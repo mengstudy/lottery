@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>双色球 - 历史数据</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #667eea;
+            font-size: 32px;
+            margin-bottom: 20px;
+        }
+        
+        .nav-buttons {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-update-all {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        .data-card {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .error-message {
+            background: #ffe3e3;
+            color: #c92a2a;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #c92a2a;
+            margin: 20px 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+            cursor: pointer;
+        }
+        
+        .ball-small {
+            display: inline-block;
+            width: 28px;
+            height: 28px;
+            line-height: 28px;
+            text-align: center;
+            border-radius: 50%;
+            margin: 0 2px;
+            font-size: 13px;
+            font-weight: bold;
+            color: white;
+            white-space: nowrap;
+        }
+        
+        .red-balls-container {
+            display: inline-block;
+            white-space: nowrap;
+        }
+        
+        .ball-red {
+            background: radial-gradient(circle at 30% 30%, #ff6b6b, #c92a2a);
+        }
+        
+        .ball-blue {
+            background: radial-gradient(circle at 30% 30%, #4dabf7, #1864ab);
+        }
+        
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .page-link {
+            min-width: 45px;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #667eea;
+            font-weight: bold;
+            transition: all 0.3s;
+            padding: 0 15px;
+        }
+        
+        .page-link:hover,
+        .page-link.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .page-link.disabled {
+            background: #f8f9fa;
+            color: #6c757d;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+        
+        .jump-to-page {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .jump-to-page span {
+            color: #667eea;
+            font-weight: bold;
+        }
+        
+        .page-input {
+            width: 80px;
+            padding: 8px 12px;
+            border: 2px solid #667eea;
+            border-radius: 5px;
+            font-size: 14px;
+            text-align: center;
+        }
+        
+        .btn-jump {
+            padding: 8px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-jump:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .issue-link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        
+        .issue-link:hover {
+            text-decoration: underline;
+        }
+        
+        .loading-spinner {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 30px 50px;
+            border-radius: 15px;
+            z-index: 9999;
+            text-align: center;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .region-text {
+            display: inline-block;
+            max-width: 400px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+        
+        .region-tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .region-tooltip:hover .region-tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+        
+        .region-tooltip-text {
+            visibility: hidden;
+            opacity: 0;
+            max-width: 500px;
+            background-color: rgba(0, 0, 0, 0.9);
+            color: #fff;
+            text-align: left;
+            border-radius: 8px;
+            padding: 12px 16px;
+            position: absolute;
+            z-index: 1000;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 13px;
+            line-height: 1.6;
+            white-space: normal;
+            word-wrap: break-word;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            transition: opacity 0.3s;
+        }
+        
+        .region-tooltip-text::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -8px;
+            border-width: 8px;
+            border-style: solid;
+            border-color: rgba(0, 0, 0, 0.9) transparent transparent transparent;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📜 历史开奖数据</h1>
+            <div class="nav-buttons">
+                <a href="{{ url_for('index') }}" class="btn">返回首页</a>
+                <button onclick="updateLatestData()" class="btn">更新最新数据</button>
+                <button onclick="updateAllHistory()" class="btn btn-update-all">🔄 更新所有历史数据</button>
+            </div>
+        </div>
+        
+        {% if error %}
+        <div class="error-message">
+            {{ error }}
+        </div>
+        {% endif %}
+        
+        <div id="loadingSpinner" class="loading-spinner">
+            <div class="spinner"></div>
+            <div id="loadingText">正在更新数据...</div>
+        </div>
+        
+        <div class="data-card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>期号</th>
+                        <th>开奖日期</th>
+                        <th>红球号码</th>
+                        <th>蓝球</th>
+                        <th>奇偶比</th>
+                        <th>最大遗漏</th>
+                        <th>蓝球遗漏</th>
+                        <th>中奖地区</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for result in results %}
+                    <tr onclick="location.href='{{ url_for('analysis', issue=result.issue) }}'">
+                        <td><a href="{{ url_for('analysis', issue=result.issue) }}" class="issue-link">{{ result.issue }}</a></td>
+                        <td>{{ result.draw_date }}</td>
+                        <td>
+                            <div class="red-balls-container">
+                                {% for i in range(6) %}
+                                <span class="ball-small ball-red">{{ '%02d' | format(result.red_balls[i]) }}</span>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td><span class="ball-small ball-blue">{{ '%02d' | format(result.blue_ball) }}</span></td>
+                        <td>{{ result.get('odd_even', '-') }}</td>
+                        <td>{{ result.get('max_red_missing', 0) }}</td>
+                        <td>{{ result.get('blue_missing', 0) }}</td>
+                        <td>
+                            {% set region_text = result.get('region', '-') or '-' %}
+                            {% if region_text != '-' and region_text|length > 50 %}
+                            <div class="region-tooltip">
+                                <span class="region-text">{{ region_text }}</span>
+                                <span class="region-tooltip-text">{{ region_text }}</span>
+                            </div>
+                            {% else %}
+                            <span class="region-text">{{ region_text }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            
+            {% if total_pages > 1 %}
+            <div class="pagination">
+                <!-- 上一页 -->
+                {% if current_page > 1 %}
+                <a href="?page={{ current_page - 1 }}" class="page-link">上一页</a>
+                {% else %}
+                <span class="page-link disabled">上一页</span>
+                {% endif %}
+                
+                <!-- 第一页 -->
+                {% if start_page > 1 %}
+                <a href="?page=1" class="page-link">1</a>
+                {% if start_page > 2 %}
+                <span class="page-link">...</span>
+                {% endif %}
+                {% endif %}
+                
+                <!-- 中间页码 -->
+                {% for p in range(start_page, end_page + 1) %}
+                <a href="?page={{ p }}" class="page-link {% if p == current_page %}active{% endif %}">{{ p }}</a>
+                {% endfor %}
+                
+                <!-- 最后一页 -->
+                {% if end_page < total_pages %}
+                {% if end_page < total_pages - 1 %}
+                <span class="page-link">...</span>
+                {% endif %}
+                <a href="?page={{ total_pages }}" class="page-link">{{ total_pages }}</a>
+                {% endif %}
+                
+                <!-- 下一页 -->
+                {% if current_page < total_pages %}
+                <a href="?page={{ current_page + 1 }}" class="page-link">下一页</a>
+                {% else %}
+                <span class="page-link disabled">下一页</span>
+                {% endif %}
+            </div>
+            
+            <!-- 页码跳转 -->
+            <div class="jump-to-page">
+                <span>共 {{ total }} 条数据，{{ total_pages }} 页</span>
+                <form onsubmit="jumpToPage(event); return false;">
+                    <input type="number" id="pageInput" 
+                           min="1" max="{{ total_pages }}" 
+                           placeholder="页码" 
+                           class="page-input">
+                    <button type="submit" class="btn-jump">跳转</button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <script>
+        function jumpToPage(event) {
+            event.preventDefault();
+            const pageInput = document.getElementById('pageInput');
+            const page = parseInt(pageInput.value);
+            const maxPage = {{ total_pages }};
+            
+            if (isNaN(page) || page < 1) {
+                alert('请输入有效的页码（最小为 1）');
+                return;
+            }
+            
+            if (page > maxPage) {
+                alert(`最大页码为 ${maxPage}`);
+                return;
+            }
+            
+            // 跳转到指定页
+            window.location.href = `?page=${page}`;
+        }
+        
+        function updateLatestData() {
+            fetch('{{ url_for("update_data") }}', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✅ ' + data.message);
+                    location.reload();
+                } else {
+                    alert('❌ ' + data.message);
+                }
+            })
+            .catch(error => {
+                alert('请求失败：' + error);
+            });
+        }
+        
+        function updateAllHistory() {
+            if (!confirm('⚠️ 注意：\n\n此操作将抓取所有历史开奖数据（约 3000 期）！\n\n可能需要几分钟时间，确定要继续吗？')) {
+                return;
+            }
+            
+            const spinner = document.getElementById('loadingSpinner');
+            const loadingText = document.getElementById('loadingText');
+            spinner.style.display = 'block';
+            loadingText.textContent = '正在抓取所有历史数据，请稍候...';
+            
+            fetch('{{ url_for("update_all_history") }}', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                spinner.style.display = 'none';
+                if (data.success) {
+                    alert('✅ ' + data.message + '\n总计：' + data.total + ' 条');
+                    location.reload();
+                } else {
+                    alert('❌ ' + data.message);
+                }
+            })
+            .catch(error => {
+                spinner.style.display = 'none';
+                alert('请求失败：' + error);
+            });
+        }
+    </script>
+</body>
+</html>

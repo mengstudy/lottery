@@ -1,0 +1,253 @@
+/* 全局样式 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+}
+
+/* 渐变色主题 */
+.gradient-bg {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.pink-gradient {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.green-gradient {
+    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+}
+
+.blue-gradient {
+    background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+}
+
+/* 卡片样式 */
+.card {
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    padding: 25px;
+    margin-bottom: 20px;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+}
+
+/* 按钮样式 */
+.btn {
+    display: inline-block;
+    padding: 12px 30px;
+    border: none;
+    border-radius: 25px;
+    font-size: 16px;
+    font-weight: bold;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    color: white;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* 号码球样式 */
+.ball {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    font-size: 20px;
+    font-weight: bold;
+    color: white;
+    margin: 5px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.ball-red {
+    background: radial-gradient(circle at 30% 30%, #ff6b6b, #c92a2a);
+}
+
+.ball-blue {
+    background: radial-gradient(circle at 30% 30%, #4dabf7, #1864ab);
+}
+
+/* 表格样式 */
+.table-responsive {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+}
+
+thead th {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 15px;
+    text-align: left;
+    font-weight: bold;
+}
+
+tbody td {
+    padding: 12px;
+    border-bottom: 1px solid #dee2e6;
+}
+
+tbody tr:hover {
+    background: #f8f9fa;
+}
+
+/* 遗漏值标签 */
+.missing-tag {
+    display: inline-block;
+    padding: 6px 15px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: bold;
+    min-width: 50px;
+    text-align: center;
+}
+
+.missing-hot {
+    background: #ffe3e3;
+    color: #c92a2a;
+}
+
+.missing-warm {
+    background: #fff3bf;
+    color: #f08c00;
+}
+
+.missing-cold {
+    background: #d0ebff;
+    color: #1864ab;
+}
+
+.missing-very-cold {
+    background: #daebff;
+    color: #1098ad;
+}
+
+/* 分页样式 */
+.pagination {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    list-style: none;
+    margin-top: 20px;
+}
+
+.page-item a {
+    padding: 10px 20px;
+    border: 2px solid #667eea;
+    border-radius: 5px;
+    text-decoration: none;
+    color: #667eea;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+.page-item.active a,
+.page-item a:hover {
+    background: #667eea;
+    color: white;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+    
+    .balls-display {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* 动画效果 */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+/* 加载动画 */
+.loader {
+    border: 5px solid #f3f3f3;
+    border-top: 5px solid #667eea;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+    margin: 20px auto;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 错误提示 */
+.alert {
+    padding: 15px 20px;
+    border-radius: 10px;
+    margin: 20px 0;
+    border-left: 4px solid;
+}
+
+.alert-error {
+    background: #ffe3e3;
+    border-left-color: #c92a2a;
+    color: #c92a2a;
+}
+
+.alert-success {
+    background: #d3f9d8;
+    border-left-color: #2b8a3e;
+    color: #2b8a3e;
+}
+
+.alert-warning {
+    background: #fff3bf;
+    border-left-color: #f08c00;
+    color: #f08c00;
+}

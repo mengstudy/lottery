@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.venv
+.flaskenv
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Project specific
+database/ssq_data.db
+crawler.log
+utils/__pycache__/
+analyzer/__pycache__/
+crawler/__pycache__/
+database/__pycache__/
+templates/__pycache__/
