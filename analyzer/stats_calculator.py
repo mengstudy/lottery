@@ -122,6 +122,12 @@ class StatsCalculator:
         # 根据最新遗漏值判断冷热号
         hot_numbers, cold_numbers = self.classify_hot_cold_numbers(missing_stat)
         
+        # 计算遗漏次数分组（包含所有 33 个红球）
+        missing_groups = self.calculate_all_red_missing_groups(missing_stat)
+        
+        # 计算开出号码的遗漏次数分组（仅本期开出的 6 个红球）
+        drawn_ball_missing_groups = self.calculate_missing_groups(red_balls, red_missing_values)
+        
         return NumberAnalysis(
             issue=issue_result['issue'],
             draw_date=issue_result['draw_date'],
@@ -132,7 +138,9 @@ class StatsCalculator:
             blue_missing_value=blue_missing_value,
             max_red_missing=max_red_missing,
             hot_numbers=hot_numbers,
-            cold_numbers=cold_numbers
+            cold_numbers=cold_numbers,
+            missing_groups=missing_groups,
+            drawn_ball_missing_groups=drawn_ball_missing_groups
         )
     
     def classify_hot_cold_numbers(self, missing_stat: MissingStatistics) -> Tuple[List[int], List[int]]:
@@ -157,6 +165,61 @@ class StatsCalculator:
                 cold_numbers.append(num)  # 大冷号：遗漏超过 10 期
         
         return hot_numbers, cold_numbers
+    
+    def calculate_missing_groups(self, red_balls: List[int], red_missing_values: List[int]) -> Dict[int, List[int]]:
+        """
+        计算遗漏次数分组（针对本期开出的红球）
+        
+        Args:
+            red_balls: 本期开出的红球号码列表
+            red_missing_values: 本期开出的红球对应的遗漏值
+            
+        Returns:
+            遗漏次数分组字典 {遗漏次数：[红球号码]}
+            例如：{0: [5, 12], 1: [3], 2: [8], 9+: [15, 20, 28]}
+        """
+        groups = {}
+        
+        for ball, missing in zip(red_balls, red_missing_values):
+            # 将遗漏次数 >= 9 的归为一组
+            group_key = missing if missing < 9 else 9
+            
+            if group_key not in groups:
+                groups[group_key] = []
+            groups[group_key].append(ball)
+        
+        # 按遗漏次数排序
+        sorted_groups = dict(sorted(groups.items()))
+        
+        return sorted_groups
+    
+    def calculate_all_red_missing_groups(self, missing_stat: MissingStatistics) -> Dict[int, List[int]]:
+        """
+        计算所有 33 个红球的遗漏次数分组
+        
+        Args:
+            missing_stat: 遗漏统计对象
+            
+        Returns:
+            遗漏次数分组字典 {遗漏次数：[红球号码]}
+            例如：{0: [5, 12, 28], 1: [3, 15], 2: [8, 20], ..., 9+: [1, 7, 14, ...]}
+        """
+        groups = {}
+        
+        # 遍历所有 33 个红球
+        for num in self.red_numbers:
+            missing = missing_stat.red_missing[num]
+            # 将遗漏次数 >= 9 的归为一组
+            group_key = missing if missing < 9 else 9
+            
+            if group_key not in groups:
+                groups[group_key] = []
+            groups[group_key].append(num)
+        
+        # 按遗漏次数排序
+        sorted_groups = dict(sorted(groups.items()))
+        
+        return sorted_groups
     
     def get_current_missing_ranking(self, latest_missing: MissingStatistics) -> Dict:
         """

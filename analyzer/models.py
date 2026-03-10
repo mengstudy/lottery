@@ -95,6 +95,8 @@ class NumberAnalysis:
     max_red_missing: int  # 红球最大遗漏值
     hot_numbers: List[int]  # 热号列表
     cold_numbers: List[int]  # 冷号列表
+    missing_groups: Dict[int, List[int]] = field(default_factory=dict)  # 遗漏次数分组 {遗漏次数：[红球号码]}（包含所有 33 个红球）
+    drawn_ball_missing_groups: Dict[int, List[int]] = field(default_factory=dict)  # 开出号码的遗漏次数分组 {遗漏次数：[红球号码]}
     
     def to_dict(self) -> Dict:
         """转换为字典格式"""
@@ -108,5 +110,7 @@ class NumberAnalysis:
             'blue_missing_value': self.blue_missing_value,
             'max_red_missing': self.max_red_missing,
             'hot_numbers': self.hot_numbers,
-            'cold_numbers': self.cold_numbers
+            'cold_numbers': self.cold_numbers,
+            'missing_groups': self.missing_groups,
+            'drawn_ball_missing_groups': self.drawn_ball_missing_groups
         }

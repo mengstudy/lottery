@@ -194,6 +194,34 @@ def analysis(issue):
         if target_missing:
             analysis_result = calculator.analyze_issue(formatted_result, target_missing)
             
+            # 查找上一期数据
+            prev_issue_data = None
+            prev_analysis = None
+            
+            # 找到当前期在列表中的位置
+            for i, result in enumerate(all_results):
+                if result['issue'] == issue and i > 0:
+                    # 获取上一期数据
+                    prev_result = all_results[i - 1]
+                    prev_issue_data = {
+                        'issue': prev_result['issue'],
+                        'red_balls': [prev_result['red_1'], prev_result['red_2'],
+                                     prev_result['red_3'], prev_result['red_4'],
+                                     prev_result['red_5'], prev_result['red_6']],
+                        'blue_ball': prev_result.get('blue', 0),
+                        'draw_date': str(prev_result['draw_date'])
+                    }
+                    
+                    # 获取上一期的遗漏统计
+                    for stat in missing_stats:
+                        if stat.issue == prev_result['issue']:
+                            # 计算上一期的遗漏分组
+                            prev_analysis = {
+                                'missing_groups': calculator.calculate_all_red_missing_groups(stat)
+                            }
+                            break
+                    break
+            
             # 构建号码遗漏详情
             number_details = []
             for i, red_ball in enumerate(formatted_result['red_balls']):
@@ -212,7 +240,9 @@ def analysis(issue):
             return render_template('analysis.html',
                                  issue_data=formatted_result,
                                  analysis=analysis_result.to_dict(),
-                                 number_details=number_details)
+                                 number_details=number_details,
+                                 prev_issue_data=prev_issue_data,
+                                 prev_analysis=prev_analysis)
         else:
             return render_template('analysis.html', 
                                  issue_data=formatted_result,
