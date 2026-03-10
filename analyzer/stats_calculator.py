@@ -295,6 +295,51 @@ class StatsCalculator:
             else:
                 trend.append(stat.red_missing.get(number, 0))
         return trend
+    
+    def calculate_all_missing_for_issue(self, lottery_results: List[Dict], target_index: int) -> Tuple[Dict[int, int], Dict[int, int]]:
+        """
+        计算某一期所有红球和蓝球的遗漏次数
+        
+        Args:
+            lottery_results: 开奖结果列表（按期号升序排列）
+            target_index: 目标期次在列表中的索引
+            
+        Returns:
+            (red_missing, blue_missing) 两个字典，分别记录红球和蓝球的遗漏次数
+        """
+        if not lottery_results or target_index < 0 or target_index >= len(lottery_results):
+            return {}, {}
+        
+        # 初始化遗漏计数器
+        red_missing_count = {num: 0 for num in self.red_numbers}
+        blue_missing_count = {num: 0 for num in self.blue_numbers}
+        
+        # 遍历到目标期为止
+        for i in range(target_index + 1):
+            result = lottery_results[i]
+            
+            # 获取当前期的开奖号码
+            if 'red_balls' in result and isinstance(result['red_balls'], list):
+                current_red_balls = result['red_balls']
+            else:
+                current_red_balls = [result.get(f'red_{i+1}', 0) for i in range(6)]
+            
+            current_blue_ball = result.get('blue_ball', result.get('blue', 0))
+            
+            # 更新遗漏计数
+            for red_num in self.red_numbers:
+                if red_num in current_red_balls:
+                    red_missing_count[red_num] = 0
+                else:
+                    red_missing_count[red_num] += 1
+            
+            for blue_num in self.blue_numbers:
+                if blue_num == current_blue_ball:
+                    blue_missing_count[blue_num] = 0
+                else:
+                    blue_missing_count[blue_num] += 1
+        
+        return red_missing_count.copy(), blue_missing_count.copy()
 
 
 # 单例模式

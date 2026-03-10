@@ -388,6 +388,58 @@ def statistics():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/calculate_missing_tables', methods=['POST'])
+def calculate_missing_tables():
+    """API: 一键计算遗漏次数表"""
+    try:
+        import time
+        start_time = time.time()
+        
+        # 获取所有开奖数据（升序）
+        all_results = db_manager.get_all_results(order_by='draw_date')
+        
+        if not all_results:
+           return jsonify({'error': '没有开奖数据'}), 400
+        
+        total_count = len(all_results)
+        processed_count = 0
+        
+        # 清空旧的遗漏次数表
+        db_manager.delete_all_red_ball_missing()
+        db_manager.delete_all_blue_ball_missing()
+        
+        # 遍历每一期，计算遗漏次数并保存
+        for idx, result in enumerate(all_results):
+            issue = result['issue']
+            
+            # 计算该期的遗漏次数
+            red_missing, blue_missing = calculator.calculate_all_missing_for_issue(all_results, idx)
+            
+            # 保存到数据库
+            db_manager.insert_red_ball_missing(issue, red_missing)
+            db_manager.insert_blue_ball_missing(issue, blue_missing)
+            
+            processed_count += 1
+            
+            # 每处理 100 期打印一次进度
+            if processed_count % 100 == 0:
+               print(f"已处理 {processed_count}/{total_count} 期")
+        
+        elapsed_time = time.time() - start_time
+        
+        return jsonify({
+            'success': True,
+            'message': f'计算完成！共处理 {total_count} 期数据',
+            'total': total_count,
+            'processed': processed_count,
+            'elapsed_seconds': round(elapsed_time, 2)
+        })
+        
+    except Exception as e:
+       print(f"计算遗漏次数错误：{e}")
+       return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     # 初始化数据库
     db_manager.initialize()

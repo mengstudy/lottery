@@ -65,16 +65,53 @@ class DatabaseManager:
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS missing_stats (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    issue TEXT NOT NULL,
+                    issue TEXT UNIQUE NOT NULL,
                     red_missing TEXT NOT NULL,  -- JSON 格式存储红球遗漏值
                     blue_missing TEXT NOT NULL,  -- JSON 格式存储蓝球遗漏值
                     calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
             
+            # 创建红球遗漏次数表（详细记录每个红球号码的遗漏次数）
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS red_ball_missing (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    issue TEXT UNIQUE NOT NULL,
+                    num_01 INTEGER DEFAULT 0, num_02 INTEGER DEFAULT 0, num_03 INTEGER DEFAULT 0,
+                    num_04 INTEGER DEFAULT 0, num_05 INTEGER DEFAULT 0, num_06 INTEGER DEFAULT 0,
+                    num_07 INTEGER DEFAULT 0, num_08 INTEGER DEFAULT 0, num_09 INTEGER DEFAULT 0,
+                    num_10 INTEGER DEFAULT 0, num_11 INTEGER DEFAULT 0, num_12 INTEGER DEFAULT 0,
+                    num_13 INTEGER DEFAULT 0, num_14 INTEGER DEFAULT 0, num_15 INTEGER DEFAULT 0,
+                    num_16 INTEGER DEFAULT 0, num_17 INTEGER DEFAULT 0, num_18 INTEGER DEFAULT 0,
+                    num_19 INTEGER DEFAULT 0, num_20 INTEGER DEFAULT 0, num_21 INTEGER DEFAULT 0,
+                    num_22 INTEGER DEFAULT 0, num_23 INTEGER DEFAULT 0, num_24 INTEGER DEFAULT 0,
+                    num_25 INTEGER DEFAULT 0, num_26 INTEGER DEFAULT 0, num_27 INTEGER DEFAULT 0,
+                    num_28 INTEGER DEFAULT 0, num_29 INTEGER DEFAULT 0, num_30 INTEGER DEFAULT 0,
+                    num_31 INTEGER DEFAULT 0, num_32 INTEGER DEFAULT 0, num_33 INTEGER DEFAULT 0,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # 创建蓝球遗漏次数表（详细记录每个蓝球号码的遗漏次数）
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS blue_ball_missing (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    issue TEXT UNIQUE NOT NULL,
+                    num_01 INTEGER DEFAULT 0, num_02 INTEGER DEFAULT 0, num_03 INTEGER DEFAULT 0,
+                    num_04 INTEGER DEFAULT 0, num_05 INTEGER DEFAULT 0, num_06 INTEGER DEFAULT 0,
+                    num_07 INTEGER DEFAULT 0, num_08 INTEGER DEFAULT 0, num_09 INTEGER DEFAULT 0,
+                    num_10 INTEGER DEFAULT 0, num_11 INTEGER DEFAULT 0, num_12 INTEGER DEFAULT 0,
+                    num_13 INTEGER DEFAULT 0, num_14 INTEGER DEFAULT 0, num_15 INTEGER DEFAULT 0,
+                    num_16 INTEGER DEFAULT 0,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
             # 创建索引以提高查询性能
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_issue ON lottery_results(issue)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_draw_date ON lottery_results(draw_date)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_red_missing_issue ON red_ball_missing(issue)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_blue_missing_issue ON blue_ball_missing(issue)')
             
             conn.commit()
             print("数据库表初始化成功")
@@ -194,6 +231,174 @@ class DatabaseManager:
         except sqlite3.Error as e:
             print(f"查询最近记录错误：{e}")
             return []
+        finally:
+            self.close()
+    
+    # ========== 红球遗漏次数表操作 ==========
+    
+    def insert_red_ball_missing(self, issue, missing_data):
+        """
+        插入或更新红球遗漏次数
+        
+        Args:
+            issue: 期号
+            missing_data: 字典，键为号码（01-33），值为遗漏次数
+        """
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            
+            # 构建字段和值
+            fields = ['issue']
+            values = [issue]
+            placeholders = ['?']
+            
+            for num in range(1, 34):
+                field_name = f'num_{num:02d}'
+                fields.append(field_name)
+                values.append(missing_data.get(num, 0))
+                placeholders.append('?')
+            
+            # 使用 INSERT OR REPLACE
+            sql = f'''
+                INSERT OR REPLACE INTO red_ball_missing 
+                ({', '.join(fields)}) 
+                VALUES ({', '.join(placeholders)})
+            '''
+            
+            cursor.execute(sql, values)
+            conn.commit()
+            
+        except sqlite3.Error as e:
+            print(f"插入红球遗漏次数错误：{e}")
+            raise
+        finally:
+            self.close()
+    
+    def get_red_ball_missing(self, issue):
+        """
+        获取某期的红球遗漏次数
+        
+        Args:
+            issue: 期号
+            
+        Returns:
+            字典格式的遗漏次数数据
+        """
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT * FROM red_ball_missing WHERE issue = ?
+            ''', (issue,))
+            
+            result = cursor.fetchone()
+            if result:
+                return dict(result)
+            return None
+            
+        except sqlite3.Error as e:
+            print(f"查询红球遗漏次数错误：{e}")
+            return None
+        finally:
+            self.close()
+    
+    def delete_all_red_ball_missing(self):
+        """删除所有红球遗漏次数数据"""
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM red_ball_missing')
+            conn.commit()
+            
+        except sqlite3.Error as e:
+            print(f"删除红球遗漏次数错误：{e}")
+            raise
+        finally:
+            self.close()
+    
+    # ========== 蓝球遗漏次数表操作 ==========
+    
+    def insert_blue_ball_missing(self, issue, missing_data):
+        """
+        插入或更新蓝球遗漏次数
+        
+        Args:
+            issue: 期号
+            missing_data: 字典，键为号码（01-16），值为遗漏次数
+        """
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            
+            # 构建字段和值
+            fields = ['issue']
+            values = [issue]
+            placeholders = ['?']
+            
+            for num in range(1, 17):
+                field_name = f'num_{num:02d}'
+                fields.append(field_name)
+                values.append(missing_data.get(num, 0))
+                placeholders.append('?')
+            
+            # 使用 INSERT OR REPLACE
+            sql = f'''
+                INSERT OR REPLACE INTO blue_ball_missing 
+                ({', '.join(fields)}) 
+                VALUES ({', '.join(placeholders)})
+            '''
+            
+            cursor.execute(sql, values)
+            conn.commit()
+            
+        except sqlite3.Error as e:
+            print(f"插入蓝球遗漏次数错误：{e}")
+            raise
+        finally:
+            self.close()
+    
+    def get_blue_ball_missing(self, issue):
+        """
+        获取某期的蓝球遗漏次数
+        
+        Args:
+            issue: 期号
+            
+        Returns:
+            字典格式的遗漏次数数据
+        """
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT * FROM blue_ball_missing WHERE issue = ?
+            ''', (issue,))
+            
+            result = cursor.fetchone()
+            if result:
+                return dict(result)
+            return None
+            
+        except sqlite3.Error as e:
+            print(f"查询蓝球遗漏次数错误：{e}")
+            return None
+        finally:
+            self.close()
+    
+    def delete_all_blue_ball_missing(self):
+        """删除所有蓝球遗漏次数数据"""
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM blue_ball_missing')
+            conn.commit()
+            
+        except sqlite3.Error as e:
+            print(f"删除蓝球遗漏次数错误：{e}")
+            raise
         finally:
             self.close()
 

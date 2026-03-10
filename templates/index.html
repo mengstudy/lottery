@@ -262,6 +262,7 @@
             <div class="nav-buttons">
                 <a href="{{ url_for('history') }}" class="btn btn-primary">历史数据</a>
                 <button onclick="updateData()" class="btn btn-success">立即更新</button>
+                <button onclick="calculateMissingTables()" class="btn btn-primary" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">🔢 计算遗漏次数表</button>
             </div>
         </div>
         
@@ -395,6 +396,36 @@
                 btn.textContent = '立即更新';
             });
         }
+        
+        // 计算遗漏次数表函数
+       function calculateMissingTables() {
+         const btn = event.target;
+        btn.disabled = true;
+        btn.textContent = '计算中...';
+        
+        // 显示进度提示
+       alert('⚠️ 注意：此操作需要较长时间（约 30-60 秒），请耐心等待完成。');
+        
+        fetch('/api/calculate_missing_tables', {
+            method: 'POST'
+        })
+       .then(response => response.json())
+       .then(data => {
+           if (data.success) {
+              alert(`✅ ${data.message}\n⏱️ 耗时：${data.elapsed_seconds}秒\n📊 处理了 ${data.processed} 期数据`);
+             location.reload();
+           } else {
+               alert('计算失败：' + (data.error || data.message));
+               btn.disabled = false;
+               btn.textContent = '🔢 计算遗漏次数表';
+           }
+       })
+       .catch(error => {
+           alert('计算出错：' + error);
+           btn.disabled = false;
+           btn.textContent = '🔢 计算遗漏次数表';
+       });
+    }
         
         // 绘制图表
         {% if red_ranking %}
