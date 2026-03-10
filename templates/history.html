@@ -254,7 +254,7 @@
         
         .region-text {
             display: inline-block;
-            max-width: 400px;
+            max-width: 150px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -264,6 +264,8 @@
         .region-tooltip {
             position: relative;
             display: inline-block;
+            width: 100%;
+            height: 100%;
         }
         
         .region-tooltip:hover .region-tooltip-text {
@@ -274,8 +276,9 @@
         .region-tooltip-text {
             visibility: hidden;
             opacity: 0;
-            max-width: 500px;
-            background-color: rgba(0, 0, 0, 0.9);
+            max-width: 600px;
+            min-width: 200px;
+            background-color: rgba(0, 0, 0, 0.95);
             color: #fff;
             text-align: left;
             border-radius: 8px;
@@ -290,7 +293,8 @@
             white-space: normal;
             word-wrap: break-word;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            transition: opacity 0.3s;
+            transition: opacity 0.3s ease-in-out;
+            pointer-events: none;
         }
         
         .region-tooltip-text::after {
@@ -301,7 +305,7 @@
             margin-left: -8px;
             border-width: 8px;
             border-style: solid;
-            border-color: rgba(0, 0, 0, 0.9) transparent transparent transparent;
+            border-color: rgba(0, 0, 0, 0.95) transparent transparent transparent;
         }
     </style>
 </head>
@@ -338,6 +342,7 @@
                         <th>奇偶比</th>
                         <th>最大遗漏</th>
                         <th>蓝球遗漏</th>
+                        <th>红球遗漏详情</th>
                         <th>中奖地区</th>
                     </tr>
                 </thead>
@@ -358,15 +363,26 @@
                         <td>{{ result.get('max_red_missing', 0) }}</td>
                         <td>{{ result.get('blue_missing', 0) }}</td>
                         <td>
+                            {% if result.get('red_balls_missing') %}
+                            <div style="display: flex; gap: 4px; align-items: center; justify-content: center;">
+                                {% set sorted_missing = result.red_balls_missing|sort %}
+                                {% for missing in sorted_missing %}
+                                <span style="font-size: 13px; color: #333;">{{ missing }}</span>
+                                {% if not loop.last %}
+                                <span style="font-size: 13px; color: #999;">-</span>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <span style="color: #999;">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
                             {% set region_text = result.get('region', '-') or '-' %}
-                            {% if region_text != '-' and region_text|length > 50 %}
                             <div class="region-tooltip">
                                 <span class="region-text">{{ region_text }}</span>
                                 <span class="region-tooltip-text">{{ region_text }}</span>
                             </div>
-                            {% else %}
-                            <span class="region-text">{{ region_text }}</span>
-                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}

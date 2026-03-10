@@ -84,11 +84,8 @@ def history():
         page = request.args.get('page', 1, type=int)
         per_page = 20
         
-        # 获取所有数据（倒序，最新的在前）
+        # 获取所有数据（按 draw_date 升序排列）
         all_results = db_manager.get_all_results(order_by='draw_date')
-        
-        # 倒序排列
-        all_results.reverse()
         
         # 转换为字典列表
         results_list = []
@@ -102,22 +99,37 @@ def history():
                 'region': result.get('region', '')  # 中奖地区
             })
         
+        # 计算遗漏值（需要升序排列）
+        if results_list:
+            # 复制一份用于计算遗漏值（保持升序）
+            results_for_calc = results_list.copy()
+            missing_stats = calculator.calculate_missing_values(results_for_calc)
+                    
+            # 倒序排列用于显示（最新的在前）
+            results_list.reverse()
+                
         # 分页
         total = len(results_list)
         start_idx = (page - 1) * per_page
         end_idx = start_idx + per_page
         paginated_results = results_list[start_idx:end_idx]
-        
-        # 计算每期的分析数据
-        if results_list:
-            missing_stats = calculator.calculate_missing_values(results_list)
-            
+                
+        # 为当前页的数据添加分析信息
+        if results_list and missing_stats:
+            # 找到当前页数据在倒序列表中的起始位置对应的正序索引
             for i, result in enumerate(paginated_results):
-                if i < len(missing_stats):
-                    analysis = calculator.analyze_issue(result, missing_stats[i])
+                # 在倒序列表中的索引
+                reverse_idx = start_idx + i
+                # 对应的正序索引（从后往前）
+                forward_idx = len(results_list) -1 - reverse_idx
+                        
+                if 0 <= forward_idx < len(missing_stats):
+                    analysis = calculator.analyze_issue(result, missing_stats[forward_idx])
                     result['odd_even'] = analysis.red_odd_even
                     result['max_red_missing'] = analysis.max_red_missing
                     result['blue_missing'] = analysis.blue_missing_value
+                    # 添加红色中奖号码的遗漏次数列表
+                    result['red_balls_missing'] = analysis.red_missing_values
         else:
             for result in paginated_results:
                 result['odd_even'] = '-'
