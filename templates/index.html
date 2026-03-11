@@ -373,19 +373,30 @@
         // 更新数据函数
         function updateData() {
             const btn = event.target;
+            
+            // 显示口令输入框
+            const password = prompt('请输入操作口令：', '');
+            
+            if (!password) {
+                alert('❌ 已取消操作');
+                return;
+            }
+            
             btn.disabled = true;
             btn.textContent = '更新中...';
             
             fetch('/api/update_data', {
-                method: 'POST'
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({password: password})
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    alert(data.message);
+                    alert(`✅ ${data.message}`);
                     location.reload();
                 } else {
-                    alert('更新失败：' + data.message);
+                    alert('❌ ' + data.message);
                     btn.disabled = false;
                     btn.textContent = '立即更新';
                 }
@@ -398,34 +409,45 @@
         }
         
         // 计算遗漏次数表函数
-       function calculateMissingTables() {
-         const btn = event.target;
-        btn.disabled = true;
-        btn.textContent = '计算中...';
-        
-        // 显示进度提示
-       alert('⚠️ 注意：此操作需要较长时间（约 30-60 秒），请耐心等待完成。');
-        
-        fetch('/api/calculate_missing_tables', {
-            method: 'POST'
-        })
-       .then(response => response.json())
-       .then(data => {
-           if (data.success) {
-              alert(`✅ ${data.message}\n⏱️ 耗时：${data.elapsed_seconds}秒\n📊 处理了 ${data.processed} 期数据`);
-             location.reload();
-           } else {
-               alert('计算失败：' + (data.error || data.message));
-               btn.disabled = false;
-               btn.textContent = '🔢 计算遗漏次数表';
-           }
-       })
-       .catch(error => {
-           alert('计算出错：' + error);
-           btn.disabled = false;
-           btn.textContent = '🔢 计算遗漏次数表';
-       });
-    }
+        function calculateMissingTables() {
+            const btn = event.target;
+            
+            // 显示口令输入框
+            const password = prompt('请输入操作口令：', '');
+            
+            if (!password) {
+                alert('❌ 已取消操作');
+                return;
+            }
+            
+            btn.disabled = true;
+            btn.textContent = '计算中...';
+            
+            // 显示进度提示
+            alert('⚠️ 注意：此操作需要较长时间（约 30-60 秒），请耐心等待完成。');
+            
+            fetch('/api/calculate_missing_tables', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({password: password})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`✅ ${data.message}\n⏱️ 耗时：${data.elapsed_seconds}秒\n📊 处理了 ${data.processed} 期数据`);
+                    location.reload();
+                } else {
+                    alert('❌ ' + (data.error || data.message));
+                    btn.disabled = false;
+                    btn.textContent = '🔢 计算遗漏次数表';
+                }
+            })
+            .catch(error => {
+                alert('计算出错：' + error);
+                btn.disabled = false;
+                btn.textContent = '🔢 计算遗漏次数表';
+            });
+        }
         
         // 绘制图表
         {% if red_ranking %}

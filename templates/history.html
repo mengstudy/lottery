@@ -464,8 +464,18 @@
         }
         
         function updateLatestData() {
+            // 显示口令输入框
+            const password = prompt('请输入操作口令：', '');
+            
+            if (!password) {
+                alert('❌ 已取消操作');
+                return;
+            }
+            
             fetch('{{ url_for("update_data") }}', {
-                method: 'POST'
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({password: password})
             })
             .then(response => response.json())
             .then(data => {
@@ -482,6 +492,14 @@
         }
         
         function updateAllHistory() {
+            // 显示口令输入框
+            const password = prompt('请输入操作口令：', '');
+            
+            if (!password) {
+                alert('❌ 已取消操作');
+                return;
+            }
+            
             if (!confirm('⚠️ 注意：\n\n此操作将抓取所有历史开奖数据（约 3000 期）！\n\n可能需要几分钟时间，确定要继续吗？')) {
                 return;
             }
@@ -492,7 +510,9 @@
             loadingText.textContent = '正在抓取所有历史数据，请稍候...';
             
             fetch('{{ url_for("update_all_history") }}', {
-                method: 'POST'
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({password: password})
             })
             .then(response => response.json())
             .then(data => {

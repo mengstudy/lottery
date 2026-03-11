@@ -13,6 +13,25 @@ sys.path.insert(0, str(Path(__file__).parent))
 from database.db_manager import db_manager
 from analyzer.stats_calculator import calculator
 from crawler.crawler import crawler
+from functools import wraps
+
+
+# 操作口令（统一配置）
+OPERATION_PASSWORD = 'ssq2026'
+
+
+def require_password(f):
+    """装饰器：验证操作口令"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        data = request.get_json()
+        password = data.get('password', '') if data else ''
+        
+        if password != OPERATION_PASSWORD:
+            return jsonify({'success': False, 'message': '口令错误！'})
+        
+        return f(*args, **kwargs)
+    return decorated_function
 
 
 app = Flask(__name__)
@@ -267,6 +286,7 @@ def analysis(issue):
 
 
 @app.route('/api/update_data', methods=['POST'])
+@require_password
 def update_data():
     """API: 手动触发数据更新"""
     try:
@@ -298,6 +318,7 @@ def update_data():
 
 
 @app.route('/api/update_all_history', methods=['POST'])
+@require_password
 def update_all_history():
     """API: 更新所有历史数据"""
     try:
@@ -389,6 +410,7 @@ def statistics():
 
 
 @app.route('/api/calculate_missing_tables', methods=['POST'])
+@require_password
 def calculate_missing_tables():
     """API: 一键计算遗漏次数表"""
     try:
