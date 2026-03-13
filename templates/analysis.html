@@ -255,6 +255,45 @@
         .missing-ball-9-plus {
             color: #1098ad;
         }
+        
+        .missing-ball-highlight {
+            border: 3px solid #c92a2a;
+            box-shadow: 0 0 10px rgba(201, 42, 42, 0.5);
+        }
+        
+        /* 表格背景色样式 */
+        .table-bg-0 {
+            background: linear-gradient(135deg, #ffe3e3 0%, #ffc9c9 100%);
+        }
+        .table-bg-1-5 {
+            background: linear-gradient(135deg, #fff3bf 0%, #ffe066 100%);
+        }
+        .table-bg-6-8 {
+            background: linear-gradient(135deg, #d0ebff 0%, #74c0fc 100%);
+        }
+        .table-bg-9-plus {
+            background: linear-gradient(135deg, #daebff 0%, #74c0fc 100%);
+        }
+        
+        /* 号码球颜色样式 */
+        .ball-color-0 {
+            color: #c92a2a;
+        }
+        .ball-color-1-5 {
+            color: #f08c00;
+        }
+        .ball-color-6-8 {
+            color: #1864ab;
+        }
+        .ball-color-9-plus {
+            color: #1098ad;
+        }
+        
+        /* 本期开出号码标记样式 */
+        .ball-highlight {
+            border: 3px solid #c92a2a;
+            box-shadow: 0 0 10px rgba(201, 42, 42, 0.5);
+        }
     </style>
 </head>
 <body>
@@ -316,31 +355,134 @@
             <div class="analysis-section">
                 <h3>📊 遗漏次数分组（全部 33 个红球）</h3>
                 <p style="color: #666; font-size: 14px; margin-bottom: 15px;">说明：将所有 33 个红球按遗漏期数分组，≥9 次的归为一组</p>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px;">
-                    {% for missing_count, balls in analysis.missing_groups.items() %}
-                    <div class="missing-group-card
-                        {% if missing_count == 0 %} missing-group-0
-                        {% elif missing_count <= 5 %} missing-group-1-5
-                        {% elif missing_count <= 8 %} missing-group-6-8
-                        {% else %} missing-group-9-plus{% endif %}">
-                        <div style="font-size: 14px; color: #666; margin-bottom: 10px;">
-                            遗漏 {{ '≥9' if missing_count == 9 else missing_count }} 次 
-                            <span style="font-size: 12px; color: #999;">({{ balls|length }}个)</span>
-                        </div>
-                        <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
-                            {% for ball in balls %}
-                            <span class="missing-ball
-                                {% if missing_count == 0 %} missing-ball-0
-                                {% elif missing_count <= 5 %} missing-ball-1-5
-                                {% elif missing_count <= 8 %} missing-ball-6-8
-                                {% else %} missing-ball-9-plus{% endif %}">
-                                {{ '%02d' | format(ball) }}
-                            </span>
+                <table style="margin-top: 20px;">
+                    <thead>
+                        <tr>
+                            {% for missing_count in range(9) %}
+                            <th style="text-align: center; padding: 12px; color: #333; font-weight: bold; text-shadow: 0 1px 2px rgba(255,255,255,0.8);"
+                                class="{% if missing_count == 0 %}table-bg-0
+                                       {% elif missing_count <= 5 %}table-bg-1-5
+                                       {% elif missing_count <= 8 %}table-bg-6-8
+                                       {% else %}table-bg-9-plus{% endif %}">
+                                遗漏 {{ missing_count }} 次
+                            </th>
                             {% endfor %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
+                            <th style="text-align: center; padding: 12px; color: #333; font-weight: bold; text-shadow: 0 1px 2px rgba(255,255,255,0.8);" class="table-bg-9-plus">遗漏 ≥9 次</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            {% for missing_count in range(9) %}
+                            <td style="padding: 12px; text-align: center; border: 1px solid #dee2e6; vertical-align: top;"
+                                class="{% if missing_count == 0 %}table-bg-0
+                                       {% elif missing_count <= 5 %}table-bg-1-5
+                                       {% elif missing_count <= 8 %}table-bg-6-8
+                                       {% else %}table-bg-9-plus{% endif %}">
+                                {% set balls = analysis.missing_groups.get(missing_count|string, []) %}
+                                {% if balls %}
+                                <div style="display: flex; flex-direction: column; gap: 5px; align-items: center;">
+                                    {% for ball in balls %}
+                                    <span style="display: inline-block; width: 35px; height: 35px; line-height: 35px; text-align: center; background: white; border-radius: 50%; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"
+                                          class="{% if missing_count == 0 %}ball-color-0
+                                                 {% elif missing_count <= 5 %}ball-color-1-5
+                                                 {% elif missing_count <= 8 %}ball-color-6-8
+                                                 {% else %}ball-color-9-plus{% endif %}">
+                                        {{ '%02d' | format(ball) }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <span style="color: #ccc;">-</span>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                            <td style="padding: 12px; text-align: center; border: 1px solid #dee2e6; vertical-align: top;" class="table-bg-9-plus">
+                                {% set balls = analysis.missing_groups.get('9', []) %}
+                                {% if balls %}
+                                <div style="display: flex; flex-direction: column; gap: 5px; align-items: center;">
+                                    {% for ball in balls %}
+                                    <span style="display: inline-block; width: 35px; height: 35px; line-height: 35px; text-align: center; background: white; border-radius: 50%; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);" class="ball-color-9-plus">
+                                        {{ '%02d' | format(ball) }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <span style="color: #ccc;">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+            
+            <!-- 本期开出号码遗漏次数分组 -->
+            {% if analysis.missing_groups %}
+            <div class="analysis-section">
+                <h3>🎯 本期开出号码遗漏次数分组</h3>
+                <p style="color: #666; font-size: 14px; margin-bottom: 15px;">说明：全部 33 个红球的遗漏分布，🔴 红色边框号码为本期开出号码</p>
+                <table style="margin-top: 20px;">
+                    <thead>
+                        <tr>
+                            {% for missing_count in range(9) %}
+                            <th style="text-align: center; padding: 12px; color: #333; font-weight: bold; text-shadow: 0 1px 2px rgba(255,255,255,0.8);"
+                                class="{% if missing_count == 0 %}table-bg-0
+                                       {% elif missing_count <= 5 %}table-bg-1-5
+                                       {% elif missing_count <= 8 %}table-bg-6-8
+                                       {% else %}table-bg-9-plus{% endif %}">
+                                遗漏 {{ missing_count }} 次
+                            </th>
+                            {% endfor %}
+                            <th style="text-align: center; padding: 12px; color: #333; font-weight: bold; text-shadow: 0 1px 2px rgba(255,255,255,0.8);" class="table-bg-9-plus">遗漏 ≥9 次</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            {% for missing_count in range(9) %}
+                            <td style="padding: 12px; text-align: center; border: 1px solid #dee2e6; vertical-align: top;"
+                                class="{% if missing_count == 0 %}table-bg-0
+                                       {% elif missing_count <= 5 %}table-bg-1-5
+                                       {% elif missing_count <= 8 %}table-bg-6-8
+                                       {% else %}table-bg-9-plus{% endif %}">
+                                {% set balls = analysis.missing_groups.get(missing_count|string, []) %}
+                                {% if balls %}
+                                <div style="display: flex; flex-direction: column; gap: 5px; align-items: center;">
+                                    {% for ball in balls %}
+                                    {% set is_drawn = ball in issue_data.red_balls %}
+                                    <span style="display: inline-block; width: 35px; height: 35px; line-height: 35px; text-align: center; background: white; border-radius: 50%; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"
+                                          class="{% if is_drawn %}ball-highlight{% endif %} 
+                                                 {% if missing_count == 0 %}ball-color-0
+                                                 {% elif missing_count <= 5 %}ball-color-1-5
+                                                 {% elif missing_count <= 8 %}ball-color-6-8
+                                                 {% else %}ball-color-9-plus{% endif %}">
+                                        {{ '%02d' | format(ball) }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <span style="color: #ccc;">-</span>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                            <td style="padding: 12px; text-align: center; border: 1px solid #dee2e6; vertical-align: top;" class="table-bg-9-plus">
+                                {% set balls = analysis.missing_groups.get('9', []) %}
+                                {% if balls %}
+                                <div style="display: flex; flex-direction: column; gap: 5px; align-items: center;">
+                                    {% for ball in balls %}
+                                    {% set is_drawn = ball in issue_data.red_balls %}
+                                    <span style="display: inline-block; width: 35px; height: 35px; line-height: 35px; text-align: center; background: white; border-radius: 50%; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"
+                                          class="{% if is_drawn %}ball-highlight{% endif %} ball-color-9-plus">
+                                        {{ '%02d' | format(ball) }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <span style="color: #ccc;">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
             {% endif %}
             
@@ -349,32 +491,68 @@
             <div class="analysis-section">
                 <h3>📊 上一期遗漏次数分组（期号：{{ prev_issue_data.issue }}）</h3>
                 <p style="color: #666; font-size: 14px; margin-bottom: 15px;">开奖日期：{{ prev_issue_data.draw_date }} - 🔴 红色边框号码为上期（{{ prev_issue_data.issue }}）开出号码</p>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px;">
-                    {% for missing_count, balls in prev_analysis.missing_groups.items() %}
-                    <div class="missing-group-card
-                        {% if missing_count == 0 %} missing-group-0
-                        {% elif missing_count <= 5 %} missing-group-1-5
-                        {% elif missing_count <= 8 %} missing-group-6-8
-                        {% else %} missing-group-9-plus{% endif %}" style="opacity: 0.85;">
-                        <div style="font-size: 14px; color: #666; margin-bottom: 10px;">
-                            遗漏 {{ '≥9' if missing_count == 9 else missing_count }} 次 
-                            <span style="font-size: 12px; color: #999;">({{ balls|length }}个)</span>
-                        </div>
-                        <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
-                            {% for ball in balls %}
-                            <span class="missing-ball
-                                {% if missing_count == 0 %} missing-ball-0
-                                {% elif missing_count <= 5 %} missing-ball-1-5
-                                {% elif missing_count <= 8 %} missing-ball-6-8
-                                {% else %} missing-ball-9-plus{% endif %}"
-                                {% if ball in prev_issue_data.red_balls %}style="border: 3px solid #c92a2a; box-shadow: 0 0 10px rgba(201, 42, 42, 0.5);"{% endif %}>
-                                {{ '%02d' | format(ball) }}
-                            </span>
+                <table style="margin-top: 20px;">
+                    <thead>
+                        <tr>
+                            {% for missing_count in range(9) %}
+                            <th style="text-align: center; padding: 12px; color: #333; font-weight: bold; text-shadow: 0 1px 2px rgba(255,255,255,0.8);"
+                                class="{% if missing_count == 0 %}table-bg-0
+                                       {% elif missing_count <= 5 %}table-bg-1-5
+                                       {% elif missing_count <= 8 %}table-bg-6-8
+                                       {% else %}table-bg-9-plus{% endif %}">
+                                遗漏 {{ missing_count }} 次
+                            </th>
                             {% endfor %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
+                            <th style="text-align: center; padding: 12px; color: #333; font-weight: bold; text-shadow: 0 1px 2px rgba(255,255,255,0.8);" class="table-bg-9-plus">遗漏 ≥9 次</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            {% for missing_count in range(9) %}
+                            <td style="padding: 12px; text-align: center; border: 1px solid #dee2e6; vertical-align: top;"
+                                class="{% if missing_count == 0 %}table-bg-0
+                                       {% elif missing_count <= 5 %}table-bg-1-5
+                                       {% elif missing_count <= 8 %}table-bg-6-8
+                                       {% else %}table-bg-9-plus{% endif %}">
+                                {% set balls = prev_analysis.missing_groups.get(missing_count|string, []) %}
+                                {% if balls %}
+                                <div style="display: flex; flex-direction: column; gap: 5px; align-items: center;">
+                                    {% for ball in balls %}
+                                    {% set is_prev_drawn = ball in prev_issue_data.red_balls %}
+                                    <span style="display: inline-block; width: 35px; height: 35px; line-height: 35px; text-align: center; background: white; border-radius: 50%; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"
+                                          class="{% if is_prev_drawn %}missing-ball-highlight{% endif %} 
+                                                 {% if missing_count == 0 %}ball-color-0
+                                                 {% elif missing_count <= 5 %}ball-color-1-5
+                                                 {% elif missing_count <= 8 %}ball-color-6-8
+                                                 {% else %}ball-color-9-plus{% endif %}">
+                                        {{ '%02d' | format(ball) }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <span style="color: #ccc;">-</span>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                            <td style="padding: 12px; text-align: center; border: 1px solid #dee2e6; vertical-align: top;" class="table-bg-9-plus">
+                                {% set balls = prev_analysis.missing_groups.get('9', []) %}
+                                {% if balls %}
+                                <div style="display: flex; flex-direction: column; gap: 5px; align-items: center;">
+                                    {% for ball in balls %}
+                                    {% set is_prev_drawn = ball in prev_issue_data.red_balls %}
+                                    <span style="display: inline-block; width: 35px; height: 35px; line-height: 35px; text-align: center; background: white; border-radius: 50%; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"
+                                          class="{% if is_prev_drawn %}missing-ball-highlight{% endif %} ball-color-9-plus">
+                                        {{ '%02d' | format(ball) }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <span style="color: #ccc;">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
             {% endif %}
             {% endif %}

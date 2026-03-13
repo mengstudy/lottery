@@ -247,8 +247,10 @@ def analysis(issue):
                     for stat in missing_stats:
                         if stat.issue == prev_result['issue']:
                             # 计算上一期的遗漏分组
+                            prev_missing_groups = calculator.calculate_all_red_missing_groups(stat)
+                            # 将键转换为字符串，方便模板访问
                             prev_analysis = {
-                                'missing_groups': calculator.calculate_all_red_missing_groups(stat)
+                                'missing_groups': {str(k): v for k, v in prev_missing_groups.items()}
                             }
                             break
                     break
