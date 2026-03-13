@@ -362,26 +362,15 @@
                         </div>
                         <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
                             {% for ball in balls %}
-                            <span class="missing-ball
-                                {% if missing_count == 0 %} missing-ball-0
-                                {% elif missing_count <= 5 %} missing-ball-1-5
-                                {% elif missing_count <= 8 %} missing-ball-6-8
-                                {% else %} missing-ball-9-plus{% endif %}">
-                                {{ '%02d' | format(ball) }}
-                            </span>
-                            {% endfor %}
-                            <!-- 标记本期开出号码 -->
-                            {% for drawn_ball in issue_data.red_balls %}
-                            {% if drawn_ball in balls %}
+                            {% set is_drawn = drawn_ball in issue_data.red_balls %}
                             <span class="missing-ball
                                 {% if missing_count == 0 %} missing-ball-0
                                 {% elif missing_count <= 5 %} missing-ball-1-5
                                 {% elif missing_count <= 8 %} missing-ball-6-8
                                 {% else %} missing-ball-9-plus{% endif %}"
-                                style="border: 3px solid #c92a2a; box-shadow: 0 0 10px rgba(201, 42, 42, 0.5);">
-                                {{ '%02d' | format(drawn_ball) }}
+                                {% if ball in issue_data.red_balls %}style="border: 3px solid #c92a2a; box-shadow: 0 0 10px rgba(201, 42, 42, 0.5);"{% endif %}>
+                                {{ '%02d' | format(ball) }}
                             </span>
-                            {% endif %}
                             {% endfor %}
                         </div>
                     </div>

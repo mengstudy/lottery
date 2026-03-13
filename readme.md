@@ -17,7 +17,7 @@
 
 ```bash
 cd ssq_analyzer
-pip install-r requirements.txt
+pip install -r requirements.txt
 ```
 
 ### 启动应用
@@ -29,6 +29,34 @@ python start.py
 ### 访问网站
 
 打开浏览器访问：**http://localhost:5000**
+
+---
+
+### 🖥️ 服务器部署（Linux）
+
+#### 1. 创建 data 目录并设置权限
+
+```bash
+cd /home/lottery
+mkdir -p data
+chmod 755 data
+```
+
+#### 2. 自动修复权限（推荐）
+
+```bash
+python3 fix_permissions.py
+```
+
+#### 3. 启动应用
+
+```bash
+python3 start.py
+```
+
+⚠️ **重要**：如果遇到 `unable to open database file` 错误，请先运行 `fix_permissions.py` 修复权限。
+
+📖 **详细部署指南**：请查看 [`部署问题修复指南.md`](部署问题修复指南.md)
 
 ---
 
