@@ -100,6 +100,10 @@ class NumberAnalysis:
     
     def to_dict(self) -> Dict:
         """转换为字典格式"""
+        # 将 missing_groups 的键转换为字符串，方便模板访问
+        missing_groups_str = {str(k): v for k, v in self.missing_groups.items()}
+        drawn_ball_missing_groups_str = {str(k): v for k, v in self.drawn_ball_missing_groups.items()}
+        
         return {
             'issue': self.issue,
             'draw_date': self.draw_date,
@@ -111,6 +115,6 @@ class NumberAnalysis:
             'max_red_missing': self.max_red_missing,
             'hot_numbers': self.hot_numbers,
             'cold_numbers': self.cold_numbers,
-            'missing_groups': self.missing_groups,
-            'drawn_ball_missing_groups': self.drawn_ball_missing_groups
+            'missing_groups': missing_groups_str,
+            'drawn_ball_missing_groups': drawn_ball_missing_groups_str
         }
