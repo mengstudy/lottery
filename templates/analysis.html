@@ -348,7 +348,7 @@
             {% if prev_analysis and prev_issue_data %}
             <div class="analysis-section">
                 <h3>📊 上一期遗漏次数分组（期号：{{ prev_issue_data.issue }}）</h3>
-                <p style="color: #666; font-size: 14px; margin-bottom: 15px;">开奖日期：{{ prev_issue_data.draw_date }} - 🔴 红色边框号码为本期开出号码</p>
+                <p style="color: #666; font-size: 14px; margin-bottom: 15px;">开奖日期：{{ prev_issue_data.draw_date }} - 🔴 红色边框号码为上期（{{ prev_issue_data.issue }}）开出号码</p>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px;">
                     {% for missing_count, balls in prev_analysis.missing_groups.items() %}
                     <div class="missing-group-card
@@ -362,13 +362,12 @@
                         </div>
                         <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
                             {% for ball in balls %}
-                            {% set is_drawn = drawn_ball in issue_data.red_balls %}
                             <span class="missing-ball
                                 {% if missing_count == 0 %} missing-ball-0
                                 {% elif missing_count <= 5 %} missing-ball-1-5
                                 {% elif missing_count <= 8 %} missing-ball-6-8
                                 {% else %} missing-ball-9-plus{% endif %}"
-                                {% if ball in issue_data.red_balls %}style="border: 3px solid #c92a2a; box-shadow: 0 0 10px rgba(201, 42, 42, 0.5);"{% endif %}>
+                                {% if ball in prev_issue_data.red_balls %}style="border: 3px solid #c92a2a; box-shadow: 0 0 10px rgba(201, 42, 42, 0.5);"{% endif %}>
                                 {{ '%02d' | format(ball) }}
                             </span>
                             {% endfor %}
