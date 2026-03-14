@@ -302,9 +302,12 @@ def analysis(issue):
                         # 未开出的号码，遗漏值 +1
                         missing_val = target_missing.red_missing.get(red_num, 0) + 1
                     
-                    if missing_val not in simulated_groups:
-                        simulated_groups[missing_val] = []
-                    simulated_groups[missing_val].append(red_num)
+                    # 将遗漏值≥9 的都归为"9"这一组
+                    group_key = 9 if missing_val >= 9 else missing_val
+                    
+                    if group_key not in simulated_groups:
+                        simulated_groups[group_key] = []
+                    simulated_groups[group_key].append(red_num)
                 
                 next_analysis = {
                     'missing_groups': {str(k): v for k, v in simulated_groups.items()},
