@@ -186,6 +186,97 @@ def history():
                              total=0)
 
 
+@app.route('/missing_groups')
+def missing_groups():
+    """历史遗漏分组页面 - 显示每期的遗漏次数分组"""
+    try:
+        # 获取页码参数
+        page = request.args.get('page', 1, type=int)
+        per_page = 10  # 每页显示 10 期
+        
+        # 获取所有历史数据
+        all_results = db_manager.get_all_results(order_by='draw_date')
+        
+        if not all_results:
+            return render_template('missing_groups.html', 
+                                 error="暂无数据，请先更新数据")
+        
+        # 转换数据格式
+        formatted_results = []
+        for result in all_results:
+            formatted_results.append({
+                'issue': result['issue'],
+                'red_balls': [result['red_1'], result['red_2'], result['red_3'],
+                             result['red_4'], result['red_5'], result['red_6']],
+                'blue_ball': result.get('blue', 0),
+                'draw_date': str(result['draw_date'])
+            })
+        
+        # 计算遗漏值
+        missing_stats = calculator.calculate_missing_values(formatted_results)
+        
+        # 为每期计算遗漏分组
+        issues_with_groups = []
+        for i, stat in enumerate(missing_stats):
+            # 计算该期的遗漏分组
+            missing_groups = calculator.calculate_all_red_missing_groups(stat)
+            
+            # 获取对应的开奖信息
+            result = formatted_results[i] if i < len(formatted_results) else None
+            
+            if result:
+                # 构建红球遗漏详情列表
+                red_missing_details = []
+                for j, red_ball in enumerate(result['red_balls']):
+                    # 从 stat.red_missing 字典中获取该号码的遗漏值
+                    missing_val = stat.red_missing.get(red_ball, 0)
+                    red_missing_details.append({
+                        'ball': red_ball,
+                        'missing': missing_val
+                    })
+                
+                issues_with_groups.append({
+                    'issue': result['issue'],
+                    'draw_date': result['draw_date'],
+                    'red_balls': result['red_balls'],
+                    'blue_ball': result['blue_ball'],
+                    'missing_groups': {str(k): v for k, v in missing_groups.items()},
+                    'red_missing_details': red_missing_details  # 添加红球遗漏详情
+                })
+        
+        # 倒序排列（最新的在前）
+        issues_with_groups.reverse()
+        
+        # 分页
+        total = len(issues_with_groups)
+        total_pages = (total + per_page - 1) // per_page
+        
+        # 确保页码在有效范围内
+        if page < 1:
+            page = 1
+        elif page > total_pages:
+            page = total_pages
+        
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        paginated_issues = issues_with_groups[start_idx:end_idx]
+        
+        # 计算分页导航
+        start_page = max(1, page - 2)
+        end_page = min(total_pages, page + 2)
+        
+        return render_template('missing_groups.html',
+                             issues=paginated_issues,
+                             current_page=page,
+                             total_pages=total_pages,
+                             start_page=start_page,
+                             end_page=end_page,
+                             total_count=total)
+    except Exception as e:
+        return render_template('missing_groups.html', 
+                             error=f"加载数据失败：{str(e)}")
+
+
 @app.route('/analysis/<issue>')
 def analysis(issue):
     """单期详情分析页面"""
