@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>历史遗漏分组 - 双色球数据分析</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            color: #667eea;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        
+        .back-btn {
+            display: inline-block;
+            padding: 10px 25px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 25px;
+            margin-top: 15px;
+            transition: transform 0.3s;
+        }
+        
+        .back-btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .issue-card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+        
+        .issue-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .issue-info h3 {
+            color: #667eea;
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+        
+        .issue-info p {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .balls-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .ball {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        
+        .red-ball {
+            background: radial-gradient(circle at 30% 30%, #ff6b6b, #c92a2a);
+        }
+        
+        .blue-ball {
+            background: radial-gradient(circle at 30% 30%, #4dabf7, #1864ab);
+        }
+        
+        /* 遗漏次数分组表格样式 */
+        .missing-groups-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        .missing-groups-table thead th {
+            text-align: center;
+            padding: 12px;
+            color: #333;
+            font-weight: bold;
+            text-shadow: 0 1px 2px rgba(255,255,255,0.8);
+            border: 1px solid #dee2e6;
+        }
+        
+        .missing-groups-table tbody td {
+            padding: 12px;
+            text-align: center;
+            border: 1px solid #dee2e6;
+            vertical-align: top;
+            min-width: 80px;
+        }
+        
+        /* 表格背景色 */
+        .table-bg-0 {
+            background: linear-gradient(135deg, #ffe3e3 0%, #ffc9c9);
+        }
+        
+        .table-bg-1-5 {
+            background: linear-gradient(135deg, #fff3bf 0%, #ffe066);
+        }
+        
+        .table-bg-6-8 {
+            background: linear-gradient(135deg, #e7f5ff 0%, #74c0fc);
+        }
+        
+        .table-bg-9-plus {
+            background: linear-gradient(135deg, #d0ebff 0%, #15aabf);
+        }
+        
+        /* 号码球样式 */
+        .ball-color-0 {
+            color: #c92a2a;
+        }
+        
+        .ball-color-1-5 {
+            color: #f08c00;
+        }
+        
+        .ball-color-6-8 {
+            color: #1864ab;
+        }
+        
+        .ball-color-9-plus {
+            color: #1098ad;
+        }
+        
+        .ball-number {
+            display: block;
+            width: 32px;
+            height: 32px;
+            line-height: 32px;
+            text-align: center;
+            background: white;
+            border-radius: 50%;
+            font-weight: bold;
+            font-size: 13px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin: 5px auto;
+        }
+        
+        /* 中奖号码标记样式 */
+        .ball-highlight {
+            border: 3px solid #c92a2a;
+            box-shadow: 0 0 10px rgba(201, 42, 42, 0.5);
+        }
+        
+        .error-message {
+            background: #ffe3e3;
+            color: #c92a2a;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            margin: 30px auto;
+            max-width: 600px;
+        }
+        
+        .stats-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .stats-info strong {
+            color: #667eea;
+        }
+        
+        /* 分页样式 */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin: 30px 0;
+            padding: 20px;
+        }
+        
+        .pagination a, .pagination span {
+            padding: 10px 18px;
+            background: white;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #667eea;
+            font-weight: bold;
+            transition: all 0.3s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .pagination a:hover {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .pagination .current {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .pagination .disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 历史遗漏分组分析</h1>
+            <p style="color: #666; margin-top: 10px;">查看每一期的红球遗漏次数分组详情</p>
+            <a href="{{ url_for('index') }}" class="back-btn">🏠 返回首页</a>
+        </div>
+        
+        {% if error %}
+        <div class="error-message">
+            {{ error }}
+        </div>
+        {% else %}
+        <div class="stats-info">
+            共显示 <strong>{{ total_count }}</strong> 期遗漏分组数据，按开奖日期倒序排列，每页显示 10 期
+        </div>
+        
+        <!-- 分页导航 -->
+        {% if total_pages > 1 %}
+        <div class="pagination">
+            <!-- 上一页 -->
+            {% if current_page > 1 %}
+            <a href="{{ url_for('missing_groups', page=current_page-1) }}">« 上一页</a>
+            {% else %}
+            <span class="disabled">« 上一页</span>
+            {% endif %}
+            
+            <!-- 页码 -->
+            {% for p in range(start_page, end_page + 1) %}
+                {% if p == current_page %}
+                <span class="current">{{ p }}</span>
+                {% else %}
+                <a href="{{ url_for('missing_groups', page=p) }}">{{ p }}</a>
+                {% endif %}
+            {% endfor %}
+            
+            <!-- 下一页 -->
+            {% if current_page < total_pages %}
+            <a href="{{ url_for('missing_groups', page=current_page+1) }}">下一页 »</a>
+            {% else %}
+            <span class="disabled">下一页 »</span>
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        {% for issue_data in issues %}
+        <div class="issue-card">
+            <div class="issue-header">
+                <div class="issue-info">
+                    <h3>第 {{ issue_data.issue }} 期</h3>
+                    <p style="display: flex; align-items: center; gap: 15px;">
+                        <span>开奖日期：{{ issue_data.draw_date }}</span>
+                        <span style="color: #666;">|</span>
+                        <span style="color: #f08c00; font-size: 13px;">
+                            遗漏：
+                            {% for detail in issue_data.red_missing_details %}
+                                {{ detail.missing }}{% if not loop.last %}-{% endif %}
+                            {% endfor %}
+                        </span>
+                    </p>
+                </div>
+                <div class="balls-container">
+                    {% for ball in issue_data.red_balls %}
+                    <span class="ball red-ball">{{ '%02d' | format(ball) }}</span>
+                    {% endfor %}
+                    <span class="ball blue-ball">{{ '%02d' | format(issue_data.blue_ball) }}</span>
+                </div>
+            </div>
+            
+            <table class="missing-groups-table">
+                <thead>
+                    <tr>
+                        {% for missing_count in range(9) %}
+                        <th style="background: {% if missing_count == 0 %}linear-gradient(135deg, #ffe3e3 0%, #ffc9c9){% elif missing_count <= 5 %}linear-gradient(135deg, #fff3bf 0%, #ffe066){% elif missing_count <= 8 %}linear-gradient(135deg, #e7f5ff 0%, #74c0fc){% else %}linear-gradient(135deg, #d0ebff 0%, #15aabf){% endif %};">
+                            遗漏 {{ missing_count }} 次
+                        </th>
+                        {% endfor %}
+                        <th style="background: linear-gradient(135deg, #d0ebff 0%, #15aabf);">遗漏 ≥9 次</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        {% for missing_count in range(9) %}
+                        <td class="{% if missing_count == 0 %}table-bg-0{% elif missing_count <= 5 %}table-bg-1-5{% elif missing_count <= 8 %}table-bg-6-8{% else %}table-bg-9-plus{% endif %}">
+                            {% set balls = issue_data.missing_groups.get(missing_count|string, []) %}
+                            {% if balls %}
+                                {% for ball in balls %}
+                                {% set is_drawn = ball in issue_data.red_balls %}
+                                <span class="ball-number {% if is_drawn %}ball-highlight{% endif %} {% if missing_count == 0 %}ball-color-0{% elif missing_count <= 5 %}ball-color-1-5{% elif missing_count <= 8 %}ball-color-6-8{% else %}ball-color-9-plus{% endif %}">
+                                    {{ '%02d' | format(ball) }}
+                                </span>
+                                {% endfor %}
+                            {% else %}
+                                <span style="color: #ccc;">-</span>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                        <td class="table-bg-9-plus">
+                            {% set balls = issue_data.missing_groups.get('9', []) %}
+                            {% if balls %}
+                                {% for ball in balls %}
+                                {% set is_drawn = ball in issue_data.red_balls %}
+                                <span class="ball-number {% if is_drawn %}ball-highlight{% endif %} ball-color-9-plus">
+                                    {{ '%02d' | format(ball) }}
+                                </span>
+                                {% endfor %}
+                            {% else %}
+                                <span style="color: #ccc;">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+</body>
+</html>
