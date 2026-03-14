@@ -255,6 +255,62 @@ def analysis(issue):
                             break
                     break
             
+            # 查找下一期数据
+            next_issue_data = None
+            next_analysis = None
+            
+            # 找到当前期在列表中的位置
+            for i, result in enumerate(all_results):
+                if result['issue'] == issue and i < len(all_results) - 1:
+                    # 获取下一期数据（注意：all_results 是按开奖日期倒序排列的，所以下一期是 i+1）
+                    next_result = all_results[i + 1]
+                    next_issue_data = {
+                        'issue': next_result['issue'],
+                        'red_balls': [next_result['red_1'], next_result['red_2'],
+                                     next_result['red_3'], next_result['red_4'],
+                                     next_result['red_5'], next_result['red_6']],
+                        'blue_ball': next_result.get('blue', 0),
+                        'draw_date': str(next_result['draw_date'])
+                    }
+                    
+                    # 获取下一期的遗漏统计
+                    for stat in missing_stats:
+                        if stat.issue == next_result['issue']:
+                            # 计算下一期的遗漏分组
+                            next_missing_groups = calculator.calculate_all_red_missing_groups(stat)
+                            # 将键转换为字符串，方便模板访问
+                            next_analysis = {
+                                'missing_groups': {str(k): v for k, v in next_missing_groups.items()}
+                            }
+                            break
+                    break
+            
+            # 如果没有下一期数据，模拟下期未开奖的情况（所有红球遗漏次数 +1，但本期开出号码遗漏为 0）
+            if not next_analysis:
+                # 构建模拟的遗漏分组
+                # 规则：本期开出的 6 个红球遗漏值 = 0，其他红球遗漏值 = 当前遗漏值 + 1
+                simulated_groups = {}
+                
+                # 获取本期开出的红球号码
+                current_drawn_red_balls = set(analysis_result.red_balls)
+                
+                for red_num in range(1, 34):
+                    if red_num in current_drawn_red_balls:
+                        # 本期开出的号码，遗漏值为 0
+                        missing_val = 0
+                    else:
+                        # 未开出的号码，遗漏值 +1
+                        missing_val = target_missing.red_missing.get(red_num, 0) + 1
+                    
+                    if missing_val not in simulated_groups:
+                        simulated_groups[missing_val] = []
+                    simulated_groups[missing_val].append(red_num)
+                
+                next_analysis = {
+                    'missing_groups': {str(k): v for k, v in simulated_groups.items()},
+                    'no_next_draw': True  # 标记没有下一期开奖数据
+                }
+            
             # 构建号码遗漏详情
             number_details = []
             for i, red_ball in enumerate(formatted_result['red_balls']):
@@ -275,7 +331,9 @@ def analysis(issue):
                                  analysis=analysis_result.to_dict(),
                                  number_details=number_details,
                                  prev_issue_data=prev_issue_data,
-                                 prev_analysis=prev_analysis)
+                                 prev_analysis=prev_analysis,
+                                 next_issue_data=next_issue_data,
+                                 next_analysis=next_analysis)
         else:
             return render_template('analysis.html', 
                                  issue_data=formatted_result,
