@@ -61,6 +61,24 @@
             margin-bottom: 30px;
         }
         
+        .analysis-link-btn {
+            display: inline-block;
+            padding: 8px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: bold;
+            transition: all 0.3s;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+        
+        .analysis-link-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
+        }
+        
         .issue-header {
             display: flex;
             justify-content: space-between;
@@ -298,7 +316,10 @@
         <div class="issue-card">
             <div class="issue-header">
                 <div class="issue-info">
-                    <h3>第 {{ issue_data.issue }} 期</h3>
+                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 8px;">
+                        <h3 style="margin: 0;">第 {{ issue_data.issue }} 期</h3>
+                        <a href="{{ url_for('analysis', issue=issue_data.issue) }}" class="analysis-link-btn">📊 期号详情分析</a>
+                    </div>
                     <p style="display: flex; align-items: center; gap: 15px;">
                         <span>开奖日期：{{ issue_data.draw_date }}</span>
                         <span style="color: #666;">|</span>
