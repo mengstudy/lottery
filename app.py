@@ -235,6 +235,9 @@ def missing_groups():
                         'missing': missing_val
                     })
                 
+                # 按遗漏次数从小到大排序
+                red_missing_details.sort(key=lambda x: x['missing'])
+                
                 issues_with_groups.append({
                     'issue': result['issue'],
                     'draw_date': result['draw_date'],
