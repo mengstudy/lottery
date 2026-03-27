@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大乐透 - {{ issue_data.issue if issue_data else '详情' }}期分析</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+        .header h1 { color: #11998e; font-size: 32px; margin-bottom: 20px; }
+        .nav-buttons { display: flex; gap: 15px; }
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(17, 153, 142, 0.4); }
+        .btn-ssq { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .content-card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); margin-bottom: 30px; }
+        .error-message { background: #ffe3e3; color: #c92a2a; padding: 20px; border-radius: 10px; border-left: 4px solid #c92a2a; margin: 20px 0; }
+        .issue-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+        }
+        .issue-info h2 { font-size: 28px; margin-bottom: 15px; }
+        .balls-container { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; align-items: center; }
+        .balls-section { display: flex; align-items: center; gap: 10px; }
+        .balls-label { font-size: 14px; opacity: 0.9; }
+        .ball {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: bold;
+            color: white;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        .red-ball { background: radial-gradient(circle at 30% 30%, #ff6b6b, #c92a2a); }
+        .blue-ball { background: radial-gradient(circle at 30% 30%, #4dabf7, #1864ab); }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px; }
+        .stat-item { background: #f8f9fa; padding: 15px; border-radius: 10px; text-align: center; }
+        .stat-label { color: #666; font-size: 13px; margin-bottom: 8px; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #11998e; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #dee2e6; }
+        th { background: #f8f9fa; font-weight: bold; color: #495057; }
+        .missing-badge { display: inline-block; padding: 6px 15px; border-radius: 20px; font-weight: bold; min-width: 50px; text-align: center; }
+        .missing-0 { background: #ffe3e3; color: #c92a2a; }
+        .missing-1-5 { background: #fff3bf; color: #f08c00; }
+        .missing-6-10 { background: #d0ebff; color: #1864ab; }
+        .missing-11-plus { background: #daebff; color: #1098ad; }
+        .analysis-section { margin-top: 30px; }
+        .analysis-section h3 { color: #11998e; margin-bottom: 20px; font-size: 22px; border-bottom: 2px solid #11998e; padding-bottom: 10px; }
+        .table-bg-0 { background: linear-gradient(135deg, #ffe3e3 0%, #ffc9c9 100%); }
+        .table-bg-1-5 { background: linear-gradient(135deg, #fff3bf 0%, #ffe066 100%); }
+        .table-bg-6-8 { background: linear-gradient(135deg, #d0ebff 0%, #74c0fc 100%); }
+        .table-bg-9-plus { background: linear-gradient(135deg, #daebff 0%, #74c0fc 100%); }
+        .ball-color-0 { color: #c92a2a; }
+        .ball-color-1-5 { color: #f08c00; }
+        .ball-color-6-8 { color: #1864ab; }
+        .ball-color-9-plus { color: #1098ad; }
+        .ball-highlight { border: 3px solid #c92a2a; box-shadow: 0 0 10px rgba(201, 42, 42, 0.5); }
+        table tbody tr td { vertical-align: top !important; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 期号详情分析</h1>
+            <div class="nav-buttons">
+                {% if prev_issue_data %}
+                <a href="{{ url_for('dlt_analysis', issue=prev_issue_data.issue) }}" class="btn">◀ 上一期</a>
+                {% endif %}
+                {% if next_issue_data %}
+                <a href="{{ url_for('dlt_analysis', issue=next_issue_data.issue) }}" class="btn">下一期 ▶</a>
+                {% endif %}
+                <a href="{{ url_for('dlt_index') }}" class="btn">返回首页</a>
+                <a href="{{ url_for('dlt_history') }}" class="btn">历史数据</a>
+                <a href="{{ url_for('index') }}" class="btn btn-ssq">双色球</a>
+            </div>
+        </div>
+        
+        {% if error %}
+        <div class="error-message">{{ error }}</div>
+        {% endif %}
+        
+        {% if issue_data %}
+        <div class="content-card">
+            <div class="issue-info">
+                <h2>期号：{{ issue_data.issue }}</h2>
+                <div>开奖日期：{{ issue_data.draw_date }}</div>
+                
+                <div class="balls-container">
+                    <div class="balls-section">
+                        <span class="balls-label">前区：</span>
+                        {% for ball in issue_data.red_balls %}
+                        <div class="ball red-ball">{{ '%02d' | format(ball) }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="balls-section">
+                        <span class="balls-label">后区：</span>
+                        {% for ball in issue_data.blue_balls %}
+                        <div class="ball blue-ball">{{ '%02d' | format(ball) }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            
+            {% if analysis %}
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-label">奇偶比</div>
+                    <div class="stat-value">{{ analysis.red_odd_even }}</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">前区和值</div>
+                    <div class="stat-value">{{ analysis.red_sum }}</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">后区和值</div>
+                    <div class="stat-value">{{ analysis.blue_sum }}</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">前区最大遗漏</div>
+                    <div class="stat-value">{{ analysis.max_red_missing }}</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">后区最大遗漏</div>
+                    <div class="stat-value">{{ analysis.max_blue_missing }}</div>
+                </div>
+            </div>
+            
+            {% if next_analysis %}
+            <div class="analysis-section">
+                {% if next_issue_data and not next_analysis.no_next_draw %}
+                <h3>📊 下一期遗漏次数分组（期号：{{ next_issue_data.issue }}）</h3>
+                <p style="color: #666; font-size: 14px; margin-bottom: 15px;">开奖日期：{{ next_issue_data.draw_date }} - 🔴 红色边框号码为本期开出号码</p>
+                {% else %}
+                <h3>📊 下期遗漏次数分组（预测参考）</h3>
+                <p style="color: #666; font-size: 14px; margin-bottom: 15px;">说明：下一期尚未开奖，以下为基于当前期遗漏统计的分组数据</p>
+                {% endif %}
+                <table>
+                    <thead>
+                        <tr>
+                            {% for missing_count in range(9) %}
+                            <th style="text-align: center; background: {% if missing_count == 0 %}#ffe3e3{% elif missing_count <= 5 %}#fff3bf{% elif missing_count <= 8 %}#d0ebff{% else %}#daebff{% endif %}; color: #333;">
+                                遗漏 {{ missing_count }} 次
+                            </th>
+                            {% endfor %}
+                            <th style="text-align: center; background: #daebff; color: #333;">遗漏 ≥9 次</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            {% for missing_count in range(9) %}
+                            <td style="text-align: center; padding: 10px; background: {% if missing_count == 0 %}#fff5f5{% elif missing_count <= 5 %}#fffef0{% elif missing_count <= 8 %}#f0f9ff{% else %}#f0faff{% endif %};">
+                                {% set balls = next_analysis.missing_groups.get(missing_count|string, []) %}
+                                {% if balls %}
+                                <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
+                                    {% for ball in balls %}
+                                    {% set show_highlight = not next_analysis.no_next_draw and next_issue_data and ball in next_issue_data.red_balls %}
+                                    <span style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: white; border-radius: 50%; font-weight: bold; font-size: 13px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); {% if show_highlight %}border: 3px solid #c92a2a;{% endif %} color: {% if missing_count == 0 %}#c92a2a{% elif missing_count <= 5 %}#f08c00{% elif missing_count <= 8 %}#1864ab{% else %}#1098ad{% endif %};">
+                                        {{ '%02d' | format(ball) }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <span style="color: #ccc;">-</span>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                            <td style="text-align: center; padding: 10px; background: #f0faff;">
+                                {% set balls = next_analysis.missing_groups.get('9', []) %}
+                                {% if balls %}
+                                <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
+                                    {% for ball in balls %}
+                                    {% set show_highlight = not next_analysis.no_next_draw and next_issue_data and ball in next_issue_data.red_balls %}
+                                    <span style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: white; border-radius: 50%; font-weight: bold; font-size: 13px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); {% if show_highlight %}border: 3px solid #c92a2a;{% endif %} color: #1098ad;">
+                                        {{ '%02d' | format(ball) }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <span style="color: #ccc;">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+            
+            {% if analysis.missing_groups %}
+            <div class="analysis-section">
+                <h3>🎯 本期开出号码遗漏次数分组</h3>
+                <p style="color: #666; font-size: 14px; margin-bottom: 15px;">说明：全部 35 个前区红球的遗漏分布，🔴 红色边框号码为本期开出号码</p>
+                <table>
+                    <thead>
+                        <tr>
+                            {% for missing_count in range(9) %}
+                            <th style="text-align: center; background: {% if missing_count == 0 %}#ffe3e3{% elif missing_count <= 5 %}#fff3bf{% elif missing_count <= 8 %}#d0ebff{% else %}#daebff{% endif %}; color: #333;">
+                                遗漏 {{ missing_count }} 次
+                            </th>
+                            {% endfor %}
+                            <th style="text-align: center; background: #daebff; color: #333;">遗漏 ≥9 次</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            {% for missing_count in range(9) %}
+                            <td style="text-align: center; padding: 10px; background: {% if missing_count == 0 %}#fff5f5{% elif missing_count <= 5 %}#fffef0{% elif missing_count <= 8 %}#f0f9ff{% else %}#f0faff{% endif %};">
+                                {% set balls = analysis.missing_groups.get(missing_count|string, []) %}
+                                {% if balls %}
+                                <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
+                                    {% for ball in balls %}
+                                    {% set is_drawn = ball in issue_data.red_balls %}
+                                    <span style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: white; border-radius: 50%; font-weight: bold; font-size: 13px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); {% if is_drawn %}border: 3px solid #c92a2a;{% endif %} color: {% if missing_count == 0 %}#c92a2a{% elif missing_count <= 5 %}#f08c00{% elif missing_count <= 8 %}#1864ab{% else %}#1098ad{% endif %};">
+                                        {{ '%02d' | format(ball) }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <span style="color: #ccc;">-</span>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                            <td style="text-align: center; padding: 10px; background: #f0faff;">
+                                {% set balls = analysis.missing_groups.get('9', []) %}
+                                {% if balls %}
+                                <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
+                                    {% for ball in balls %}
+                                    {% set is_drawn = ball in issue_data.red_balls %}
+                                    <span style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: white; border-radius: 50%; font-weight: bold; font-size: 13px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); {% if is_drawn %}border: 3px solid #c92a2a;{% endif %} color: #1098ad;">
+                                        {{ '%02d' | format(ball) }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <span style="color: #ccc;">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+            
+            {% if prev_analysis and prev_issue_data %}
+            <div class="analysis-section">
+                <h3>📊 上一期遗漏次数分组（期号：{{ prev_issue_data.issue }}）</h3>
+                <p style="color: #666; font-size: 14px; margin-bottom: 15px;">开奖日期：{{ prev_issue_data.draw_date }} - 🔴 红色边框号码为上期开出号码</p>
+                <table>
+                    <thead>
+                        <tr>
+                            {% for missing_count in range(9) %}
+                            <th style="text-align: center; background: {% if missing_count == 0 %}#ffe3e3{% elif missing_count <= 5 %}#fff3bf{% elif missing_count <= 8 %}#d0ebff{% else %}#daebff{% endif %}; color: #333;">
+                                遗漏 {{ missing_count }} 次
+                            </th>
+                            {% endfor %}
+                            <th style="text-align: center; background: #daebff; color: #333;">遗漏 ≥9 次</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            {% for missing_count in range(9) %}
+                            <td style="text-align: center; padding: 10px; background: {% if missing_count == 0 %}#fff5f5{% elif missing_count <= 5 %}#fffef0{% elif missing_count <= 8 %}#f0f9ff{% else %}#f0faff{% endif %};">
+                                {% set balls = prev_analysis.missing_groups.get(missing_count|string, []) %}
+                                {% if balls %}
+                                <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
+                                    {% for ball in balls %}
+                                    {% set is_prev_drawn = ball in prev_issue_data.red_balls %}
+                                    <span style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: white; border-radius: 50%; font-weight: bold; font-size: 13px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); {% if is_prev_drawn %}border: 3px solid #c92a2a;{% endif %} color: {% if missing_count == 0 %}#c92a2a{% elif missing_count <= 5 %}#f08c00{% elif missing_count <= 8 %}#1864ab{% else %}#1098ad{% endif %};">
+                                        {{ '%02d' | format(ball) }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <span style="color: #ccc;">-</span>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                            <td style="text-align: center; padding: 10px; background: #f0faff;">
+                                {% set balls = prev_analysis.missing_groups.get('9', []) %}
+                                {% if balls %}
+                                <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
+                                    {% for ball in balls %}
+                                    {% set is_prev_drawn = ball in prev_issue_data.red_balls %}
+                                    <span style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: white; border-radius: 50%; font-weight: bold; font-size: 13px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); {% if is_prev_drawn %}border: 3px solid #c92a2a;{% endif %} color: #1098ad;">
+                                        {{ '%02d' | format(ball) }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <span style="color: #ccc;">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+            {% endif %}
+            
+            {% if number_details %}
+            <div class="analysis-section">
+                <h3>🎯 开出号码遗漏详情</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>类型</th>
+                            <th>号码</th>
+                            <th>遗漏期数</th>
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for detail in number_details %}
+                        <tr>
+                            <td>{{ detail.type }}</td>
+                            <td><strong>{{ '%02d' | format(detail.number) }}</strong></td>
+                            <td>
+                                <span class="missing-badge {% if detail.missing == 0 %}missing-0{% elif detail.missing <= 5 %}missing-1-5{% elif detail.missing <= 10 %}missing-6-10{% else %}missing-11-plus{% endif %}">
+                                    {{ detail.missing }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if detail.missing == 0 %}
+                                <span style="color: #c92a2a;">🔥 热号</span>
+                                {% elif detail.missing <= 5 %}
+                                <span style="color: #f08c00;">⚡ 温号</span>
+                                {% elif detail.missing <= 10 %}
+                                <span style="color: #1864ab;">❄️ 冷号</span>
+                                {% else %}
+                                <span style="color: #1098ad;">🧊 大冷号</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+            
+            {% if analysis %}
+            <div class="analysis-section">
+                <h3>📈 冷热号分析</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 20px;">
+                    <div>
+                        <h4 style="margin-bottom: 15px; color: #11998e;">热号列表（遗漏 0 次）</h4>
+                        {% if analysis.hot_numbers %}
+                        <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                            {% for num in analysis.hot_numbers %}
+                            <span style="display: inline-block; padding: 10px 20px; background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%); color: #c92a2a; border-radius: 25px; font-weight: bold;">
+                                🔥 {{ '%02d' | format(num) }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p style="color: #999;">暂无热号</p>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <h4 style="margin-bottom: 15px; color: #11998e;">冷号列表（遗漏 >12 次）</h4>
+                        {% if analysis.cold_numbers %}
+                        <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                            {% for num in analysis.cold_numbers %}
+                            <span style="display: inline-block; padding: 10px 20px; background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); color: #1864ab; border-radius: 25px; font-weight: bold;">
+                                🧊 {{ '%02d' | format(num) }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p style="color: #999;">暂无冷号</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

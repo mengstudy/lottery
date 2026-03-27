@@ -301,6 +301,12 @@
         <div class="header">
             <h1>📊 期号详情分析</h1>
             <div class="nav-buttons">
+                {% if prev_issue_data %}
+                <a href="{{ url_for('analysis', issue=prev_issue_data.issue) }}" class="btn">◀ 上一期</a>
+                {% endif %}
+                {% if next_issue_data %}
+                <a href="{{ url_for('analysis', issue=next_issue_data.issue) }}" class="btn">下一期 ▶</a>
+                {% endif %}
                 <a href="{{ url_for('index') }}" class="btn">返回首页</a>
                 <a href="{{ url_for('history') }}" class="btn">历史数据</a>
             </div>
@@ -388,9 +394,9 @@
                                 <div style="display: flex; flex-direction: column; gap: 5px; align-items: center;">
                                     {% for ball in balls %}
                                     {% if next_issue_data and not next_analysis.no_next_draw %}
-                                        {% set is_current_drawn = ball in issue_data.red_balls %}
+                                        {% set is_next_drawn = ball in next_issue_data.red_balls %}
                                         <span style="display: inline-block; width: 35px; height: 35px; line-height: 35px; text-align: center; background: white; border-radius: 50%; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"
-                                              class="{% if is_current_drawn %}ball-highlight{% endif %} 
+                                              class="{% if is_next_drawn %}ball-highlight{% endif %} 
                                                      {% if missing_count == 0 %}ball-color-0
                                                      {% elif missing_count <= 5 %}ball-color-1-5
                                                      {% elif missing_count <= 8 %}ball-color-6-8
@@ -419,9 +425,9 @@
                                 <div style="display: flex; flex-direction: column; gap: 5px; align-items: center;">
                                     {% for ball in balls %}
                                     {% if next_issue_data and not next_analysis.no_next_draw %}
-                                        {% set is_current_drawn = ball in issue_data.red_balls %}
+                                        {% set is_next_drawn = ball in next_issue_data.red_balls %}
                                         <span style="display: inline-block; width: 35px; height: 35px; line-height: 35px; text-align: center; background: white; border-radius: 50%; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"
-                                              class="{% if is_current_drawn %}ball-highlight{% endif %} ball-color-9-plus">
+                                              class="{% if is_next_drawn %}ball-highlight{% endif %} ball-color-9-plus">
                                             {{ '%02d' | format(ball) }}
                                         </span>
                                     {% else %}
