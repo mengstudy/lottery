@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大乐透 - 历史数据</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #11998e;
+            font-size: 32px;
+            margin-bottom: 20px;
+        }
+        
+        .nav-buttons {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(17, 153, 142, 0.4);
+        }
+        
+        .btn-ssq {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .btn-update-all {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        .data-card {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .error-message {
+            background: #ffe3e3;
+            color: #c92a2a;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #c92a2a;
+            margin: 20px 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        th {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+            cursor: pointer;
+        }
+        
+        .ball-small {
+            display: inline-block;
+            width: 26px;
+            height: 26px;
+            line-height: 26px;
+            text-align: center;
+            border-radius: 50%;
+            margin: 0 2px;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+        }
+        
+        .red-balls-container, .blue-balls-container {
+            display: inline-block;
+            white-space: nowrap;
+        }
+        
+        .ball-red {
+            background: radial-gradient(circle at 30% 30%, #ff6b6b, #c92a2a);
+        }
+        
+        .ball-blue {
+            background: radial-gradient(circle at 30% 30%, #4dabf7, #1864ab);
+        }
+        
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .page-link {
+            min-width: 45px;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #11998e;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #11998e;
+            font-weight: bold;
+            transition: all 0.3s;
+            padding: 0 15px;
+        }
+        
+        .page-link:hover,
+        .page-link.active {
+            background: #11998e;
+            color: white;
+        }
+        
+        .page-link.disabled {
+            background: #f8f9fa;
+            color: #6c757d;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+        
+        .jump-to-page {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .page-input {
+            width: 80px;
+            padding: 8px 12px;
+            border: 2px solid #11998e;
+            border-radius: 5px;
+            font-size: 14px;
+            text-align: center;
+        }
+        
+        .btn-jump {
+            padding: 8px 20px;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .issue-link {
+            color: #11998e;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        
+        .issue-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📜 大乐透历史开奖数据</h1>
+            <div class="nav-buttons">
+                <a href="{{ url_for('dlt_index') }}" class="btn">返回首页</a>
+                <a href="{{ url_for('index') }}" class="btn btn-ssq">双色球</a>
+                <button onclick="updateLatestData()" class="btn">更新最新数据</button>
+                <button onclick="updateAllHistory()" class="btn btn-update-all">🔄 更新所有历史数据</button>
+            </div>
+        </div>
+        
+        {% if error %}
+        <div class="error-message">
+            {{ error }}
+        </div>
+        {% endif %}
+        
+        <div class="data-card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>期号</th>
+                        <th>开奖日期</th>
+                        <th>前区（红球）</th>
+                        <th>后区（蓝球）</th>
+                        <th>奇偶比</th>
+                        <th>前区和</th>
+                        <th>后区和</th>
+                        <th>前区遗漏详情</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for result in results %}
+                    <tr onclick="location.href='{{ url_for('dlt_analysis', issue=result.issue) }}'">
+                        <td><a href="{{ url_for('dlt_analysis', issue=result.issue) }}" class="issue-link">{{ result.issue }}</a></td>
+                        <td>{{ result.draw_date }}</td>
+                        <td>
+                            <div class="red-balls-container">
+                                {% for i in range(5) %}
+                                <span class="ball-small ball-red">{{ '%02d' | format(result.red_balls[i]) }}</span>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="ball-small ball-blue">{{ '%02d' | format(result.blue_balls[0]) }}</span>
+                            <span class="ball-small ball-blue">{{ '%02d' | format(result.blue_balls[1]) }}</span>
+                        </td>
+                        <td>{{ result.get('odd_even', '-') }}</td>
+                        <td>{{ result.get('red_sum', '-') }}</td>
+                        <td>{{ result.get('blue_sum', '-') }}</td>
+                        <td>
+                            {% if result.get('red_balls_missing') %}
+                            <div style="display: flex; gap: 4px; align-items: center; justify-content: center;">
+                                {% set sorted_missing = result.red_balls_missing|sort %}
+                                {% for missing in sorted_missing %}
+                                <span style="font-size: 13px; color: #333;">{{ missing }}</span>
+                                {% if not loop.last %}
+                                <span style="font-size: 13px; color: #999;">-</span>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <span style="color: #999;">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            
+            {% if total_pages > 1 %}
+            <div class="pagination">
+                {% if current_page > 1 %}
+                <a href="?page={{ current_page - 1 }}" class="page-link">上一页</a>
+                {% else %}
+                <span class="page-link disabled">上一页</span>
+                {% endif %}
+                
+                {% if start_page > 1 %}
+                <a href="?page=1" class="page-link">1</a>
+                {% if start_page > 2 %}
+                <span class="page-link">...</span>
+                {% endif %}
+                {% endif %}
+                
+                {% for p in range(start_page, end_page + 1) %}
+                <a href="?page={{ p }}" class="page-link {% if p == current_page %}active{% endif %}">{{ p }}</a>
+                {% endfor %}
+                
+                {% if end_page < total_pages %}
+                {% if end_page < total_pages - 1 %}
+                <span class="page-link">...</span>
+                {% endif %}
+                <a href="?page={{ total_pages }}" class="page-link">{{ total_pages }}</a>
+                {% endif %}
+                
+                {% if current_page < total_pages %}
+                <a href="?page={{ current_page + 1 }}" class="page-link">下一页</a>
+                {% else %}
+                <span class="page-link disabled">下一页</span>
+                {% endif %}
+            </div>
+            
+            <div class="jump-to-page">
+                <span>共 {{ total }} 条数据，{{ total_pages }} 页</span>
+                <form onsubmit="jumpToPage(event); return false;">
+                    <input type="number" id="pageInput" min="1" max="{{ total_pages }}" placeholder="页码" class="page-input">
+                    <button type="submit" class="btn-jump">跳转</button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <script>
+        function jumpToPage(event) {
+            event.preventDefault();
+            const pageInput = document.getElementById('pageInput');
+            const page = parseInt(pageInput.value);
+            const maxPage = {{ total_pages }};
+            
+            if (isNaN(page) || page < 1) {
+                alert('请输入有效的页码（最小为 1）');
+                return;
+            }
+            
+            if (page > maxPage) {
+                alert(`最大页码为 ${maxPage}`);
+                return;
+            }
+            
+            window.location.href = `?page=${page}`;
+        }
+        
+        function updateLatestData() {
+            const password = prompt('请输入操作口令：', '');
+            
+            if (!password) {
+                alert('❌ 已取消操作');
+                return;
+            }
+            
+            fetch('{{ url_for("dlt_update_data") }}', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({password: password})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✅ ' + data.message);
+                    location.reload();
+                } else {
+                    alert('❌ ' + data.message);
+                }
+            })
+            .catch(error => {
+                alert('请求失败：' + error);
+            });
+        }
+        
+        function updateAllHistory() {
+            const password = prompt('请输入操作口令：', '');
+            
+            if (!password) {
+                alert('❌ 已取消操作');
+                return;
+            }
+            
+            if (!confirm('⚠️ 注意：\n\n此操作将抓取所有历史开奖数据！\n\n可能需要几分钟时间，确定要继续吗？')) {
+                return;
+            }
+            
+            alert('开始抓取历史数据，请稍候...');
+            
+            fetch('{{ url_for("dlt_update_all_history") }}', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({password: password})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✅ ' + data.message + '\n总计：' + data.total + ' 条');
+                    location.reload();
+                } else {
+                    alert('❌ ' + data.message);
+                }
+            })
+            .catch(error => {
+                alert('请求失败：' + error);
+            });
+        }
+    </script>
+</body>
+</html>
