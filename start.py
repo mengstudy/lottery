@@ -26,11 +26,11 @@ def main():
     
     # 启动 Flask 应用
     print("\n正在启动 Web 服务器...")
-    print("访问地址：http://localhost:5000")
+    print("访问地址：http://localhost")
     print("按 Ctrl+C 停止服务\n")
     
     from app import app
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=80)
 
 
 if __name__ == '__main__':
