@@ -302,13 +302,13 @@
             <h1>📊 期号详情分析</h1>
             <div class="nav-buttons">
                 {% if prev_issue_data %}
-                <a href="{{ url_for('analysis', issue=prev_issue_data.issue) }}" class="btn">◀ 上一期</a>
+                <a href="{{ url_for('ssq_analysis', issue=prev_issue_data.issue) }}" class="btn">◀ 上一期</a>
                 {% endif %}
                 {% if next_issue_data %}
-                <a href="{{ url_for('analysis', issue=next_issue_data.issue) }}" class="btn">下一期 ▶</a>
+                <a href="{{ url_for('ssq_analysis', issue=next_issue_data.issue) }}" class="btn">下一期 ▶</a>
                 {% endif %}
-                <a href="{{ url_for('index') }}" class="btn">返回首页</a>
-                <a href="{{ url_for('history') }}" class="btn">历史数据</a>
+                <a href="{{ url_for('ssq_index') }}" class="btn">返回首页</a>
+                <a href="{{ url_for('ssq_history') }}" class="btn">历史数据</a>
             </div>
         </div>
         

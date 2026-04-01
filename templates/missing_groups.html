@@ -272,7 +272,7 @@
         <div class="header">
             <h1>📊 历史遗漏分组分析</h1>
             <p style="color: #666; margin-top: 10px;">查看每一期的红球遗漏次数分组详情</p>
-            <a href="{{ url_for('index') }}" class="back-btn">🏠 返回首页</a>
+            <a href="{{ url_for('ssq_index') }}" class="back-btn">🏠 返回首页</a>
         </div>
         
         {% if error %}
@@ -289,7 +289,7 @@
         <div class="pagination">
             <!-- 上一页 -->
             {% if current_page > 1 %}
-            <a href="{{ url_for('missing_groups', page=current_page-1) }}">« 上一页</a>
+            <a href="{{ url_for('ssq_missing_groups', page=current_page-1) }}">« 上一页</a>
             {% else %}
             <span class="disabled">« 上一页</span>
             {% endif %}
@@ -299,13 +299,13 @@
                 {% if p == current_page %}
                 <span class="current">{{ p }}</span>
                 {% else %}
-                <a href="{{ url_for('missing_groups', page=p) }}">{{ p }}</a>
+                <a href="{{ url_for('ssq_missing_groups', page=p) }}">{{ p }}</a>
                 {% endif %}
             {% endfor %}
             
             <!-- 下一页 -->
             {% if current_page < total_pages %}
-            <a href="{{ url_for('missing_groups', page=current_page+1) }}">下一页 »</a>
+            <a href="{{ url_for('ssq_missing_groups', page=current_page+1) }}">下一页 »</a>
             {% else %}
             <span class="disabled">下一页 »</span>
             {% endif %}
@@ -318,7 +318,7 @@
                 <div class="issue-info">
                     <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 8px;">
                         <h3 style="margin: 0;">第 {{ issue_data.issue }} 期</h3>
-                        <a href="{{ url_for('analysis', issue=issue_data.issue) }}" class="analysis-link-btn">📊 期号详情分析</a>
+                        <a href="{{ url_for('ssq_analysis', issue=issue_data.issue) }}" class="analysis-link-btn">📊 期号详情分析</a>
                     </div>
                     <p style="display: flex; align-items: center; gap: 15px;">
                         <span>开奖日期：{{ issue_data.draw_date }}</span>

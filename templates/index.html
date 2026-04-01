@@ -261,8 +261,8 @@
             
             <div class="nav-buttons">
                 <a href="{{ url_for('dlt_index') }}" class="btn btn-success">🎰 大乐透</a>
-                <a href="{{ url_for('history') }}" class="btn btn-primary">历史数据</a>
-                <a href="{{ url_for('missing_groups') }}" class="btn btn-success" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">📊 历史遗漏分组</a>
+                <a href="{{ url_for('ssq_history') }}" class="btn btn-primary">历史数据</a>
+                <a href="{{ url_for('ssq_missing_groups') }}" class="btn btn-success" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">📊 历史遗漏分组</a>
                 <button onclick="updateData()" class="btn btn-success">立即更新</button>
                 <button onclick="calculateMissingTables()" class="btn btn-primary" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">🔢 计算遗漏次数表</button>
             </div>
@@ -387,7 +387,7 @@
             btn.disabled = true;
             btn.textContent = '更新中...';
             
-            fetch('/api/update_data', {
+            fetch('/ssq/api/update_data', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({password: password})
@@ -428,7 +428,7 @@
             // 显示进度提示
             alert('⚠️ 注意：此操作需要较长时间（约 30-60 秒），请耐心等待完成。');
             
-            fetch('/api/calculate_missing_tables', {
+            fetch('/ssq/api/calculate_missing_tables', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({password: password})
