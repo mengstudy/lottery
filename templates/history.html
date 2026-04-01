@@ -314,7 +314,7 @@
         <div class="header">
             <h1>📜 历史开奖数据</h1>
             <div class="nav-buttons">
-                <a href="{{ url_for('index') }}" class="btn">返回首页</a>
+                <a href="{{ url_for('ssq_index') }}" class="btn">返回首页</a>
                 <a href="{{ url_for('dlt_index') }}" class="btn" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">🎰 大乐透</a>
                 <button onclick="updateLatestData()" class="btn">更新最新数据</button>
                 <button onclick="updateAllHistory()" class="btn btn-update-all">🔄 更新所有历史数据</button>
@@ -349,8 +349,8 @@
                 </thead>
                 <tbody>
                     {% for result in results %}
-                    <tr onclick="location.href='{{ url_for('analysis', issue=result.issue) }}'">
-                        <td><a href="{{ url_for('analysis', issue=result.issue) }}" class="issue-link">{{ result.issue }}</a></td>
+                    <tr onclick="location.href='{{ url_for('ssq_analysis', issue=result.issue) }}'">
+                        <td><a href="{{ url_for('ssq_analysis', issue=result.issue) }}" class="issue-link">{{ result.issue }}</a></td>
                         <td>{{ result.draw_date }}</td>
                         <td>
                             <div class="red-balls-container">
@@ -473,7 +473,7 @@
                 return;
             }
             
-            fetch('{{ url_for("update_data") }}', {
+            fetch('{{ url_for("ssq_update_data") }}', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({password: password})
@@ -510,7 +510,7 @@
             spinner.style.display = 'block';
             loadingText.textContent = '正在抓取所有历史数据，请稍候...';
             
-            fetch('{{ url_for("update_all_history") }}', {
+            fetch('{{ url_for("ssq_update_all_history") }}', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({password: password})

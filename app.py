@@ -43,7 +43,13 @@ app.config['JSON_AS_ASCII'] = False  # 支持中文
 
 @app.route('/')
 def index():
-    """首页 - 最新数据看板"""
+    """首页 - 骑马与砍杀3D"""
+    return render_template('mount_and_blade_3d.html')
+
+
+@app.route('/ssq')
+def ssq_index():
+    """双色球首页 - 最新数据看板"""
     try:
         # 获取最新一期数据
         latest_results = db_manager.get_recent_results(1)
@@ -99,9 +105,9 @@ def index():
                              latest=None)
 
 
-@app.route('/history')
-def history():
-    """历史数据列表页面"""
+@app.route('/ssq/history')
+def ssq_history():
+    """双色球历史数据列表页面"""
     try:
         page = request.args.get('page', 1, type=int)
         per_page = 20
@@ -176,7 +182,7 @@ def history():
                              start_page=start_page,
                              end_page=end_page,
                              total=total)
-                             
+                              
     except Exception as e:
         # 发生异常时也要传递必要的变量
         return render_template('history.html', 
@@ -189,9 +195,9 @@ def history():
                              total=0)
 
 
-@app.route('/missing_groups')
-def missing_groups():
-    """历史遗漏分组页面 - 显示每期的遗漏次数分组"""
+@app.route('/ssq/missing_groups')
+def ssq_missing_groups():
+    """双色球历史遗漏分组页面 - 显示每期的遗漏次数分组"""
     try:
         # 获取页码参数
         page = request.args.get('page', 1, type=int)
@@ -283,9 +289,9 @@ def missing_groups():
                              error=f"加载数据失败：{str(e)}")
 
 
-@app.route('/analysis/<issue>')
-def analysis(issue):
-    """单期详情分析页面"""
+@app.route('/ssq/analysis/<issue>')
+def ssq_analysis(issue):
+    """双色球单期详情分析页面"""
     try:
         # 获取该期数据
         all_results = db_manager.get_all_results(order_by='draw_date')
@@ -438,17 +444,17 @@ def analysis(issue):
             return render_template('analysis.html', 
                                  issue_data=formatted_result,
                                  error="无法计算遗漏值")
-                                 
+                                  
     except Exception as e:
         return render_template('analysis.html', 
                              error=f"加载分析数据失败：{str(e)}",
                              issue_data=None)
 
 
-@app.route('/api/update_data', methods=['POST'])
+@app.route('/ssq/api/update_data', methods=['POST'])
 @require_password
-def update_data():
-    """API: 手动触发数据更新"""
+def ssq_update_data():
+    """API: 手动触发双色球数据更新"""
     try:
         # 抓取最新数据
         new_results = crawler.fetch_latest_data()
@@ -477,10 +483,10 @@ def update_data():
         })
 
 
-@app.route('/api/update_all_history', methods=['POST'])
+@app.route('/ssq/api/update_all_history', methods=['POST'])
 @require_password
-def update_all_history():
-    """API: 更新所有历史数据"""
+def ssq_update_all_history():
+    """API: 更新双色球所有历史数据"""
     try:
         # 使用爬虫抓取所有历史数据
         all_results = crawler.fetch_all_history_by_api(max_pages=100)  # 最多抓取 100 页（3000 期）
@@ -510,9 +516,9 @@ def update_all_history():
         })
 
 
-@app.route('/api/missing_trend/<int:number>')
-def missing_trend(number):
-    """API: 获取指定号码的遗漏走势"""
+@app.route('/ssq/api/missing_trend/<int:number>')
+def ssq_missing_trend(number):
+    """API: 获取双色球指定号码的遗漏走势"""
     try:
         is_blue = request.args.get('is_blue', 'false').lower() == 'true'
         
@@ -544,9 +550,9 @@ def missing_trend(number):
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/statistics')
-def statistics():
-    """API: 获取统计信息"""
+@app.route('/ssq/api/statistics')
+def ssq_statistics():
+    """API: 获取双色球统计信息"""
     try:
         all_results = db_manager.get_all_results(order_by='draw_date')
         
@@ -569,10 +575,10 @@ def statistics():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/calculate_missing_tables', methods=['POST'])
+@app.route('/ssq/api/calculate_missing_tables', methods=['POST'])
 @require_password
-def calculate_missing_tables():
-    """API: 一键计算遗漏次数表"""
+def ssq_calculate_missing_tables():
+    """API: 一键计算双色球遗漏次数表"""
     try:
         import time
         start_time = time.time()
@@ -999,4 +1005,4 @@ if __name__ == '__main__':
     dlt_db_manager.initialize()
     
     # 启动 Flask 应用
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=80)
