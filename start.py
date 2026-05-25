@@ -10,13 +10,17 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
+# 强制重构 stdout 编码为 utf-8，解决 Windows GBK 编码报错
+import io
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
 from database.db_manager import db_manager
 
 
 def main():
     """主函数"""
     print("=" * 60)
-    print("🎱 双色球数据分析与遗漏值统计网站")
+    print("双色球数据分析与遗漏值统计网站")
     print("=" * 60)
     
     # 初始化数据库
