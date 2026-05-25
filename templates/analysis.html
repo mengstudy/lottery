@@ -366,6 +366,27 @@
                 <h3>📊 下期遗漏次数分组（预测参考）</h3>
                 <p style="color: #666; font-size: 14px; margin-bottom: 15px;">说明：下一期尚未开奖，以下为基于当前期遗漏统计的分组数据，可供走势分析参考</p>
                 {% endif %}
+                
+                <!-- 前端红球热度比对工具 -->
+                <div class="predict-compare-box" style="background: rgba(102, 126, 234, 0.05); border: 1px dashed #667eea; border-radius: 12px; padding: 18px; margin: 15px 0 25px 0;">
+                    <h4 style="color: #667eea; margin-bottom: 8px; font-size: 16px; display: flex; align-items: center; gap: 6px;">
+                        🔮 他人红球购买频次比对工具 (纯前端交互)
+                    </h4>
+                    <p style="color: #555; font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
+                        输入你收集到的红球号码（支持各种格式，如多个号码由空格、逗号或换行分隔，例如 <code>01 12 25 12 03</code>），系统将实时统计每个号码出现的次数，并在下方对应的红球旁边标注。
+                    </p>
+                    <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start;">
+                        <textarea id="collectedBallsInput" placeholder="输入别人买过的红球号码，如：&#10;05, 12, 18, 05, 33&#10;支持多行输入..." style="flex: 1; min-height: 80px; padding: 10px; border: 1px solid #ced4da; border-radius: 8px; font-family: monospace; font-size: 14px; outline: none; transition: border-color 0.2s;" oninput="compareCollectedBalls()"></textarea>
+                        <div style="display: flex; flex-direction: column; gap: 8px; width: 140px;">
+                            <button onclick="compareCollectedBalls()" class="btn" style="padding: 8px 15px; font-size: 13px; border-radius: 8px; width: 100%; margin: 0; text-align: center;">⚡ 实时比对</button>
+                            <button onclick="clearCollectedBalls()" class="btn" style="padding: 8px 15px; font-size: 13px; border-radius: 8px; width: 100%; margin: 0; text-align: center; background: #e9ecef; color: #495057; border: 1px solid #ced4da;">🗑️ 清空重置</button>
+                        </div>
+                    </div>
+                    <div id="compareResultSummary" style="margin-top: 10px; font-size: 12px; color: #868e96; display: none;">
+                        已解析出 <strong id="validBallCount" style="color: #e03131;">0</strong> 个红球号，共覆盖 <strong id="uniqueBallCount" style="color: #667eea;">0</strong> 种不同号码。
+                    </div>
+                </div>
+
                 <table style="margin-top: 20px;">
                     <thead>
                         <tr>
@@ -395,22 +416,30 @@
                                     {% for ball in balls %}
                                     {% if next_issue_data and not next_analysis.no_next_draw %}
                                         {% set is_next_drawn = ball in next_issue_data.red_balls %}
-                                        <span style="display: inline-block; width: 35px; height: 35px; line-height: 35px; text-align: center; background: white; border-radius: 50%; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"
-                                              class="{% if is_next_drawn %}ball-highlight{% endif %} 
-                                                     {% if missing_count == 0 %}ball-color-0
-                                                     {% elif missing_count <= 5 %}ball-color-1-5
-                                                     {% elif missing_count <= 8 %}ball-color-6-8
-                                                     {% else %}ball-color-9-plus{% endif %}">
-                                            {{ '%02d' | format(ball) }}
-                                        </span>
+                                        <div class="predict-ball-wrapper" style="display: flex; align-items: center; gap: 4px; position: relative;">
+                                            <span data-predict-ball="{{ '%02d' | format(ball) }}"
+                                                  style="display: inline-block; width: 35px; height: 35px; line-height: 35px; text-align: center; background: white; border-radius: 50%; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"
+                                                  class="{% if is_next_drawn %}ball-highlight{% endif %} 
+                                                         {% if missing_count == 0 %}ball-color-0
+                                                         {% elif missing_count <= 5 %}ball-color-1-5
+                                                         {% elif missing_count <= 8 %}ball-color-6-8
+                                                         {% else %}ball-color-9-plus{% endif %}">
+                                                {{ '%02d' | format(ball) }}
+                                            </span>
+                                            <span class="ball-freq-badge" style="display: none; background: #e03131; color: white; border-radius: 10px; padding: 1px 5px; font-size: 10px; font-weight: bold; min-width: 16px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.15);"></span>
+                                        </div>
                                     {% else %}
-                                        <span style="display: inline-block; width: 35px; height: 35px; line-height: 35px; text-align: center; background: white; border-radius: 50%; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"
-                                              class="{% if missing_count == 0 %}ball-color-0
-                                                     {% elif missing_count <= 5 %}ball-color-1-5
-                                                     {% elif missing_count <= 8 %}ball-color-6-8
-                                                     {% else %}ball-color-9-plus{% endif %}">
-                                            {{ '%02d' | format(ball) }}
-                                        </span>
+                                        <div class="predict-ball-wrapper" style="display: flex; align-items: center; gap: 4px; position: relative;">
+                                            <span data-predict-ball="{{ '%02d' | format(ball) }}"
+                                                  style="display: inline-block; width: 35px; height: 35px; line-height: 35px; text-align: center; background: white; border-radius: 50%; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"
+                                                  class="{% if missing_count == 0 %}ball-color-0
+                                                         {% elif missing_count <= 5 %}ball-color-1-5
+                                                         {% elif missing_count <= 8 %}ball-color-6-8
+                                                         {% else %}ball-color-9-plus{% endif %}">
+                                                {{ '%02d' | format(ball) }}
+                                            </span>
+                                            <span class="ball-freq-badge" style="display: none; background: #e03131; color: white; border-radius: 10px; padding: 1px 5px; font-size: 10px; font-weight: bold; min-width: 16px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.15);"></span>
+                                        </div>
                                     {% endif %}
                                     {% endfor %}
                                 </div>
@@ -426,14 +455,22 @@
                                     {% for ball in balls %}
                                     {% if next_issue_data and not next_analysis.no_next_draw %}
                                         {% set is_next_drawn = ball in next_issue_data.red_balls %}
-                                        <span style="display: inline-block; width: 35px; height: 35px; line-height: 35px; text-align: center; background: white; border-radius: 50%; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"
-                                              class="{% if is_next_drawn %}ball-highlight{% endif %} ball-color-9-plus">
-                                            {{ '%02d' | format(ball) }}
-                                        </span>
+                                        <div class="predict-ball-wrapper" style="display: flex; align-items: center; gap: 4px; position: relative;">
+                                            <span data-predict-ball="{{ '%02d' | format(ball) }}"
+                                                  style="display: inline-block; width: 35px; height: 35px; line-height: 35px; text-align: center; background: white; border-radius: 50%; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"
+                                                  class="{% if is_next_drawn %}ball-highlight{% endif %} ball-color-9-plus">
+                                                {{ '%02d' | format(ball) }}
+                                            </span>
+                                            <span class="ball-freq-badge" style="display: none; background: #e03131; color: white; border-radius: 10px; padding: 1px 5px; font-size: 10px; font-weight: bold; min-width: 16px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.15);"></span>
+                                        </div>
                                     {% else %}
-                                        <span style="display: inline-block; width: 35px; height: 35px; line-height: 35px; text-align: center; background: white; border-radius: 50%; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);" class="ball-color-9-plus">
-                                            {{ '%02d' | format(ball) }}
-                                        </span>
+                                        <div class="predict-ball-wrapper" style="display: flex; align-items: center; gap: 4px; position: relative;">
+                                            <span data-predict-ball="{{ '%02d' | format(ball) }}"
+                                                  style="display: inline-block; width: 35px; height: 35px; line-height: 35px; text-align: center; background: white; border-radius: 50%; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);" class="ball-color-9-plus">
+                                                {{ '%02d' | format(ball) }}
+                                            </span>
+                                            <span class="ball-freq-badge" style="display: none; background: #e03131; color: white; border-radius: 10px; padding: 1px 5px; font-size: 10px; font-weight: bold; min-width: 16px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.15);"></span>
+                                        </div>
                                     {% endif %}
                                     {% endfor %}
                                 </div>
@@ -667,5 +704,72 @@
         </div>
         {% endif %}
     </div>
+
+    <!-- 前端红球热度比对交互脚本 -->
+    <script>
+        function compareCollectedBalls() {
+            // 获取输入的内容值
+            const inputVal = document.getElementById('collectedBallsInput').value;
+            
+            // 提取所有独立的数字子串
+            const numbers = inputVal.match(/\b\d+\b/g) || [];
+            
+            // 过滤并规范化红球号码（双色球为 01 至 33），并统计频次
+            const validBalls = [];
+            const ballFreq = {};
+            
+            numbers.forEach(numStr => {
+                const num = parseInt(numStr, 10);
+                if (num >= 1 && num <= 33) {
+                    const formatted = num.toString().padStart(2, '0');
+                    validBalls.push(formatted);
+                    ballFreq[formatted] = (ballFreq[formatted] || 0) + 1;
+                }
+            });
+            
+            // 查找所有标有 data-predict-ball 属性的红球元素
+            const predictBalls = document.querySelectorAll('[data-predict-ball]');
+            
+            predictBalls.forEach(ballEl => {
+                const ballNum = ballEl.getAttribute('data-predict-ball');
+                const wrapper = ballEl.closest('.predict-ball-wrapper');
+                if (wrapper) {
+                    const badge = wrapper.querySelector('.ball-freq-badge');
+                    if (badge) {
+                        const freq = ballFreq[ballNum] || 0;
+                        if (freq > 0) {
+                            badge.innerText = 'x' + freq;
+                            badge.style.display = 'inline-block';
+                            // 动态渲染高端的发光阴影和微膨胀凸显效果
+                            ballEl.style.boxShadow = '0 0 10px rgba(224, 49, 49, 0.7)';
+                            ballEl.style.transform = 'scale(1.1)';
+                            ballEl.style.transition = 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+                        } else {
+                            badge.innerText = '';
+                            badge.style.display = 'none';
+                            // 恢复默认原生样式
+                            ballEl.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+                            ballEl.style.transform = 'none';
+                        }
+                    }
+                }
+            });
+            
+            // 实时展示统计汇总提示
+            const summaryDiv = document.getElementById('compareResultSummary');
+            if (validBalls.length > 0) {
+                summaryDiv.style.display = 'block';
+                document.getElementById('validBallCount').innerText = validBalls.length;
+                document.getElementById('uniqueBallCount').innerText = Object.keys(ballFreq).length;
+            } else {
+                summaryDiv.style.display = 'none';
+            }
+        }
+        
+        function clearCollectedBalls() {
+            document.getElementById('collectedBallsInput').value = '';
+            compareCollectedBalls();
+        }
+    </script>
 </body>
 </html>
