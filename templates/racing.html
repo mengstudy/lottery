@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>极速狂飙 3D - 漂移版</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Inter', sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        #ui {
+            position: absolute; top: 20px; left: 20px;
+            color: #0ff; text-shadow: 0 0 10px #0ff;
+            font-size: 24px; font-weight: bold; pointer-events: none; z-index: 10;
+        }
+        #ui div { margin-bottom: 10px; }
+        .score-highlight { color: #f0f; text-shadow: 0 0 15px #f0f; font-size: 30px; }
+        
+        #start-screen, #game-over {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background: rgba(0,0,0,0.85); z-index: 20; color: white; backdrop-filter: blur(5px);
+        }
+        #game-over { display: none; }
+        
+        h1 { font-size: 5rem; color: #0ff; text-shadow: 0 0 30px #0ff; margin-bottom: 0; text-transform: uppercase; letter-spacing: 5px; }
+        p { font-size: 1.5rem; color: #ccc; margin-bottom: 40px; text-align: center; line-height: 1.6; }
+        .key { background: #333; padding: 5px 12px; border-radius: 5px; border: 1px solid #555; font-family: monospace; color: #0ff; margin: 0 4px; box-shadow: 0 4px 0 #111; }
+        
+        .btn {
+            background: transparent; color: #0ff; border: 2px solid #0ff; padding: 15px 50px;
+            font-size: 1.5rem; font-weight: bold; cursor: pointer; border-radius: 50px;
+            transition: all 0.3s; text-transform: uppercase; letter-spacing: 2px;
+        }
+        .btn:hover { background: #0ff; color: #000; box-shadow: 0 0 30px #0ff; transform: scale(1.05); }
+        
+        .back-btn {
+            position: absolute; top: 20px; right: 20px; z-index: 30;
+            text-decoration: none; color: white; background: rgba(255,255,255,0.1);
+            padding: 10px 20px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2);
+            font-weight: bold; transition: all 0.3s;
+        }
+        .back-btn:hover { background: rgba(255,255,255,0.2); box-shadow: 0 0 15px rgba(255,255,255,0.5); }
+        
+        #minimap {
+            position: absolute; top: 80px; right: 20px;
+            width: 150px; height: 200px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 2px solid rgba(0, 255, 255, 0.5);
+            border-radius: 10px; z-index: 10;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.2);
+            backdrop-filter: blur(5px);
+        }
+    </style>
+    <!-- 引入 Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <a href="/" class="back-btn">返回大厅</a>
+    
+    <div id="ui">
+        <div>SCORE: <span id="score-val">0</span></div>
+        <div>SPEED: <span id="speed-val">0</span> KM/H</div>
+        <div id="drift-bonus" style="display:none; color:#ff0; text-shadow:0 0 10px #ff0;">DRIFTING! +<span id="drift-score">0</span></div>
+    </div>
+    
+    <canvas id="minimap" width="150" height="200"></canvas>
+
+    <div id="start-screen">
+        <h1>极速狂飙 3D</h1>
+        <p>
+            使用 <span class="key">W</span> <span class="key">A</span> <span class="key">S</span> <span class="key">D</span> 或 <span class="key">↑</span> <span class="key">↓</span> <span class="key">←</span> <span class="key">→</span> 驾驶<br>
+            按住 <span class="key">Shift</span> 键过弯触发 <b>漂移 (Drift)</b> 获得额外分数！
+        </p>
+        <button class="btn" onclick="startGame()">引擎点火</button>
+    </div>
+
+    <div id="game-over">
+        <h1 style="color:#f00; text-shadow:0 0 30px #f00;">车毁人亡</h1>
+        <p>最终得分: <span id="final-score" class="score-highlight">0</span></p>
+        <button class="btn" onclick="startGame()">重新挑战</button>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script>
+        // DOM 元素
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over');
+        const scoreVal = document.getElementById('score-val');
+        const speedVal = document.getElementById('speed-val');
+        const finalScoreVal = document.getElementById('final-score');
+        const driftBonusDisplay = document.getElementById('drift-bonus');
+        const driftScoreDisplay = document.getElementById('drift-score');
+        const minimapCanvas = document.getElementById('minimap');
+        const mctx = minimapCanvas.getContext('2d');
+
+        // 游戏核心变量
+        let scene, camera, renderer;
+        let playerCar;
+        let environmentObjects = [];
+        let enemies = [];
+        let particles = [];
+        let curvedMaterials = [];
+        
+        let gameState = 'start'; // start, playing, gameover
+        let score = 0;
+        let speed = 0;
+        let maxSpeed = 120;
+        let driftScore = 0;
+        let isDrifting = false;
+        
+        let currentCurveX = 0;
+        let targetCurveX = 0;
+        let distanceTravelled = 0;
+        let nextCurveDistance = 200;
+
+        const clock = new THREE.Clock();
+        const roadWidth = 30;
+
+        // 输入控制 (使用 e.code 避免输入法 and 按键冲突)
+        const keys = { w:false, a:false, s:false, d:false, shift:false };
+        window.addEventListener('keydown', e => {
+            switch(e.code) {
+                case 'KeyW': case 'ArrowUp': keys.w = true; break;
+                case 'KeyS': case 'ArrowDown': keys.s = true; break;
+                case 'KeyA': case 'ArrowLeft': keys.a = true; break;
+                case 'KeyD': case 'ArrowRight': keys.d = true; break;
+                case 'ShiftLeft': case 'ShiftRight': keys.shift = true; break;
+            }
+        });
+        window.addEventListener('keyup', e => {
+            switch(e.code) {
+                case 'KeyW': case 'ArrowUp': keys.w = false; break;
+                case 'KeyS': case 'ArrowDown': keys.s = false; break;
+                case 'KeyA': case 'ArrowLeft': keys.a = false; break;
+                case 'KeyD': case 'ArrowRight': keys.d = false; break;
+                case 'ShiftLeft': case 'ShiftRight': keys.shift = false; break;
+            }
+        });
+
+        // ====== 世界弯曲着色器 ======
+        function applyCurvature(material) {
+            material.onBeforeCompile = (shader) => {
+                shader.uniforms.curveX = { value: 0.0 };
+                material.userData.shader = shader; // 供 update 循环修改
+                
+                shader.vertexShader = `
+                    uniform float curveX;
+                    ${shader.vertexShader}
+                `.replace(
+                    `#include <begin_vertex>`,
+                    `#include <begin_vertex>
+                    // 仅对前方的物体进行弯曲
+                    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+                    if (worldPosition.z < 0.0) {
+                        float dist = abs(worldPosition.z);
+                        float zOffset = pow(dist * 0.015, 2.0); // 调整系数控制弯曲激烈度
+                        transformed.x += curveX * zOffset;
+                        // 可以加上 curveY 实现上下坡 transformed.y += curveY * zOffset;
+                    }
+                    `
+                );
+            };
+            curvedMaterials.push(material);
+        }
+
+        // 初始化 Three.js 场景
+        function initScene() {
+            const container = document.getElementById('canvas-container');
+            container.innerHTML = '';
+
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x050505, 0.008); // 霓虹黑夜雾气
+            scene.background = new THREE.Color(0x050505);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500);
+            camera.position.set(0, 5, 10);
+            camera.lookAt(0, 0, -20);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            // 开启发光相关的色调映射
+            renderer.toneMapping = THREE.ReinhardToneMapping;
+            container.appendChild(renderer.domElement);
+
+            // 灯光
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+            scene.add(ambientLight);
+            
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(10, 20, 10);
+            scene.add(dirLight);
+
+            // 路面 (由多段组成，以便做滚动动画)
+            createRoad();
+            
+            // 玩家车
+            playerCar = createCar(0x00ffff, true);
+            playerCar.position.set(0, 0, 0);
+            scene.add(playerCar);
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // 创建道路和环境
+        function createRoad() {
+            const groundMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+            applyCurvature(groundMat);
+            
+            // 使用多个平面拼接，形成向前移动的路面
+            for(let i=0; i<10; i++) {
+                const plane = new THREE.Mesh(new THREE.PlaneGeometry(roadWidth, 40), groundMat);
+                plane.rotation.x = -Math.PI / 2;
+                plane.position.z = -i * 40;
+                scene.add(plane);
+                environmentObjects.push({ mesh: plane, type: 'road' });
+
+                // 道路边界发光线
+                const lineMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+                applyCurvature(lineMat);
+                
+                const leftLine = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 40), lineMat);
+                leftLine.rotation.x = -Math.PI / 2;
+                leftLine.position.set(-roadWidth/2, 0.01, -i * 40);
+                scene.add(leftLine);
+                environmentObjects.push({ mesh: leftLine, type: 'line' });
+
+                const rightLine = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 40), lineMat);
+                rightLine.rotation.x = -Math.PI / 2;
+                rightLine.position.set(roadWidth/2, 0.01, -i * 40);
+                scene.add(rightLine);
+                environmentObjects.push({ mesh: rightLine, type: 'line' });
+                
+                // 路边风景 (方块树木/建筑)
+                for(let j=0; j<2; j++) {
+                    const side = j === 0 ? 1 : -1;
+                    const bMat = new THREE.MeshLambertMaterial({ color: Math.random() > 0.5 ? 0x00ff00 : 0xff00ff, emissive: 0x220022 });
+                    applyCurvature(bMat);
+                    const h = 2 + Math.random() * 10;
+                    const building = new THREE.Mesh(new THREE.BoxGeometry(2, h, 2), bMat);
+                    building.position.set(side * (roadWidth/2 + 2 + Math.random() * 10), h/2, -i * 40 - Math.random() * 20);
+                    scene.add(building);
+                    environmentObjects.push({ mesh: building, type: 'decor' });
+                }
+            }
+        }
+
+        // 创建赛车模型 (Low Poly)
+        function createCar(color, isPlayer = false) {
+            const carGroup = new THREE.Group();
+            
+            // 车身底盘
+            const bodyMat = new THREE.MeshLambertMaterial({ color: color });
+            const body = new THREE.Mesh(new THREE.BoxGeometry(2, 0.5, 4.5), bodyMat);
+            body.position.y = 0.5;
+            carGroup.add(body);
+            
+            // 车厢
+            const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.6, 2.2), new THREE.MeshLambertMaterial({ color: 0x222222 }));
+            cabin.position.set(0, 1.05, -0.2);
+            carGroup.add(cabin);
+
+            // 尾翼
+            if(isPlayer) {
+                const wing = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.1, 0.5), bodyMat);
+                wing.position.set(0, 1.0, 1.8);
+                carGroup.add(wing);
+                const wingSupport1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 0.2), new THREE.MeshBasicMaterial({color:0x555555}));
+                wingSupport1.position.set(0.6, 0.75, 1.8);
+                carGroup.add(wingSupport1);
+                const wingSupport2 = wingSupport1.clone();
+                wingSupport2.position.set(-0.6, 0.75, 1.8);
+                carGroup.add(wingSupport2);
+            }
+
+            // 轮胎
+            const wheelMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+            const wPositions = [
+                [-1.1, 0.3, 1.5], [1.1, 0.3, 1.5],
+                [-1.1, 0.3, -1.2], [1.1, 0.3, -1.2]
+            ];
+            wPositions.forEach(p => {
+                const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.4, 16), wheelMat);
+                wheel.rotation.z = Math.PI / 2;
+                wheel.position.set(...p);
+                carGroup.add(wheel);
+            });
+
+            // 尾灯发光
+            if(!isPlayer) {
+                const tailLightMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                const tailLightL = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.1), tailLightMat);
+                tailLightL.position.set(-0.7, 0.5, 2.3);
+                carGroup.add(tailLightL);
+                const tailLightR = tailLightL.clone();
+                tailLightR.position.set(0.7, 0.5, 2.3);
+                carGroup.add(tailLightR);
+            }
+
+            // 碰撞边界框
+            carGroup.userData.box = new THREE.Box3();
+            return carGroup;
+        }
+
+        function spawnEnemy() {
+            if(Math.random() < 0.02 * (speed / 50)) { // 速度越快生成越多
+                const enemyColors = [0xff0055, 0xffaa00, 0x00ffaa, 0xaa00ff];
+                const color = enemyColors[Math.floor(Math.random() * enemyColors.length)];
+                const enemy = createCar(color);
+                
+                // 给材质加上弯曲 Shader
+                enemy.children.forEach(child => {
+                    if(child.material) applyCurvature(child.material);
+                });
+
+                // 随机车道
+                const lane = (Math.floor(Math.random() * 3) - 1) * (roadWidth/3);
+                enemy.position.set(lane, 0, -200);
+                
+                // 敌人速度 (相对玩家较慢，所以看起来是往后退)
+                enemy.userData.speed = Math.random() * 40 + 20;
+
+                scene.add(enemy);
+                enemies.push(enemy);
+            }
+        }
+
+        // 粒子系统 (烟雾/爆炸)
+        function createParticles(x, y, z, color, count, isSmoke=false) {
+            const geom = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+            const mat = new THREE.MeshBasicMaterial({ color: color });
+            
+            for(let i=0; i<count; i++) {
+                const p = new THREE.Mesh(geom, mat);
+                p.position.set(x + (Math.random()-0.5)*1, y + (Math.random()-0.5)*0.5, z);
+                
+                p.userData = {
+                    vx: (Math.random()-0.5)* (isSmoke ? 2 : 10),
+                    vy: Math.random() * (isSmoke ? 2 : 10),
+                    vz: (Math.random()-0.5)* (isSmoke ? 2 : 10) + (isSmoke ? 5 : 0), // 烟雾向后飘
+                    life: 1.0,
+                    decay: Math.random() * 0.02 + 0.02
+                };
+                scene.add(p);
+                particles.push(p);
+            }
+        }
+
+        // 碰撞检测 (AABB)
+        function checkCollision(obj1, obj2) {
+            obj1.userData.box.setFromObject(obj1);
+            obj2.userData.box.setFromObject(obj2);
+            // 为了手感好一点，缩小一点判定框
+            obj1.userData.box.expandByScalar(-0.2);
+            obj2.userData.box.expandByScalar(-0.2);
+            return obj1.userData.box.intersectsBox(obj2.userData.box);
+        }
+
+        function startGame() {
+            if(!scene) initScene();
+            
+            // 重置状态
+            startScreen.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            driftBonusDisplay.style.display = 'none';
+            score = 0;
+            speed = 0;
+            driftScore = 0;
+            isDrifting = false;
+            currentCurveX = 0;
+            targetCurveX = 0;
+            distanceTravelled = 0;
+            
+            playerCar.position.set(0, 0, 0);
+            playerCar.rotation.set(0, 0, 0);
+            playerCar.visible = true; // 修复重新开始后车辆不可见的Bug
+
+            // 清理旧敌人和粒子
+            enemies.forEach(e => scene.remove(e));
+            enemies = [];
+            particles.forEach(p => scene.remove(p));
+            particles = [];
+
+            gameState = 'playing';
+            
+            if(!window.gameLoopStarted) {
+                window.gameLoopStarted = true;
+                requestAnimationFrame(animate);
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.1); // 防止卡顿导致dt过大
+
+            if(gameState === 'playing') {
+                updateGame(dt);
+            } else if (gameState === 'gameover') {
+                updateParticles(dt); // 只更新粒子爆炸
+                renderer.render(scene, camera);
+                return;
+            } else {
+                // start 画面缓慢旋转摄像机
+                camera.position.x = Math.sin(Date.now() * 0.001) * 10;
+                camera.lookAt(0,0,0);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // 核心游戏逻辑更新
+        function updateGame(dt) {
+            // 1. 玩家输入与物理
+            if(keys.w) speed += 60 * dt;
+            else if(keys.s) speed -= 120 * dt;
+            else speed -= 20 * dt; // 自然减速
+            
+            speed = Math.max(0, Math.min(speed, maxSpeed));
+            
+            let turnDirection = 0;
+            if(keys.a) turnDirection = -1; // 修复：向左是 -X
+            if(keys.d) turnDirection = 1;  // 修复：向右是 +X
+
+            // 漂移逻辑
+            let driftFactor = 0;
+            isDrifting = false;
+            
+            // 弯道难度影响：大幅度降低弯道阻力（离心力），确保玩家的操作能力始终高于环境阻力
+            const curveResistance = -currentCurveX * speed * 0.15 * dt;
+
+            if(keys.shift && Math.abs(turnDirection) > 0 && speed > 40) {
+                isDrifting = true;
+                driftFactor = 1.0;
+                driftScore += speed * dt * 0.5;
+                driftBonusDisplay.style.display = 'block';
+                driftScoreDisplay.innerText = Math.floor(driftScore);
+                
+                // 漂移时产生胎烟粒子
+                createParticles(playerCar.position.x - 1, 0.2, playerCar.position.z + 1.5, 0xaaaaaa, 1, true);
+                createParticles(playerCar.position.x + 1, 0.2, playerCar.position.z + 1.5, 0xaaaaaa, 1, true);
+            } else {
+                if(driftScore > 0) {
+                    score += driftScore; // 结算漂移分
+                    driftScore = 0;
+                    driftBonusDisplay.style.display = 'none';
+                    // 漂移结束短促加速
+                    speed = Math.min(maxSpeed, speed + 20);
+                }
+            }
+
+            // 计算横向移动，降低转向灵敏度以提供更平滑的操控手感
+            let lateralSpeed = (25 + speed * 0.3) * turnDirection * (0.5 + driftFactor * 0.5) * dt;
+            playerCar.position.x += lateralSpeed + curveResistance;
+            
+            // 限制在赛道内
+            const limitX = roadWidth / 2 - 1.5;
+            if(playerCar.position.x > limitX || playerCar.position.x < -limitX) {
+                // 修复：改成按时间线性减速，防止每帧瞬间失去速度和控制力
+                speed -= 80 * dt; 
+                speed = Math.max(15, speed); // 保留最低速度以便开回路中间
+                playerCar.position.x = Math.max(-limitX, Math.min(playerCar.position.x, limitX));
+            }
+
+            // 视觉偏转 (偏航角 yaw 和 侧倾角 roll)，修复：因为 turnDirection 修正了，所以视觉角也要相应修改方向
+            let targetYaw = -turnDirection * (0.15 + driftFactor * 0.5);
+            let targetRoll = turnDirection * (0.05 + driftFactor * 0.15);
+            playerCar.rotation.y += (targetYaw - playerCar.rotation.y) * 10 * dt;
+            playerCar.rotation.z += (targetRoll - playerCar.rotation.z) * 10 * dt;
+
+            // 2. 世界弯道更新
+            distanceTravelled += speed * dt;
+            if(distanceTravelled > nextCurveDistance) {
+                // 随机生成下一段曲率 (-1 到 1)
+                targetCurveX = (Math.random() - 0.5) * 2.5;
+                nextCurveDistance = distanceTravelled + 200 + Math.random() * 300;
+            }
+            currentCurveX += (targetCurveX - currentCurveX) * dt * 0.5;
+
+            // 更新 Shader Uniforms
+            curvedMaterials.forEach(mat => {
+                if(mat.userData.shader && mat.userData.shader.uniforms.curveX) {
+                    mat.userData.shader.uniforms.curveX.value = currentCurveX;
+                }
+            });
+
+            // 3. 环境滚动
+            environmentObjects.forEach(obj => {
+                obj.mesh.position.z += speed * dt;
+                // 回收到远处
+                if(obj.mesh.position.z > 10) {
+                    obj.mesh.position.z -= 400; // 10段 * 40
+                    
+                    // 如果是装饰物，随机更换X坐标
+                    if(obj.type === 'decor') {
+                        const side = Math.random() > 0.5 ? 1 : -1;
+                        obj.mesh.position.x = side * (roadWidth/2 + 2 + Math.random() * 15);
+                    }
+                }
+            });
+
+            // 4. 敌人更新与碰撞
+            spawnEnemy();
+            for(let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                // 相对速度：玩家速度往前，敌人速度也往前但比玩家慢
+                const relativeSpeed = speed - enemy.userData.speed;
+                enemy.position.z += relativeSpeed * dt;
+
+                // 敌人视觉随弯道略微偏转
+                enemy.rotation.y = -currentCurveX * 0.2;
+
+                // 碰撞检测
+                if(Math.abs(enemy.position.z - playerCar.position.z) < 5) {
+                    if(checkCollision(playerCar, enemy)) {
+                        triggerGameOver();
+                    }
+                }
+
+                // 移除身后的敌人
+                if(enemy.position.z > 10) {
+                    scene.remove(enemy);
+                    enemies.splice(i, 1);
+                }
+            }
+
+            // 5. 计分与 UI
+            if(speed > 10) score += speed * 0.05 * dt;
+            scoreVal.innerText = Math.floor(score);
+            speedVal.innerText = Math.floor(speed * 2); // 放大数值增加视觉爽感
+
+            // 摄像机稍微跟随弯道和漂移震动
+            camera.position.x = -currentCurveX * 2 + turnDirection * (driftFactor ? 1 : 0.2);
+            if(speed > 100) {
+                camera.position.y = 5 + (Math.random()-0.5)*0.1; // 高速震屏
+            } else {
+                camera.position.y = 5;
+            }
+            camera.lookAt(playerCar.position.x * 0.5, 0, playerCar.position.z - 20);
+
+            updateParticles(dt);
+            drawMinimap();
+        }
+
+        function drawMinimap() {
+            mctx.clearRect(0, 0, 150, 200);
+            
+            // 绘制扫描网格效果
+            mctx.fillStyle = 'rgba(0, 255, 255, 0.05)';
+            mctx.fillRect(0, 0, 150, 200);
+            mctx.strokeStyle = 'rgba(0, 255, 255, 0.1)';
+            mctx.beginPath();
+            for(let i=0; i<200; i+=20) { mctx.moveTo(0, i); mctx.lineTo(150, i); }
+            mctx.stroke();
+
+            // 雷达地图参数
+            const playerY = 170; // 玩家在屏幕偏下方
+            // 赛道宽度30，映射到雷达的宽度100 (每边50)
+            const mapW = 100;
+            const playerX = 75 + (playerCar.position.x / roadWidth) * mapW; 
+            
+            // 根据当前 Shader 曲率模拟弯道曲线
+            const curveOffset = currentCurveX * 40; 
+            
+            mctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            mctx.lineWidth = 2;
+            
+            // 左边线
+            mctx.beginPath();
+            mctx.moveTo(75 - mapW/2, playerY + 30);
+            mctx.quadraticCurveTo(75 - mapW/2 + curveOffset, 85, 75 - mapW/2 + curveOffset*2.5, 0);
+            mctx.stroke();
+
+            // 右边线
+            mctx.beginPath();
+            mctx.moveTo(75 + mapW/2, playerY + 30);
+            mctx.quadraticCurveTo(75 + mapW/2 + curveOffset, 85, 75 + mapW/2 + curveOffset*2.5, 0);
+            mctx.stroke();
+
+            // 绘制玩家绿点
+            mctx.fillStyle = '#0ff';
+            mctx.shadowBlur = 10;
+            mctx.shadowColor = '#0ff';
+            mctx.beginPath();
+            mctx.arc(playerX, playerY, 4, 0, Math.PI*2);
+            mctx.fill();
+
+            // 绘制敌车红点
+            mctx.fillStyle = '#f00';
+            mctx.shadowColor = '#f00';
+            enemies.forEach(e => {
+                const dz = playerCar.position.z - e.position.z; 
+                // 距离150米以内显示在雷达上
+                if(dz > 0 && dz < 150) {
+                    const ex = 75 + (e.position.x / roadWidth) * mapW;
+                    const progress = dz / 150;
+                    // 随着距离变远，受到曲率影响产生横向偏移
+                    const effectX = progress * progress * curveOffset * 2.5; 
+                    const ey = playerY - progress * 170;
+                    
+                    mctx.beginPath();
+                    mctx.arc(ex + effectX, ey, 3, 0, Math.PI*2);
+                    mctx.fill();
+                }
+            });
+            mctx.shadowBlur = 0; // 重置阴影
+        }
+
+        function updateParticles(dt) {
+            for(let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.position.x += p.userData.vx * dt;
+                p.position.y += p.userData.vy * dt;
+                p.position.z += p.userData.vz * dt;
+                p.userData.life -= p.userData.decay;
+                
+                // 缩小
+                const scale = Math.max(0, p.userData.life);
+                p.scale.set(scale, scale, scale);
+
+                if(p.userData.life <= 0) {
+                    scene.remove(p);
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        function triggerGameOver() {
+            gameState = 'gameover';
+            createParticles(playerCar.position.x, playerCar.position.y, playerCar.position.z, 0xff5500, 50, false);
+            playerCar.visible = false;
+            
+            gameOverScreen.style.display = 'flex';
+            finalScoreVal.innerText = Math.floor(score);
+        }
+
+        // 初始画面渲染一次
+        initScene();
+        renderer.render(scene, camera);
+        
+    </script>
+</body>
+</html>

@@ -25,7 +25,7 @@
 
         #ui {
             position: absolute;
-            top: 20px;
+            top: 80px;
             left: 20px;
             color: #fff;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
@@ -210,9 +210,27 @@
             transform: scale(1.1);
             box-shadow: 0 0 30px rgba(135, 206, 235, 0.8);
         }
+
+        .back-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            text-decoration: none;
+            background: rgba(0,0,0,0.6);
+            padding: 8px 16px;
+            border-radius: 5px;
+            font-family: sans-serif;
+            z-index: 400;
+            pointer-events: auto;
+        }
+        .back-btn:hover {
+            background: rgba(0,0,0,0.8);
+        }
     </style>
 </head>
 <body>
+    <a href="/" class="back-btn">← 返回大厅</a>
     <canvas id="gameCanvas"></canvas>
     
     <div id="ui">
