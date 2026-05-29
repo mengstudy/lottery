@@ -43,8 +43,38 @@ app.config['JSON_AS_ASCII'] = False  # 支持中文
 
 @app.route('/')
 def index():
-    """首页 - 骑马与砍杀3D"""
+    """首页 - 游戏大厅"""
+    return render_template('game_lobby.html')
+
+
+@app.route('/contra.html')
+def contra_game():
+    """魂斗罗"""
+    return render_template('contra.html')
+
+
+@app.route('/mario.html')
+def mario_game():
+    """超级玛丽"""
+    return render_template('mario.html')
+
+
+@app.route('/mount_and_blade_3d.html')
+def mount_and_blade_3d_game():
+    """骑马与砍杀3D"""
     return render_template('mount_and_blade_3d.html')
+
+
+@app.route('/racing.html')
+def racing_game():
+    """极速狂飙"""
+    return render_template('racing.html')
+
+
+@app.route('/tank_battle.html')
+def tank_battle_game():
+    """经典坦克大战"""
+    return render_template('tank_battle.html')
 
 
 @app.route('/ssq')

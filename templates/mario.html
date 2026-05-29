@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>超级玛丽亚 - 网页版</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #222;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: 'Press Start 2P', 'Courier New', Courier, monospace;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #game-container {
+            margin-top: 20px;
+            position: relative;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+            border: 4px solid #fff;
+        }
+
+        canvas {
+            display: block;
+            background-color: #5c94fc; /* 经典的马里奥天空蓝 */
+        }
+
+        .ui-panel {
+            display: flex;
+            justify-content: space-between;
+            width: 800px;
+            margin-top: 10px;
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .controls {
+            margin-top: 15px;
+            color: #aaa;
+            text-align: center;
+            font-family: sans-serif;
+        }
+
+        kbd {
+            background-color: #333;
+            border-radius: 3px;
+            border: 1px solid #777;
+            padding: 2px 6px;
+            font-family: monospace;
+            color: #fff;
+        }
+        
+        #message-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 3rem;
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        #restart-btn {
+            margin-top: 30px;
+            padding: 12px 24px;
+            font-size: 1.2rem;
+            background: #fff;
+            color: #000;
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        
+        #restart-btn:hover {
+            background: #ccc;
+        }
+
+        .back-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            text-decoration: none;
+            background: rgba(255,255,255,0.1);
+            padding: 8px 16px;
+            border-radius: 5px;
+            font-family: sans-serif;
+        }
+        .back-btn:hover {
+            background: rgba(255,255,255,0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <a href="/" class="back-btn">← 返回大厅</a>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="message-screen">
+            <div id="message-text" style="color: #ef4444;">GAME OVER</div>
+            <button id="restart-btn" onclick="location.reload()">重新开始</button>
+        </div>
+    </div>
+
+    <div class="ui-panel">
+        <div>MARIA<br><span id="score">0</span></div>
+        <div>WORLD<br>1-1</div>
+        <div>LIVES<br><span id="lives">3</span></div>
+    </div>
+
+    <div class="controls">
+        操作方法：<kbd>A</kbd> <kbd>D</kbd> 或 <kbd>←</kbd> <kbd>→</kbd> 左右移动 | <kbd>W</kbd> 或 <kbd>空格</kbd> 跳跃
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const livesElement = document.getElementById('lives');
+        const msgScreen = document.getElementById('message-screen');
+        const msgText = document.getElementById('message-text');
+
+        // 常量
+        const GRAVITY = 0.5;
+        const JUMP_FORCE = -12;
+        const MOVE_SPEED = 4;
+        const TILE = 40;
+
+        // 全局状态
+        let score = 0;
+        let lives = 3;
+        let isGameOver = false;
+        let cameraX = 0;
+
+        const keys = {};
+        let lastHorizontalKey = null;
+
+        window.addEventListener('keydown', e => { 
+            keys[e.code] = true; 
+            if (e.code === 'KeyA' || e.code === 'ArrowLeft') lastHorizontalKey = 'LEFT';
+            if (e.code === 'KeyD' || e.code === 'ArrowRight') lastHorizontalKey = 'RIGHT';
+        });
+
+        window.addEventListener('keyup', e => { 
+            keys[e.code] = false; 
+            if ((e.code === 'KeyA' || e.code === 'ArrowLeft') && lastHorizontalKey === 'LEFT') {
+                if (keys['KeyD'] || keys['ArrowRight']) lastHorizontalKey = 'RIGHT';
+                else lastHorizontalKey = null;
+            }
+            if ((e.code === 'KeyD' || e.code === 'ArrowRight') && lastHorizontalKey === 'RIGHT') {
+                if (keys['KeyA'] || keys['ArrowLeft']) lastHorizontalKey = 'LEFT';
+                else lastHorizontalKey = null;
+            }
+        });
+
+        function isColliding(a, b) {
+            return a.x < b.x + b.w && a.x + a.w > b.x &&
+                   a.y < b.y + b.h && a.y + a.h > b.y;
+        }
+
+        class Player {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.w = 30;
+                this.h = 40;
+                this.vx = 0;
+                this.vy = 0;
+                this.isGrounded = false;
+                this.dir = 1;
+            }
+
+            update() {
+                // X 轴移动与碰撞：后按键优先 (SOCD)
+                let moveDir = 0;
+                let isLeft = keys['KeyA'] || keys['ArrowLeft'];
+                let isRight = keys['KeyD'] || keys['ArrowRight'];
+
+                if (isLeft && isRight) {
+                    moveDir = (lastHorizontalKey === 'LEFT') ? -1 : 1;
+                } else if (isLeft) {
+                    moveDir = -1;
+                } else if (isRight) {
+                    moveDir = 1;
+                }
+                
+                this.vx = moveDir * MOVE_SPEED;
+                if (moveDir !== 0) this.dir = moveDir;
+
+                this.x += this.vx;
+
+                // 限制不能往回走太多
+                if (this.x < cameraX) this.x = cameraX;
+
+                for (let b of blocks) {
+                    if (isColliding(this, b)) {
+                        if (this.vx > 0) this.x = b.x - this.w;
+                        else if (this.vx < 0) this.x = b.x + b.w;
+                    }
+                }
+
+                // Y 轴移动与碰撞
+                this.vy += GRAVITY;
+                this.y += this.vy;
+                this.isGrounded = false;
+
+                for (let b of blocks) {
+                    if (isColliding(this, b)) {
+                        if (this.vy > 0) {
+                            // 踩在上面
+                            this.y = b.y - this.h;
+                            this.vy = 0;
+                            this.isGrounded = true;
+                        } else if (this.vy < 0) {
+                            // 顶到底部
+                            this.y = b.y + b.h;
+                            this.vy = 0;
+                            
+                            // 顶方块逻辑
+                            if (b.type === 'question' && !b.hit) {
+                                b.hit = true;
+                                score += 100;
+                                scoreElement.innerText = score;
+                                // 生成金币特效
+                                particles.push(new CoinParticle(b.x + TILE/2, b.y));
+                            } else if (b.type === 'brick') {
+                                // 简单的砖块顶动动画（这里省略），或者击碎
+                                b.y -= 5;
+                                setTimeout(() => b.y += 5, 100);
+                            }
+                        }
+                    }
+                }
+
+                // 跳跃
+                if ((keys['KeyW'] || keys['ArrowUp'] || keys['Space']) && this.isGrounded) {
+                    this.vy = JUMP_FORCE;
+                    this.isGrounded = false;
+                }
+
+                // 死亡判定 (掉进坑里)
+                if (this.y > canvas.height) {
+                    die();
+                }
+
+                // 终点判定
+                if (isColliding(this, goal)) {
+                    endGame("LEVEL CLEARED!", "#facc15");
+                }
+            }
+
+            draw() {
+                // 玩家身体
+                ctx.fillStyle = '#ef4444'; // 红色衣服
+                ctx.fillRect(this.x - cameraX, this.y + 10, this.w, this.h - 10);
+                
+                // 玩家头部
+                ctx.fillStyle = '#fca5a5'; // 肤色
+                ctx.fillRect(this.x + 4 - cameraX, this.y, 22, 14);
+
+                // 帽子
+                ctx.fillStyle = '#ef4444';
+                if (this.dir === 1) {
+                    ctx.fillRect(this.x - cameraX, this.y - 4, 26, 6);
+                } else {
+                    ctx.fillRect(this.x + 4 - cameraX, this.y - 4, 26, 6);
+                }
+            }
+        }
+
+        class Enemy {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.w = 30;
+                this.h = 30;
+                this.vx = -1.5; // 初始向左走
+                this.vy = 0;
+                this.active = true;
+            }
+
+            update() {
+                // 如果没进入屏幕就不更新
+                if (this.x - cameraX > canvas.width + 100) return;
+
+                this.x += this.vx;
+                for (let b of blocks) {
+                    if (isColliding(this, b)) {
+                        if (this.vx > 0) { this.x = b.x - this.w; this.vx *= -1; }
+                        else if (this.vx < 0) { this.x = b.x + b.w; this.vx *= -1; }
+                    }
+                }
+
+                this.vy += GRAVITY;
+                this.y += this.vy;
+                for (let b of blocks) {
+                    if (isColliding(this, b)) {
+                        if (this.vy > 0) { this.y = b.y - this.h; this.vy = 0; }
+                    }
+                }
+
+                // 掉下深渊
+                if (this.y > canvas.height) this.active = false;
+
+                // 与玩家碰撞
+                if (isColliding(this, player)) {
+                    // 判断是否是踩踏 (玩家正在下降，且玩家下边缘靠近怪物上边缘)
+                    if (player.vy > 0 && player.y + player.h - player.vy <= this.y + 15) {
+                        this.active = false;
+                        player.vy = JUMP_FORCE * 0.7; // 踩中后小跳
+                        score += 200;
+                        scoreElement.innerText = score;
+                    } else {
+                        die();
+                    }
+                }
+            }
+
+            draw() {
+                ctx.fillStyle = '#a16207'; // 棕色蘑菇怪
+                ctx.fillRect(this.x - cameraX, this.y + 10, this.w, this.h - 10);
+                
+                // 眼睛
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(this.x + 5 - cameraX, this.y + 15, 6, 6);
+                ctx.fillRect(this.x + 19 - cameraX, this.y + 15, 6, 6);
+            }
+        }
+
+        class Block {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.w = TILE;
+                this.h = TILE;
+                this.type = type; // 'ground', 'brick', 'question'
+                this.hit = false;
+            }
+
+            draw() {
+                let rx = this.x - cameraX;
+                if (rx < -TILE || rx > canvas.width) return;
+
+                if (this.type === 'ground') {
+                    ctx.fillStyle = '#b45309';
+                    ctx.fillRect(rx, this.y, this.w, this.h);
+                    ctx.fillStyle = '#22c55e'; // 草地顶
+                    ctx.fillRect(rx, this.y, this.w, 8);
+                } else if (this.type === 'brick') {
+                    ctx.fillStyle = '#9a3412';
+                    ctx.fillRect(rx, this.y, this.w, this.h);
+                    ctx.strokeStyle = '#000';
+                    ctx.strokeRect(rx, this.y, this.w, this.h);
+                } else if (this.type === 'question') {
+                    if (this.hit) {
+                        ctx.fillStyle = '#78350f'; // 变成空石头
+                        ctx.fillRect(rx, this.y, this.w, this.h);
+                    } else {
+                        ctx.fillStyle = '#f59e0b'; // 金色问号块
+                        ctx.fillRect(rx, this.y, this.w, this.h);
+                        ctx.fillStyle = '#fff';
+                        ctx.font = '24px sans-serif';
+                        ctx.fillText('?', rx + 12, this.y + 28);
+                    }
+                    ctx.strokeStyle = '#000';
+                    ctx.strokeRect(rx, this.y, this.w, this.h);
+                }
+            }
+        }
+
+        class CoinParticle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vy = -8;
+                this.active = true;
+                this.timer = 30;
+            }
+            update() {
+                this.y += this.vy;
+                this.vy += 0.4;
+                this.timer--;
+                if (this.timer <= 0) this.active = false;
+            }
+            draw() {
+                ctx.fillStyle = '#facc15';
+                ctx.beginPath();
+                ctx.arc(this.x - cameraX, this.y, 8, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        class Goal {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.w = 40;
+                this.h = 400; // 旗杆
+            }
+            draw() {
+                let rx = this.x - cameraX;
+                ctx.fillStyle = '#fcd34d'; // 旗杆圆顶
+                ctx.beginPath();
+                ctx.arc(rx + 20, this.y, 10, 0, Math.PI*2);
+                ctx.fill();
+
+                ctx.fillStyle = '#f3f4f6';
+                ctx.fillRect(rx + 16, this.y, 8, this.h); // 杆子
+
+                ctx.fillStyle = '#22c55e'; // 绿旗
+                ctx.fillRect(rx + 24, this.y + 20, 50, 40);
+            }
+        }
+
+        let player;
+        let blocks = [];
+        let enemies = [];
+        let particles = [];
+        let goal;
+
+        function buildLevel() {
+            blocks = [];
+            enemies = [];
+            particles = [];
+            cameraX = 0;
+            
+            // 地板
+            for (let i = 0; i < 80; i++) {
+                if (i === 15 || i === 16 || i === 45 || i === 46 || i === 47) continue; // 挖坑
+                blocks.push(new Block(i * TILE, 560, 'ground'));
+                blocks.push(new Block(i * TILE, 600, 'ground')); // 铺两层
+            }
+
+            // 砖块和问号
+            blocks.push(new Block(10 * TILE, 400, 'question'));
+            
+            blocks.push(new Block(18 * TILE, 400, 'brick'));
+            blocks.push(new Block(19 * TILE, 400, 'question'));
+            blocks.push(new Block(20 * TILE, 400, 'brick'));
+            blocks.push(new Block(21 * TILE, 400, 'question'));
+            blocks.push(new Block(22 * TILE, 400, 'brick'));
+
+            blocks.push(new Block(20 * TILE, 240, 'question')); // 高处的问号
+
+            // 台阶
+            for(let i = 0; i < 4; i++) {
+                for(let j = 0; j <= i; j++) {
+                    blocks.push(new Block((30 + i) * TILE, 520 - j * TILE, 'ground'));
+                }
+            }
+
+            for(let i = 0; i < 4; i++) {
+                for(let j = 0; j <= 3 - i; j++) {
+                    blocks.push(new Block((36 + i) * TILE, 520 - j * TILE, 'ground'));
+                }
+            }
+
+            // 终点前的台阶
+            for(let i = 0; i < 8; i++) {
+                for(let j = 0; j <= i; j++) {
+                    blocks.push(new Block((60 + i) * TILE, 520 - j * TILE, 'ground'));
+                }
+            }
+
+            // 敌人
+            enemies.push(new Enemy(14 * TILE, 530));
+            enemies.push(new Enemy(22 * TILE, 530));
+            enemies.push(new Enemy(40 * TILE, 530));
+            enemies.push(new Enemy(42 * TILE, 530));
+            enemies.push(new Enemy(55 * TILE, 530));
+
+            // 终点旗杆
+            goal = new Goal(72 * TILE, 160);
+
+            player = new Player(100, 300);
+        }
+
+        function die() {
+            lives--;
+            livesElement.innerText = lives;
+            if (lives <= 0) {
+                endGame("GAME OVER", "#ef4444");
+            } else {
+                buildLevel(); // 重新开始关卡
+            }
+        }
+
+        function update() {
+            if (isGameOver) return;
+
+            player.update();
+
+            // 摄像机跟随
+            let targetCameraX = player.x - canvas.width / 2;
+            if (targetCameraX > cameraX) {
+                cameraX = targetCameraX; // 只能向右走，摄像机不后退
+            }
+            if (cameraX > 75 * TILE - canvas.width) cameraX = 75 * TILE - canvas.width;
+
+            enemies.forEach(e => e.update());
+            particles.forEach(p => p.update());
+
+            enemies = enemies.filter(e => e.active);
+            particles = particles.filter(p => p.active);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 画远景云朵
+            ctx.fillStyle = '#fff';
+            for (let i = 0; i < 5; i++) {
+                let cx = (i * 400 - cameraX * 0.3) % 1200;
+                if (cx < -200) cx += 1200;
+                ctx.fillRect(cx, 100, 100, 30);
+                ctx.fillRect(cx + 20, 80, 60, 30);
+                ctx.fillRect(cx + 10, 120, 80, 20);
+            }
+
+            blocks.forEach(b => b.draw());
+            goal.draw();
+            enemies.forEach(e => e.draw());
+            particles.forEach(p => p.draw());
+            player.draw();
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            if (!isGameOver) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function endGame(text, color) {
+            isGameOver = true;
+            msgText.innerText = text;
+            msgText.style.color = color;
+            msgScreen.style.display = 'flex';
+        }
+
+        buildLevel();
+        gameLoop();
+
+    </script>
+</body>
+</html>

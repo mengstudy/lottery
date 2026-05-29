@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>双色球历史数据</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 双色球历史开奖数据</h1>
+            <p style="color: #666; margin-top: 10px;">共 99 条记录</p>
+            
+            
+            
+            <div class="nav-buttons">
+                <a href="/ssq" class="btn btn-primary">🏠 返回首页</a>
+                <a href="/ssq/missing_groups" class="btn btn-success">📊 遗漏分组</a>
+                <button onclick="updateAllHistory()" class="btn btn-success" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border: none; color: white; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 14px;">🔄 更新所有历史数据</button>
+            </div>
+        </div>
+        
+        
+        <div class="stat-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3>开奖记录</h3>
+                <div>
+                    <button onclick="updateLatestData()" class="btn btn-primary" style="padding: 8px 16px; font-size: 13px;">⚡ 快速更新最新</button>
+                    <button onclick="updateAllHistory()" class="btn btn-success" style="padding: 8px 16px; font-size: 13px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border: none; color: white;">🔄 全量更新历史</button>
+                </div>
+            </div>
+            <table class="history-table">
+                <thead>
+                    <tr>
+                        <th>期号</th>
+                        <th>红球号码</th>
+                        <th>蓝球</th>
+                        <th>开奖日期</th>
+                        <th>奇偶比</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    
+                    <tr>
+                        <td><strong>26052</strong></td>
+                        <td>
+                            <div style="display: flex; gap: 5px; justify-content: center;">
+                                
+                                <span class="ball red-ball" style="width: 35px; height: 35px; font-size: 14px;">01</span>
+                                
+                                <span class="ball red-ball" style="width: 35px; height: 35px; font-size: 14px;">03</span>
+                                
+                                <span class="ball red-ball" style="width: 35px; height: 35px; font-size: 14px;">11</span>
+                                
+                                <span class="ball red-ball" style="width: 35px; height: 35px; font-size: 14px;">22</span>
+                                
+                                <span class="ball red-ball" style="width: 35px; height: 35px; font-size: 14px;">26</span>
+                                
+                                <span class="ball red-ball" style="width: 35px; height: 35px; font-size: 14px;">31</span>
+                                
+                            </div>
+                        </td>
+                        <td><span class="ball blue-ball" style="width: 35px; height: 35px; font-size: 14px;">11</span></td>
+                        <td>2026-05-10T00:00:00Z</td>
+                        <td>
