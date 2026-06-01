@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>超级魂斗罗 - 网页版</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #111;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: 'Courier New', Courier, monospace;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #game-container {
+            margin-top: 20px;
+            position: relative;
+            box-shadow: 0 0 30px rgba(255, 0, 0, 0.4);
+            border: 4px solid #333;
+        }
+
+        canvas {
+            display: block;
+            background-color: #0f172a; /* 深蓝色夜空背景 */
+        }
+
+        .ui-panel {
+            display: flex;
+            justify-content: space-between;
+            width: 800px;
+            margin-top: 10px;
+            font-size: 1.2rem;
+        }
+
+        .controls {
+            margin-top: 15px;
+            color: #aaa;
+            text-align: center;
+        }
+
+        kbd {
+            background-color: #333;
+            border-radius: 3px;
+            border: 1px solid #777;
+            padding: 2px 6px;
+            font-family: monospace;
+            font-weight: bold;
+            color: #fff;
+        }
+        
+        #message-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 3rem;
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        #restart-btn {
+            margin-top: 30px;
+            padding: 12px 24px;
+            font-size: 1.2rem;
+            background: #ef4444;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        
+        #restart-btn:hover {
+            background: #dc2626;
+        }
+
+        .back-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            text-decoration: none;
+            background: rgba(255,255,255,0.1);
+            padding: 8px 16px;
+            border-radius: 5px;
+            font-family: sans-serif;
+        }
+        .back-btn:hover {
+            background: rgba(255,255,255,0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <a href="/" class="back-btn">← 返回大厅</a>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="message-screen">
+            <div id="message-text">GAME OVER</div>
+            <button id="restart-btn" onclick="location.reload()">重新开始</button>
+        </div>
+    </div>
+
+    <div class="ui-panel">
+        <div>分数: <span id="score">0</span></div>
+        <div style="color: #ef4444; font-weight: bold;">HP: <span id="hp">10</span></div>
+    </div>
+
+    <div class="controls">
+        操作方法：<kbd>A</kbd> <kbd>D</kbd> 或 <kbd>←</kbd> <kbd>→</kbd> 移动 | <kbd>W</kbd> 或 <kbd>K</kbd> 跳跃 | <kbd>J</kbd> 射击
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const msgScreen = document.getElementById('message-screen');
+        const msgText = document.getElementById('message-text');
+        const scoreElement = document.getElementById('score');
+        const hpElement = document.getElementById('hp');
+
+        // 物理常量
+        const GRAVITY = 0.6;
+        const JUMP_FORCE = -12;
+        const MOVE_SPEED = 5;
+
+        // 游戏状态
+        let score = 0;
+        let isGameOver = false;
+        let cameraX = 0;
+
+        // 按键状态
+        const keys = {};
+        let lastHorizontalKey = null;
+
+        window.addEventListener('keydown', e => { 
+            keys[e.code] = true; 
+            if (e.code === 'KeyA' || e.code === 'ArrowLeft') lastHorizontalKey = 'LEFT';
+            if (e.code === 'KeyD' || e.code === 'ArrowRight') lastHorizontalKey = 'RIGHT';
+        });
+
+        window.addEventListener('keyup', e => { 
+            keys[e.code] = false; 
+            if ((e.code === 'KeyA' || e.code === 'ArrowLeft') && lastHorizontalKey === 'LEFT') {
+                if (keys['KeyD'] || keys['ArrowRight']) lastHorizontalKey = 'RIGHT';
+                else lastHorizontalKey = null;
+            }
+            if ((e.code === 'KeyD' || e.code === 'ArrowRight') && lastHorizontalKey === 'RIGHT') {
+                if (keys['KeyA'] || keys['ArrowLeft']) lastHorizontalKey = 'LEFT';
+                else lastHorizontalKey = null;
+            }
+        });
+
+        // 玩家类
+        class Player {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 30;
+                this.height = 60;
+                this.vx = 0;
+                this.vy = 0;
+                this.hp = 10;
+                this.dir = 1; // 1: right, -1: left
+                this.isGrounded = false;
+                this.shootCooldown = 0;
+                this.invincibleTimer = 0;
+            }
+
+            update() {
+                if (this.invincibleTimer > 0) this.invincibleTimer--;
+                if (this.shootCooldown > 0) this.shootCooldown--;
+
+                // 左右移动：后按键优先 (SOCD)
+                let moveDir = 0;
+                let isLeft = keys['KeyA'] || keys['ArrowLeft'];
+                let isRight = keys['KeyD'] || keys['ArrowRight'];
+
+                if (isLeft && isRight) {
+                    moveDir = (lastHorizontalKey === 'LEFT') ? -1 : 1;
+                } else if (isLeft) {
+                    moveDir = -1;
+                } else if (isRight) {
+                    moveDir = 1;
+                }
+                
+                this.vx = moveDir * MOVE_SPEED;
+                if (moveDir !== 0) this.dir = moveDir;
+
+                // 跳跃
+                if ((keys['KeyW'] || keys['ArrowUp'] || keys['KeyK']) && this.isGrounded) {
+                    this.vy = JUMP_FORCE;
+                    this.isGrounded = false;
+                }
+
+                // 射击
+                if (keys['KeyJ'] && this.shootCooldown === 0) {
+                    let bx = this.dir === 1 ? this.x + this.width : this.x;
+                    let by = this.y + this.height / 3;
+                    bullets.push(new Bullet(bx, by, this.dir * 12, 0, true));
+                    this.shootCooldown = 15;
+                }
+
+                // 应用物理
+                this.x += this.vx;
+                
+                let oldY = this.y;
+                this.vy += GRAVITY;
+                this.y += this.vy;
+
+                // 屏幕左边界限制
+                if (this.x < cameraX) this.x = cameraX;
+
+                // 平台碰撞 (单向平台：只能从上面踩下)
+                this.isGrounded = false;
+                for (let p of platforms) {
+                    if (this.vy >= 0) {
+                        // 如果上一帧的底部还在平台上面，这一帧的底部超过了平台
+                        if (oldY + this.height <= p.y && this.y + this.height >= p.y) {
+                            if (this.x + this.width > p.x && this.x < p.x + p.width) {
+                                this.y = p.y - this.height;
+                                this.vy = 0;
+                                this.isGrounded = true;
+                            }
+                        }
+                    }
+                }
+
+                // 掉出地图下界死亡
+                if (this.y > canvas.height + 100) {
+                    this.takeDamage(this.hp); // 直接死亡
+                }
+            }
+
+            draw() {
+                // 闪烁无敌效果
+                if (this.invincibleTimer > 0 && Math.floor(Date.now() / 100) % 2 === 0) return;
+
+                // 画身体
+                ctx.fillStyle = '#3b82f6'; // 蓝色装甲
+                ctx.fillRect(this.x - cameraX, this.y, this.width, this.height);
+                
+                // 画头
+                ctx.fillStyle = '#fca5a5';
+                ctx.fillRect(this.x + 5 - cameraX, this.y - 15, 20, 20);
+
+                // 画枪
+                ctx.fillStyle = '#9ca3af';
+                if (this.dir === 1) {
+                    ctx.fillRect(this.x + this.width - cameraX, this.y + 15, 20, 8);
+                } else {
+                    ctx.fillRect(this.x - 20 - cameraX, this.y + 15, 20, 8);
+                }
+            }
+
+            takeDamage(amount) {
+                if (this.invincibleTimer > 0) return;
+                this.hp -= amount;
+                hpElement.innerText = this.hp;
+                this.invincibleTimer = 60; // 1秒无敌
+
+                if (this.hp <= 0) {
+                    endGame("GAME OVER", "#ef4444");
+                }
+            }
+        }
+
+        // 敌人类
+        class Enemy {
+            constructor(x, y, patrolLength) {
+                this.x = x;
+                this.y = y;
+                this.width = 30;
+                this.height = 60;
+                this.startX = x;
+                this.patrolLength = patrolLength;
+                this.vx = 2;
+                this.dir = 1;
+                this.hp = 3;
+                this.shootTimer = Math.random() * 60 + 60;
+                this.active = true;
+            }
+
+            update() {
+                // 巡逻逻辑
+                this.x += this.vx;
+                if (this.x > this.startX + this.patrolLength) {
+                    this.vx = -2;
+                    this.dir = -1;
+                } else if (this.x < this.startX) {
+                    this.vx = 2;
+                    this.dir = 1;
+                }
+
+                // 射击逻辑
+                this.shootTimer--;
+                if (this.shootTimer <= 0) {
+                    // 如果玩家在范围内
+                    if (Math.abs(player.x - this.x) < 500) {
+                        let shootDir = player.x < this.x ? -1 : 1;
+                        this.dir = shootDir; // 转向玩家
+                        let bx = shootDir === 1 ? this.x + this.width : this.x;
+                        let by = this.y + this.height / 3;
+                        bullets.push(new Bullet(bx, by, shootDir * 6, 0, false));
+                    }
+                    this.shootTimer = 120; // 2秒开一枪
+                }
+
+                // 玩家触碰敌人受伤
+                if (checkRectCollision(this.x, this.y, this.width, this.height, 
+                                       player.x, player.y, player.width, player.height)) {
+                    player.takeDamage(1);
+                }
+            }
+
+            draw() {
+                ctx.fillStyle = '#ef4444'; // 红色敌军
+                ctx.fillRect(this.x - cameraX, this.y, this.width, this.height);
+                
+                // 枪
+                ctx.fillStyle = '#333';
+                if (this.dir === 1) {
+                    ctx.fillRect(this.x + this.width - cameraX, this.y + 15, 20, 8);
+                } else {
+                    ctx.fillRect(this.x - 20 - cameraX, this.y + 15, 20, 8);
+                }
+            }
+
+            takeDamage(amount) {
+                this.hp -= amount;
+                if (this.hp <= 0) {
+                    this.active = false;
+                    score += 100;
+                    scoreElement.innerText = score;
+                }
+            }
+        }
+
+        // 子弹类
+        class Bullet {
+            constructor(x, y, vx, vy, isPlayer) {
+                this.x = x;
+                this.y = y;
+                this.vx = vx;
+                this.vy = vy;
+                this.isPlayer = isPlayer;
+                this.radius = 4;
+                this.active = true;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // 飞出屏幕销毁
+                if (this.x < cameraX || this.x > cameraX + canvas.width || this.y < 0 || this.y > canvas.height) {
+                    this.active = false;
+                }
+
+                // 碰撞检测
+                if (this.isPlayer) {
+                    for (let e of enemies) {
+                        if (e.active && checkCircleRectColl(this.x, this.y, this.radius, e.x, e.y, e.width, e.height)) {
+                            this.active = false;
+                            e.takeDamage(1);
+                            break;
+                        }
+                    }
+                } else {
+                    if (checkCircleRectColl(this.x, this.y, this.radius, player.x, player.y, player.width, player.height)) {
+                        this.active = false;
+                        player.takeDamage(1);
+                    }
+                }
+            }
+
+            draw() {
+                ctx.fillStyle = this.isPlayer ? '#fef08a' : '#f87171'; // 玩家黄子弹，敌人红子弹
+                ctx.beginPath();
+                ctx.arc(this.x - cameraX, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // 平台类
+        class Platform {
+            constructor(x, y, w, h) {
+                this.x = x;
+                this.y = y;
+                this.width = w;
+                this.height = h;
+            }
+
+            draw() {
+                // 简单的金属风格平台
+                ctx.fillStyle = '#475569';
+                ctx.fillRect(this.x - cameraX, this.y, this.width, this.height);
+                ctx.fillStyle = '#64748b';
+                ctx.fillRect(this.x - cameraX, this.y, this.width, 4);
+            }
+        }
+
+        // 终点旗帜
+        class Goal {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 40;
+                this.height = 100;
+            }
+
+            update() {
+                if (checkRectCollision(this.x, this.y, this.width, this.height, 
+                                       player.x, player.y, player.width, player.height)) {
+                    endGame("MISSION CLEAR!", "#22c55e");
+                }
+            }
+
+            draw() {
+                // 旗杆
+                ctx.fillStyle = '#d1d5db';
+                ctx.fillRect(this.x + 15 - cameraX, this.y, 5, this.height);
+                // 旗帜
+                ctx.fillStyle = '#3b82f6';
+                ctx.fillRect(this.x + 20 - cameraX, this.y, 40, 30);
+            }
+        }
+
+        // 碰撞辅助
+        function checkRectCollision(r1x, r1y, r1w, r1h, r2x, r2y, r2w, r2h) {
+            return r1x < r2x + r2w && r1x + r1w > r2x &&
+                   r1y < r2y + r2h && r1y + r1h > r2y;
+        }
+
+        function checkCircleRectColl(cx, cy, cr, rx, ry, rw, rh) {
+            let testX = cx;
+            let testY = cy;
+
+            if (cx < rx) testX = rx; else if (cx > rx + rw) testX = rx + rw;
+            if (cy < ry) testY = ry; else if (cy > ry + rh) testY = ry + rh;
+
+            let distX = cx - testX;
+            let distY = cy - testY;
+            let distance = Math.sqrt((distX*distX) + (distY*distY));
+
+            return distance <= cr;
+        }
+
+        // 全局对象
+        let player;
+        let platforms = [];
+        let enemies = [];
+        let bullets = [];
+        let goal;
+
+        // 初始化关卡设计
+        function initLevel() {
+            player = new Player(100, 300);
+            
+            // 地板平台（长短不一的碎片化地面）
+            platforms.push(new Platform(0, 500, 800, 100));
+            platforms.push(new Platform(900, 500, 400, 100));
+            platforms.push(new Platform(1400, 450, 200, 150));
+            platforms.push(new Platform(1700, 550, 600, 50));
+            platforms.push(new Platform(2400, 500, 800, 100));
+
+            // 高处平台
+            platforms.push(new Platform(400, 380, 200, 20));
+            platforms.push(new Platform(700, 280, 150, 20));
+            platforms.push(new Platform(1000, 350, 250, 20));
+            platforms.push(new Platform(1500, 250, 150, 20));
+            platforms.push(new Platform(1800, 380, 300, 20));
+            platforms.push(new Platform(2200, 300, 200, 20));
+
+            // 放置敌人 (Enemy(x, y, patrolLength))
+            enemies.push(new Enemy(500, 440, 150));
+            enemies.push(new Enemy(450, 320, 100));
+            enemies.push(new Enemy(1050, 290, 100));
+            enemies.push(new Enemy(1450, 390, 50));
+            enemies.push(new Enemy(1850, 320, 150));
+            enemies.push(new Enemy(2000, 490, 100));
+            enemies.push(new Enemy(2500, 440, 200));
+
+            // 终点
+            goal = new Goal(2900, 400);
+        }
+
+        function update() {
+            if (isGameOver) return;
+
+            player.update();
+            goal.update();
+
+            // 摄像机跟随玩家
+            let targetCameraX = player.x - canvas.width / 2.5; // 玩家保持在偏左侧
+            if (targetCameraX > cameraX) {
+                cameraX = targetCameraX;
+            }
+            // 限制最大摄像机
+            if (cameraX > 2400) cameraX = 2400; // 地图右边缘
+
+            enemies.forEach(e => e.update());
+            bullets.forEach(b => b.update());
+
+            // 清理销毁
+            enemies = enemies.filter(e => e.active);
+            bullets = bullets.filter(b => b.active);
+
+            // 背景视差星星 (可以通过清屏时带一点透明度做残影，或者绘制静态星星，这里用简单的颜色清屏)
+        }
+
+        function draw() {
+            // 画背景
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 画远景山脉（简单多边形，跟随摄像机缓慢移动实现视差）
+            ctx.fillStyle = '#1e293b';
+            ctx.beginPath();
+            ctx.moveTo(0 - cameraX * 0.2, 600);
+            ctx.lineTo(200 - cameraX * 0.2, 300);
+            ctx.lineTo(400 - cameraX * 0.2, 450);
+            ctx.lineTo(700 - cameraX * 0.2, 200);
+            ctx.lineTo(1000 - cameraX * 0.2, 500);
+            ctx.lineTo(1500 - cameraX * 0.2, 250);
+            ctx.lineTo(2000 - cameraX * 0.2, 600);
+            ctx.fill();
+
+            platforms.forEach(p => p.draw());
+            goal.draw();
+            enemies.forEach(e => e.draw());
+            bullets.forEach(b => b.draw());
+            player.draw();
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            if (!isGameOver) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function endGame(text, color) {
+            isGameOver = true;
+            msgText.innerText = text;
+            msgText.style.color = color;
+            msgScreen.style.display = 'flex';
+        }
+
+        initLevel();
+        gameLoop();
+
+    </script>
+</body>
+</html>
