@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>游戏大厅 - 畅享经典与现代</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+            	radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+            	radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.15) 0px, transparent 50%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 4rem 2rem;
+            overflow-x: hidden;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 4rem;
+            animation: fadeInDown 0.8s ease-out;
+        }
+
+        .header h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #60a5fa, #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 1rem;
+            letter-spacing: -0.05em;
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .game-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 2.5rem;
+            width: 100%;
+            max-width: 1000px;
+            animation: fadeInUp 0.8s ease-out 0.2s both;
+        }
+
+        .game-card {
+            background: var(--card-bg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            overflow: hidden;
+            text-decoration: none;
+            color: inherit;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            group: hover;
+        }
+
+        .game-card:hover {
+            transform: translateY(-10px) scale(1.02);
+            border-color: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 
+                        0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+        }
+
+        .card-image {
+            height: 200px;
+            width: 100%;
+            background-size: cover;
+            background-position: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .mb-image {
+            background: linear-gradient(45deg, #1e3a8a, #064e3b);
+            /* Placeholder for actual game screenshot */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .mb-image::before {
+            content: '⚔️';
+            font-size: 5rem;
+            opacity: 0.8;
+            transition: transform 0.4s;
+        }
+
+        .tank-image {
+            background: linear-gradient(45deg, #78350f, #1e293b);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .tank-image::before {
+            content: '🪖';
+            font-size: 5rem;
+            opacity: 0.8;
+            transition: transform 0.4s;
+        }
+
+        .contra-image {
+            background: linear-gradient(45deg, #7f1d1d, #450a0a);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .contra-image::before {
+            content: '🔫';
+            font-size: 5rem;
+            opacity: 0.8;
+            transition: transform 0.4s;
+        }
+
+        .mario-image {
+            background: linear-gradient(45deg, #ef4444, #3b82f6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mario-image::before {
+            content: '🍄';
+            font-size: 5rem;
+            opacity: 0.8;
+            transition: transform 0.4s;
+        }
+
+        .racing-image {
+            background: linear-gradient(45deg, #0f766e, #042f2e);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .racing-image::before {
+            content: '🏎️';
+            font-size: 5rem;
+            opacity: 0.8;
+            transition: transform 0.4s;
+        }
+
+        .game-card:hover .card-image::before {
+            transform: scale(1.2) rotate(10deg);
+        }
+
+        .card-content {
+            padding: 2rem;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: #fff;
+        }
+
+        .card-desc {
+            color: var(--text-muted);
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+            flex-grow: 1;
+        }
+
+        .play-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            padding: 0.8rem 1.5rem;
+            border-radius: 10px;
+            font-weight: 600;
+            text-align: center;
+            transition: all 0.3s;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .game-card:hover .play-btn {
+            background: var(--primary);
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+        }
+
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="header">
+        <h1>游戏大厅</h1>
+        <p>选择你的世界，开始一场全新的冒险之旅。无论是中世纪的铁马金戈，还是复古的坦克激战，由你主宰。</p>
+    </header>
+
+    <main class="game-grid">
+        <!-- 骑马与砍杀 3D -->
+        <a href="mount_and_blade_3d.html" class="game-card">
+            <div class="card-image mb-image"></div>
+            <div class="card-content">
+                <h2 class="card-title">骑马与砍杀 3D</h2>
+                <p class="card-desc">探索广阔的中世纪沙盒世界。骑乘战马，挥舞利刃，带领你的部队征战四方，书写属于你的史诗传说。</p>
+                <div class="play-btn">进入游戏</div>
+            </div>
+        </a>
+
+        <!-- 坦克大战 -->
+        <a href="tank_battle.html" class="game-card">
+            <div class="card-image tank-image"></div>
+            <div class="card-content">
+                <h2 class="card-title">经典坦克大战</h2>
+                <p class="card-desc">重温童年经典！保卫基地，击溃敌军坦克。使用地形掩护，收集强化道具，在枪林弹雨中生存下来。</p>
+                <div class="play-btn">进入游戏</div>
+            </div>
+        </a>
+
+        <!-- 魂斗罗 -->
+        <a href="contra.html" class="game-card">
+            <div class="card-image contra-image"></div>
+            <div class="card-content">
+                <h2 class="card-title">超级魂斗罗</h2>
+                <p class="card-desc">拿起武器，消灭外星威胁！体验经典的横版卷轴射击，跳跃、射击、闪避，突破重重难关。</p>
+                <div class="play-btn">进入游戏</div>
+            </div>
+        </a>
+
+        <!-- 超级玛丽亚 -->
+        <a href="mario.html" class="game-card">
+            <div class="card-image mario-image"></div>
+            <div class="card-content">
+                <h2 class="card-title">超级玛丽亚</h2>
+                <p class="card-desc">探索神奇的蘑菇王国！跳跃、顶砖块、踩怪物、收集金币，重温经典的平台跳跃乐趣。</p>
+                <div class="play-btn">进入游戏</div>
+            </div>
+        </a>
+
+        <!-- 极速狂飙 -->
+        <a href="racing.html" class="game-card">
+            <div class="card-image racing-image"></div>
+            <div class="card-content">
+                <h2 class="card-title">极速狂飙</h2>
+                <p class="card-desc">驾驶超级跑车在公路上驰骋。躲避障碍，不断加速，体验肾上腺素飙升的极限快感！</p>
+                <div class="play-btn">进入游戏</div>
+            </div>
+        </a>
+    </main>
+
+</body>
+</html>
