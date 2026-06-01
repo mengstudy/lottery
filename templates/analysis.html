@@ -423,6 +423,14 @@
                                 <div id="compareResultSummary" style="margin-top: 10px; font-size: 12px; color: #868e96; display: none;">
                                     已解析 <strong id="validBallCount" style="color: #e03131;">0</strong> 个红球号，共覆盖 <strong id="uniqueBallCount" style="color: #667eea;">0</strong> 种。
                                 </div>
+                                <div id="parsedGroupsContainer" style="margin-top: 15px; border-top: 1px solid #eef2f7; padding-top: 12px; display: none;">
+                                    <h6 style="color: #667eea; font-size: 13px; margin-bottom: 8px; display: flex; align-items: center; gap: 4px;">
+                                        🔍 收集号码组比对 (按行匹配)：
+                                    </h6>
+                                    <div id="parsedGroupsList" style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px;">
+                                        <!-- 动态渲染的匹配列表 -->
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -858,6 +866,88 @@
                 document.getElementById('uniqueBallCount').innerText = Object.keys(ballFreq).length;
             } else {
                 summaryDiv.style.display = 'none';
+            }
+
+            // 按行（组）解析收集到的号码并计算匹配数
+            const lines = inputVal.split('\n');
+            const parsedGroups = [];
+            lines.forEach((lineText, idx) => {
+                const tokens = lineText.match(/\b\d+\b/g) || [];
+                const ballsInLine = [];
+                const seenInLine = new Set();
+                
+                tokens.forEach(tok => {
+                    const num = parseInt(tok, 10);
+                    if (num >= 1 && num <= 33) {
+                        const formatted = num.toString().padStart(2, '0');
+                        if (!seenInLine.has(formatted)) {
+                            ballsInLine.push(formatted);
+                            seenInLine.add(formatted);
+                        }
+                    }
+                });
+                
+                if (ballsInLine.length > 0) {
+                    parsedGroups.push({
+                        index: idx + 1,
+                        balls: ballsInLine
+                    });
+                }
+            });
+
+            const groupsContainer = document.getElementById('parsedGroupsContainer');
+            const listEl = document.getElementById('parsedGroupsList');
+            if (parsedGroups.length > 0) {
+                groupsContainer.style.display = 'block';
+                listEl.innerHTML = '';
+                
+                parsedGroups.forEach(group => {
+                    let matchCount = 0;
+                    group.balls.forEach(b => {
+                        if (mySelectedBallsSet.has(b)) {
+                            matchCount++;
+                        }
+                    });
+                    
+                    const groupRow = document.createElement('div');
+                    groupRow.style.display = 'flex';
+                    groupRow.style.alignItems = 'center';
+                    groupRow.style.justifyContent = 'space-between';
+                    groupRow.style.background = '#f8f9fa';
+                    groupRow.style.padding = '6px 10px';
+                    groupRow.style.borderRadius = '6px';
+                    groupRow.style.border = '1px solid #e9ecef';
+                    groupRow.style.fontSize = '12px';
+                    groupRow.style.gap = '10px';
+                    
+                    // 号码展示
+                    let ballsHtml = `<div style="display: flex; gap: 4px; flex-wrap: wrap; align-items: center;">`;
+                    ballsHtml += `<span style="color: #868e96; font-weight: bold; margin-right: 6px; min-width: 45px;">第 ${group.index} 组:</span>`;
+                    
+                    group.balls.forEach(b => {
+                        const isMatch = mySelectedBallsSet.has(b);
+                        if (isMatch) {
+                            ballsHtml += `<span style="display: inline-block; width: 22px; height: 22px; line-height: 22px; text-align: center; background: radial-gradient(circle at 30% 30%, #ff5252, #c92a2a); color: white; border-radius: 50%; font-size: 11px; font-weight: bold; box-shadow: 0 1px 3px rgba(201,42,42,0.3); text-shadow: 0 1px 1px rgba(0,0,0,0.3);">${b}</span>`;
+                        } else {
+                            ballsHtml += `<span style="display: inline-block; width: 22px; height: 22px; line-height: 20px; text-align: center; background: white; color: #495057; border: 1px solid #ced4da; border-radius: 50%; font-size: 11px; font-weight: bold;">${b}</span>`;
+                        }
+                    });
+                    ballsHtml += `</div>`;
+                    
+                    // 匹配结果角标
+                    let matchHtml = '';
+                    if (matchCount > 0) {
+                        matchHtml = `<span style="background: #ffe3e3; color: #c92a2a; border-radius: 4px; padding: 2px 8px; font-weight: bold; font-size: 11px; display: flex; align-items: center; gap: 2px; border: 1px solid rgba(201, 42, 42, 0.15);">🎯 匹配 ${matchCount} 个</span>`;
+                    } else {
+                        matchHtml = `<span style="color: #ced4da; font-size: 11px;">无匹配</span>`;
+                    }
+                    
+                    groupRow.innerHTML = ballsHtml + matchHtml;
+                    listEl.appendChild(groupRow);
+                });
+            } else {
+                groupsContainer.style.display = 'none';
+                listEl.innerHTML = '';
             }
 
             // B. 查找所有预测的球，应用多维度渲染逻辑
