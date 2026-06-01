@@ -88,6 +88,36 @@
         .ball-color-9-plus { color: #1098ad; }
         .ball-highlight { border: 3px solid #c92a2a; box-shadow: 0 0 10px rgba(201, 42, 42, 0.5); }
         table tbody tr td { vertical-align: top !important; }
+        
+        /* 心水前区红球选择面板样式 */
+        .selector-ball {
+            display: inline-block;
+            width: 22px;
+            height: 22px;
+            line-height: 20px;
+            text-align: center;
+            border: 1px solid #ced4da;
+            border-radius: 50%;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #495057;
+            background: #f8f9fa;
+            user-select: none;
+            transition: all 0.2s;
+        }
+        .selector-ball:hover {
+            border-color: #ff6b6b;
+            color: #c92a2a;
+            transform: scale(1.1);
+        }
+        .selector-ball.active {
+            background: radial-gradient(circle at 30% 30%, #ff5252, #c92a2a);
+            color: white;
+            border-color: #c92a2a;
+            box-shadow: 0 2px 6px rgba(201, 42, 42, 0.4);
+            transform: scale(1.15);
+        }
     </style>
 </head>
 <body>
@@ -166,6 +196,66 @@
                 <h3>📊 下期遗漏次数分组（预测参考）</h3>
                 <p style="color: #666; font-size: 14px; margin-bottom: 15px;">说明：下一期尚未开奖，以下为基于当前期遗漏统计的分组数据</p>
                 {% endif %}
+
+                <!-- 前端红球预测比对与选号工具箱 -->
+                <div class="predict-compare-box" style="background: rgba(17, 153, 142, 0.05); border: 1px dashed #11998e; border-radius: 12px; padding: 20px; margin: 15px 0 25px 0;">
+                    <h4 style="color: #11998e; margin-bottom: 15px; font-size: 18px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid rgba(17, 153, 142, 0.15); padding-bottom: 8px;">
+                        🔮 预测比对与心水红球工具箱 (纯前端交互)
+                    </h4>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+                        <!-- 左列：他人红球频次比对 -->
+                        <div style="background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); border: 1px solid #eef2f7; display: flex; flex-direction: column; justify-content: space-between;">
+                            <div>
+                                <h5 style="color: #11998e; margin-bottom: 8px; font-size: 15px; display: flex; align-items: center; gap: 6px;">
+                                    📋 收集到的前区红球号码 (他人频次)
+                                </h5>
+                                <p style="color: #666; font-size: 12px; margin-bottom: 10px; line-height: 1.4;">
+                                    输入别人购买的号码（空格、逗号或多行分隔），系统将统计频次并在下方预测球旁展示角标。
+                                </p>
+                                <textarea id="collectedBallsInput" placeholder="输入别人买过的前区号码，例如：&#10;05, 12, 18, 05, 35..." style="width: 100%; min-height: 80px; padding: 10px; border: 1px solid #ced4da; border-radius: 8px; font-family: monospace; font-size: 13px; outline: none; transition: border-color 0.2s; resize: vertical;" oninput="updateCompareAndSelection()"></textarea>
+                            </div>
+                            <div>
+                                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                                    <button onclick="updateCompareAndSelection()" class="btn" style="flex: 1; padding: 6px 12px; font-size: 12px; border-radius: 6px; margin: 0; text-align: center;">⚡ 实时比对</button>
+                                    <button onclick="clearCollectedBalls()" class="btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; margin: 0; text-align: center; background: #e9ecef; color: #495057; border: 1px solid #ced4da;">🗑️ 清空</button>
+                                </div>
+                                <div id="compareResultSummary" style="margin-top: 10px; font-size: 12px; color: #868e96; display: none;">
+                                    已解析 <strong id="validBallCount" style="color: #e03131;">0</strong> 个前区号，共覆盖 <strong id="uniqueBallCount" style="color: #11998e;">0</strong> 种。
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 右列：我选的前区红球号码 (直接标红) -->
+                        <div style="background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); border: 1px solid #eef2f7; display: flex; flex-direction: column; justify-content: space-between;">
+                            <div>
+                                <h5 style="color: #e03131; margin-bottom: 8px; font-size: 15px; display: flex; align-items: center; gap: 6px;">
+                                    ⭐ 我选的前区红球号码 (直接标红)
+                                </h5>
+                                <p style="color: #666; font-size: 12px; margin-bottom: 10px; line-height: 1.4;">
+                                    点击下方迷你球直接选号（红底亮起），或在输入框输入，选中号码在预测表中将<strong>直接标红</strong>。
+                                </p>
+                                
+                                <!-- Mini ball grid for visual selection (01 to 35 for DLT) -->
+                                <div style="display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; margin-bottom: 12px;" id="mySelectedBallsSelector">
+                                    {% for i in range(1, 36) %}
+                                    <span class="selector-ball" data-select-num="{{ '%02d' | format(i) }}" onclick="toggleMySelectedBall('{{ '%02d' | format(i) }}')">
+                                        {{ '%02d' | format(i) }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                
+                                <input type="text" id="mySelectedBallsInput" placeholder="支持手动输入或粘贴号码，以空格/逗号分隔..." style="width: 100%; padding: 8px 10px; border: 1px solid #ced4da; border-radius: 6px; font-size: 12px; outline: none; transition: border-color 0.2s;" oninput="syncMySelectedBallsFromInput()">
+                            </div>
+                            <div>
+                                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                                    <button onclick="clearMySelectedBalls()" class="btn" style="flex: 1; padding: 6px 12px; font-size: 12px; border-radius: 6px; margin: 0; text-align: center; background: #e9ecef; color: #495057; border: 1px solid #ced4da;">🗑️ 清空选号</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <table>
                     <thead>
                         <tr>
@@ -183,12 +273,17 @@
                             <td style="text-align: center; padding: 10px; background: {% if missing_count == 0 %}#fff5f5{% elif missing_count <= 5 %}#fffef0{% elif missing_count <= 8 %}#f0f9ff{% else %}#f0faff{% endif %};">
                                 {% set balls = next_analysis.missing_groups.get(missing_count|string, []) %}
                                 {% if balls %}
-                                <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
+                                <div style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
                                     {% for ball in balls %}
                                     {% set show_highlight = not next_analysis.no_next_draw and next_issue_data and ball in next_issue_data.red_balls %}
-                                    <span style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: white; border-radius: 50%; font-weight: bold; font-size: 13px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); {% if show_highlight %}border: 3px solid #c92a2a;{% endif %} color: {% if missing_count == 0 %}#c92a2a{% elif missing_count <= 5 %}#f08c00{% elif missing_count <= 8 %}#1864ab{% else %}#1098ad{% endif %};">
-                                        {{ '%02d' | format(ball) }}
-                                    </span>
+                                    <div class="predict-ball-wrapper" style="display: flex; align-items: center; gap: 4px; position: relative;">
+                                        <span data-predict-ball="{{ '%02d' | format(ball) }}"
+                                              class="{% if show_highlight %}ball-highlight{% endif %}"
+                                              style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: white; border-radius: 50%; font-weight: bold; font-size: 13px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); color: {% if missing_count == 0 %}#c92a2a{% elif missing_count <= 5 %}#f08c00{% elif missing_count <= 8 %}#1864ab{% else %}#1098ad{% endif %};">
+                                            {{ '%02d' | format(ball) }}
+                                        </span>
+                                        <span class="ball-freq-badge" style="display: none; background: #e03131; color: white; border-radius: 10px; padding: 1px 5px; font-size: 10px; font-weight: bold; min-width: 16px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.15);"></span>
+                                    </div>
                                     {% endfor %}
                                 </div>
                                 {% else %}
@@ -199,12 +294,17 @@
                             <td style="text-align: center; padding: 10px; background: #f0faff;">
                                 {% set balls = next_analysis.missing_groups.get('9', []) %}
                                 {% if balls %}
-                                <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
+                                <div style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
                                     {% for ball in balls %}
                                     {% set show_highlight = not next_analysis.no_next_draw and next_issue_data and ball in next_issue_data.red_balls %}
-                                    <span style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: white; border-radius: 50%; font-weight: bold; font-size: 13px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); {% if show_highlight %}border: 3px solid #c92a2a;{% endif %} color: #1098ad;">
-                                        {{ '%02d' | format(ball) }}
-                                    </span>
+                                    <div class="predict-ball-wrapper" style="display: flex; align-items: center; gap: 4px; position: relative;">
+                                        <span data-predict-ball="{{ '%02d' | format(ball) }}"
+                                              class="{% if show_highlight %}ball-highlight{% endif %}"
+                                              style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: white; border-radius: 50%; font-weight: bold; font-size: 13px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); color: #1098ad;">
+                                            {{ '%02d' | format(ball) }}
+                                        </span>
+                                        <span class="ball-freq-badge" style="display: none; background: #e03131; color: white; border-radius: 10px; padding: 1px 5px; font-size: 10px; font-weight: bold; min-width: 16px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.15);"></span>
+                                    </div>
                                     {% endfor %}
                                 </div>
                                 {% else %}
@@ -406,5 +506,185 @@
         </div>
         {% endif %}
     </div>
+
+    <!-- 前端前区红球热度比对与自选高亮交互脚本 -->
+    <script>
+        // 全局管理我选的前区红球集合（保存格式化的字符串如 '05'）
+        let mySelectedBallsSet = new Set();
+
+        // 1. 点击切换我选的球号
+        function toggleMySelectedBall(ballNum) {
+            if (mySelectedBallsSet.has(ballNum)) {
+                mySelectedBallsSet.delete(ballNum);
+            } else {
+                mySelectedBallsSet.add(ballNum);
+            }
+            // 同步更新视觉网格状态
+            updateMySelectedBallsUI();
+            // 同步更新文本输入框
+            syncInputFromMySelectedBalls();
+            // 重新比对和渲染表格高亮
+            updateCompareAndSelection();
+        }
+
+        // 2. 从输入框更新自选号码（双向绑定）
+        function syncMySelectedBallsFromInput() {
+            const inputVal = document.getElementById('mySelectedBallsInput').value;
+            const numbers = inputVal.match(/\b\d+\b/g) || [];
+            
+            mySelectedBallsSet.clear();
+            numbers.forEach(numStr => {
+                const num = parseInt(numStr, 10);
+                if (num >= 1 && num <= 35) {
+                    const formatted = num.toString().padStart(2, '0');
+                    mySelectedBallsSet.add(formatted);
+                }
+            });
+            
+            // 同步更新面板样式
+            updateMySelectedBallsUI();
+            // 重新渲染高亮
+            updateCompareAndSelection();
+        }
+
+        // 3. 选号变动更新面板迷你球状态
+        function updateMySelectedBallsUI() {
+            const selectorBalls = document.querySelectorAll('#mySelectedBallsSelector .selector-ball');
+            selectorBalls.forEach(ballEl => {
+                const num = ballEl.getAttribute('data-select-num');
+                if (mySelectedBallsSet.has(num)) {
+                    ballEl.classList.add('active');
+                } else {
+                    ballEl.classList.remove('active');
+                }
+            });
+        }
+
+        // 4. 将自选球同步写入输入框
+        function syncInputFromMySelectedBalls() {
+            const sortedArray = Array.from(mySelectedBallsSet).sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+            document.getElementById('mySelectedBallsInput').value = sortedArray.join(' ');
+        }
+
+        // 5. 核心合并渲染函数：频次比对 & 心水标红 & 智能角标
+        function updateCompareAndSelection() {
+            // A. 解析他人收集号码的频次
+            const inputVal = document.getElementById('collectedBallsInput').value;
+            const numbers = inputVal.match(/\b\d+\b/g) || [];
+            const validBalls = [];
+            const ballFreq = {};
+            
+            numbers.forEach(numStr => {
+                const num = parseInt(numStr, 10);
+                if (num >= 1 && num <= 35) {
+                    const formatted = num.toString().padStart(2, '0');
+                    validBalls.push(formatted);
+                    ballFreq[formatted] = (ballFreq[formatted] || 0) + 1;
+                }
+            });
+
+            // 展示解析总计
+            const summaryDiv = document.getElementById('compareResultSummary');
+            if (validBalls.length > 0) {
+                summaryDiv.style.display = 'block';
+                document.getElementById('validBallCount').innerText = validBalls.length;
+                document.getElementById('uniqueBallCount').innerText = Object.keys(ballFreq).length;
+            } else {
+                summaryDiv.style.display = 'none';
+            }
+
+            // B. 查找所有预测的球，应用多维度渲染逻辑
+            const predictBalls = document.querySelectorAll('[data-predict-ball]');
+            predictBalls.forEach(ballEl => {
+                const ballNum = ballEl.getAttribute('data-predict-ball');
+                const isSelected = mySelectedBallsSet.has(ballNum);
+                const freq = ballFreq[ballNum] || 0;
+                
+                const wrapper = ballEl.closest('.predict-ball-wrapper');
+                const badge = wrapper ? wrapper.querySelector('.ball-freq-badge') : null;
+
+                // 1. 渲染球底色：若是“我选的前区红球”，直接涂红标出
+                if (isSelected) {
+                    ballEl.style.background = 'radial-gradient(circle at 30% 30%, #ff5252, #c92a2a)';
+                    ballEl.style.color = 'white';
+                    ballEl.style.textShadow = '0 1px 2px rgba(0,0,0,0.4)';
+                    ballEl.style.border = 'none';
+                    
+                    // 如果我选的球也是下一期真实开出的号码（如果有高亮圈），升级为至尊金黄圈
+                    if (ballEl.classList.contains('ball-highlight')) {
+                        ballEl.style.border = '3px solid #ffd700';
+                        ballEl.style.boxShadow = '0 0 12px rgba(255, 215, 0, 0.8)';
+                    } else {
+                        ballEl.style.boxShadow = '0 0 8px rgba(201, 42, 42, 0.6)';
+                    }
+                } else {
+                    // 恢复默认的纯净背景（由 HTML 中 class 的默认样式接管底色）
+                    ballEl.style.background = 'white';
+                    ballEl.style.color = '';
+                    ballEl.style.textShadow = 'none';
+                    
+                    // 恢复正常的边框
+                    if (ballEl.classList.contains('ball-highlight')) {
+                        ballEl.style.border = '3px solid #c92a2a';
+                        ballEl.style.boxShadow = '0 0 10px rgba(201, 42, 42, 0.5)';
+                    } else {
+                        ballEl.style.border = 'none';
+                        ballEl.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+                    }
+                }
+
+                // 2. 渲染频次角标：当有被购买记录时展示
+                if (badge) {
+                    if (freq > 0) {
+                        badge.innerText = 'x' + freq;
+                        badge.style.display = 'inline-block';
+                        
+                        // 智能角标色彩对比优化：若红球已被涂红，使用黄金角标，否则使用标准红角标
+                        if (isSelected) {
+                            badge.style.background = '#ffd700';
+                            badge.style.color = '#2c3e50';
+                            badge.style.border = '1px solid #d35400';
+                            badge.style.boxShadow = '0 1px 3px rgba(0,0,0,0.2)';
+                        } else {
+                            badge.style.background = '#e03131';
+                            badge.style.color = 'white';
+                            badge.style.border = 'none';
+                            badge.style.boxShadow = '0 1px 3px rgba(0,0,0,0.15)';
+                        }
+                        
+                        // 微膨胀和轻微浮动阴影，表示他人热度匹配
+                        ballEl.style.transform = 'scale(1.1)';
+                        if (!isSelected) {
+                            ballEl.style.boxShadow = '0 0 10px rgba(224, 49, 49, 0.7)';
+                        }
+                        ballEl.style.transition = 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+                    } else {
+                        badge.innerText = '';
+                        badge.style.display = 'none';
+                        
+                        if (!isSelected) {
+                            ballEl.style.transform = 'none';
+                        } else {
+                            ballEl.style.transform = 'scale(1.05)';
+                        }
+                    }
+                }
+            });
+        }
+
+        // 清空他人购买频次比对
+        function clearCollectedBalls() {
+            document.getElementById('collectedBallsInput').value = '';
+            updateCompareAndSelection();
+        }
+
+        // 清空自选号码
+        function clearMySelectedBalls() {
+            mySelectedBallsSet.clear();
+            updateMySelectedBallsUI();
+            syncInputFromMySelectedBalls();
+            updateCompareAndSelection();
+        }
+    </script>
 </body>
 </html>
