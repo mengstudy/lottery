@@ -225,6 +225,106 @@
             height: 400px;
             margin-top: 20px;
         }
+        
+        .latest-stats {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+        }
+        
+        .chart-card-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            .container {
+                max-width: 100%;
+            }
+            .header {
+                padding: 15px;
+                margin-bottom: 15px;
+            }
+            .header h1 {
+                font-size: 24px;
+            }
+            .latest-issue {
+                padding: 15px;
+                margin-top: 15px;
+            }
+            .latest-issue h2 {
+                font-size: 18px;
+                margin-bottom: 10px;
+                text-align: center;
+            }
+            .balls-display {
+                gap: 8px;
+            }
+            .ball {
+                width: 40px;
+                height: 40px;
+                font-size: 16px;
+            }
+            .latest-stats {
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+                font-size: 13px;
+            }
+            .nav-buttons {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+                margin-top: 15px;
+            }
+            .btn {
+                padding: 8px 12px;
+                font-size: 13px;
+                border-radius: 15px;
+                text-align: center;
+                width: 100%;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+                margin-bottom: 20px;
+            }
+            .stat-card {
+                padding: 15px;
+                border-radius: 10px;
+            }
+            .stat-card h3 {
+                font-size: 16px;
+                margin-bottom: 12px;
+            }
+            .missing-table th, .missing-table td {
+                padding: 8px;
+                font-size: 13px;
+            }
+            .chart-card-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+            .chart-container {
+                height: 280px;
+                margin-top: 10px;
+            }
+            .number-group {
+                gap: 8px;
+            }
+            .group-item {
+                padding: 6px 15px;
+                font-size: 13px;
+                width: 100%;
+                text-align: center;
+            }
+        }
     </style>
 </head>
 <body>
@@ -250,7 +350,7 @@
                 </div>
                 
                 {% if analysis %}
-                <div style="margin-top: 20px; display: flex; justify-content: center; gap: 30px;">
+                <div class="latest-stats">
                     <div>奇偶比：<strong>{{ analysis.red_odd_even }}</strong></div>
                     <div>红球最大遗漏值：<strong>{{ analysis.max_red_missing }}</strong></div>
                     <div>蓝球遗漏值：<strong>{{ analysis.blue_missing_value }}</strong></div>
@@ -349,7 +449,7 @@
         
         <div class="stat-card" style="margin-bottom: 30px;">
             <h3>🎯 冷热号分布</h3>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+            <div class="chart-card-grid">
                 <div>
                     <h4 style="margin-bottom: 15px; color: #667eea;">红球冷热号</h4>
                     <div class="number-group">

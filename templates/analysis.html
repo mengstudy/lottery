@@ -324,6 +324,170 @@
             box-shadow: 0 2px 6px rgba(201, 42, 42, 0.4);
             transform: scale(1.15);
         }
+        
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            margin-top: 15px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .swipe-tip {
+            display: none;
+            background: #eef2f7;
+            color: #667eea;
+            font-size: 12px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            align-items: center;
+            gap: 6px;
+            font-weight: bold;
+            border: 1px solid rgba(102, 126, 234, 0.15);
+        }
+
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            .container {
+                max-width: 100%;
+            }
+            .header {
+                padding: 15px;
+                margin-bottom: 15px;
+            }
+            .header h1 {
+                font-size: 24px;
+                margin-bottom: 15px;
+            }
+            .nav-buttons {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+                gap: 8px;
+            }
+            .btn {
+                padding: 8px 12px;
+                font-size: 13px;
+                border-radius: 15px;
+                text-align: center;
+                width: 100%;
+            }
+            .content-card {
+                padding: 15px;
+                border-radius: 10px;
+                margin-bottom: 15px;
+            }
+            .issue-info {
+                padding: 15px;
+                margin-bottom: 15px;
+            }
+            .issue-info h2 {
+                font-size: 20px;
+                margin-bottom: 10px;
+            }
+            .balls-container {
+                gap: 8px;
+                margin-top: 15px;
+            }
+            .ball {
+                width: 40px;
+                height: 40px;
+                font-size: 16px;
+            }
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+                margin-bottom: 15px;
+            }
+            .stat-item {
+                padding: 10px;
+                border-radius: 8px;
+            }
+            .stat-label {
+                font-size: 11px;
+                margin-bottom: 4px;
+            }
+            .stat-value {
+                font-size: 18px;
+            }
+            .analysis-section {
+                margin-top: 20px;
+            }
+            .analysis-section h3 {
+                font-size: 16px;
+                margin-bottom: 10px;
+            }
+            .predict-compare-box {
+                padding: 15px;
+                margin: 10px 0 15px 0;
+            }
+            .predict-compare-box h4 {
+                font-size: 15px !important;
+                margin-bottom: 10px !important;
+            }
+            .predict-compare-box div[style*="display: grid"] {
+                grid-template-columns: 1fr !important;
+                gap: 15px !important;
+            }
+            .swipe-tip {
+                display: flex;
+            }
+            table th, table td {
+                padding: 8px;
+                font-size: 13px;
+            }
+            
+            /* Table cell padding compression */
+            .table-responsive table th,
+            .table-responsive table td {
+                padding: 6px 4px !important;
+                font-size: 11px !important;
+            }
+            
+            /* High-density grid display inside tables */
+            .predict-ball-wrapper span[data-predict-ball] {
+                width: 24px !important;
+                height: 24px !important;
+                line-height: 24px !important;
+                font-size: 11px !important;
+            }
+            .table-responsive tbody td span:not(.ball-freq-badge) {
+                width: 24px !important;
+                height: 24px !important;
+                line-height: 24px !important;
+                font-size: 11px !important;
+            }
+            .predict-ball-wrapper {
+                gap: 2px !important;
+            }
+            .ball-freq-badge {
+                padding: 1px 3px !important;
+                font-size: 8px !important;
+                min-width: 12px !important;
+            }
+            
+            /* Highlighting group row widths */
+            .selector-ball {
+                width: 20px;
+                height: 20px;
+                line-height: 18px;
+                font-size: 10px;
+            }
+            #mySelectedBallsSelector {
+                grid-template-columns: repeat(11, 1fr) !important;
+                gap: 3px !important;
+            }
+            
+            /* Stacked hot/cold blocks */
+            .analysis-section div[style*="display: grid"] {
+                grid-template-columns: 1fr !important;
+                gap: 15px !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -464,8 +628,12 @@
                     </div>
                 </div>
 
-                <table style="margin-top: 20px;">
-                    <thead>
+                <div class="swipe-tip">
+                    <span>💡 提示：左右滑动可查看完整的分组表格 ↔</span>
+                </div>
+                <div class="table-responsive">
+                    <table style="margin-top: 0;">
+                        <thead>
                         <tr>
                             {% for missing_count in range(9) %}
                             <th style="text-align: center; padding: 12px; color: #333; font-weight: bold; text-shadow: 0 1px 2px rgba(255,255,255,0.8);"
@@ -558,6 +726,7 @@
                         </tr>
                     </tbody>
                 </table>
+                </div>
             </div>
             {% endif %}
             
@@ -566,8 +735,12 @@
             <div class="analysis-section">
                 <h3>🎯 本期开出号码遗漏次数分组</h3>
                 <p style="color: #666; font-size: 14px; margin-bottom: 15px;">说明：全部 33 个红球的遗漏分布，🔴 红色边框号码为本期开出号码</p>
-                <table style="margin-top: 20px;">
-                    <thead>
+                <div class="swipe-tip">
+                    <span>💡 提示：左右滑动可查看完整的分组表格 ↔</span>
+                </div>
+                <div class="table-responsive">
+                    <table style="margin-top: 0;">
+                        <thead>
                         <tr>
                             {% for missing_count in range(9) %}
                             <th style="text-align: center; padding: 12px; color: #333; font-weight: bold; text-shadow: 0 1px 2px rgba(255,255,255,0.8);"
@@ -628,6 +801,7 @@
                         </tr>
                     </tbody>
                 </table>
+                </div>
             </div>
             {% endif %}
             
@@ -636,8 +810,12 @@
             <div class="analysis-section">
                 <h3>📊 上一期遗漏次数分组（期号：{{ prev_issue_data.issue }}）</h3>
                 <p style="color: #666; font-size: 14px; margin-bottom: 15px;">开奖日期：{{ prev_issue_data.draw_date }} - 🔴 红色边框号码为上期（{{ prev_issue_data.issue }}）开出号码</p>
-                <table style="margin-top: 20px;">
-                    <thead>
+                <div class="swipe-tip">
+                    <span>💡 提示：左右滑动可查看完整的分组表格 ↔</span>
+                </div>
+                <div class="table-responsive">
+                    <table style="margin-top: 0;">
+                        <thead>
                         <tr>
                             {% for missing_count in range(9) %}
                             <th style="text-align: center; padding: 12px; color: #333; font-weight: bold; text-shadow: 0 1px 2px rgba(255,255,255,0.8);"
@@ -698,6 +876,7 @@
                         </tr>
                     </tbody>
                 </table>
+                </div>
             </div>
             {% endif %}
             {% endif %}

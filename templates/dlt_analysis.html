@@ -118,6 +118,179 @@
             box-shadow: 0 2px 6px rgba(201, 42, 42, 0.4);
             transform: scale(1.15);
         }
+        
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            margin-top: 15px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .swipe-tip {
+            display: none;
+            background: #eefdf9;
+            color: #11998e;
+            font-size: 12px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            align-items: center;
+            gap: 6px;
+            font-weight: bold;
+            border: 1px solid rgba(17, 153, 142, 0.15);
+        }
+
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            .container {
+                max-width: 100%;
+            }
+            .header {
+                padding: 15px;
+                margin-bottom: 15px;
+            }
+            .header h1 {
+                font-size: 24px;
+                margin-bottom: 15px;
+            }
+            .nav-buttons {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+                gap: 8px;
+            }
+            .btn {
+                padding: 8px 12px;
+                font-size: 13px;
+                border-radius: 15px;
+                text-align: center;
+                width: 100%;
+            }
+            .content-card {
+                padding: 15px;
+                border-radius: 10px;
+                margin-bottom: 15px;
+            }
+            .issue-info {
+                padding: 15px;
+                margin-bottom: 15px;
+            }
+            .issue-info h2 {
+                font-size: 20px;
+                margin-bottom: 10px;
+            }
+            .balls-container {
+                flex-direction: column;
+                gap: 10px !important;
+                margin-top: 15px;
+            }
+            .balls-section {
+                margin: 0;
+            }
+            .balls-section h4 {
+                font-size: 12px;
+                margin-bottom: 6px;
+            }
+            .ball {
+                width: 38px;
+                height: 38px;
+                font-size: 15px;
+                margin: 0 2px;
+            }
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+                margin-bottom: 15px;
+            }
+            .stat-item {
+                padding: 10px;
+                border-radius: 8px;
+            }
+            .stat-label {
+                font-size: 11px;
+                margin-bottom: 4px;
+            }
+            .stat-value {
+                font-size: 18px;
+            }
+            .analysis-section {
+                margin-top: 20px;
+            }
+            .analysis-section h3 {
+                font-size: 16px;
+                margin-bottom: 10px;
+            }
+            .predict-compare-box {
+                padding: 15px;
+                margin: 10px 0 15px 0;
+            }
+            .predict-compare-box h4 {
+                font-size: 15px !important;
+                margin-bottom: 10px !important;
+            }
+            .predict-compare-box div[style*="display: grid"] {
+                grid-template-columns: 1fr !important;
+                gap: 15px !important;
+            }
+            .swipe-tip {
+                display: flex;
+            }
+            table th, table td {
+                padding: 8px;
+                font-size: 13px;
+            }
+            
+            /* Table cell padding compression */
+            .table-responsive table th,
+            .table-responsive table td {
+                padding: 6px 4px !important;
+                font-size: 11px !important;
+            }
+            
+            /* High-density grid display inside tables */
+            .predict-ball-wrapper span[data-predict-ball] {
+                width: 22px !important;
+                height: 22px !important;
+                line-height: 22px !important;
+                font-size: 10px !important;
+            }
+            .table-responsive tbody td span:not(.ball-freq-badge) {
+                width: 22px !important;
+                height: 22px !important;
+                line-height: 22px !important;
+                font-size: 10px !important;
+            }
+            .predict-ball-wrapper {
+                gap: 2px !important;
+            }
+            .ball-freq-badge {
+                padding: 1px 3px !important;
+                font-size: 8px !important;
+                min-width: 12px !important;
+            }
+            
+            /* Highlighting group row widths */
+            .selector-ball {
+                width: 18px;
+                height: 18px;
+                line-height: 16px;
+                font-size: 9px;
+            }
+            #mySelectedBallsSelector {
+                grid-template-columns: repeat(12, 1fr) !important;
+                gap: 3px !important;
+            }
+            
+            /* Stacked hot/cold blocks */
+            .analysis-section div[style*="display: grid"] {
+                grid-template-columns: 1fr !important;
+                gap: 15px !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -262,9 +435,11 @@
                             </div>
                         </div>
                     </div>
+                <div class="swipe-tip">
+                    <span>💡 提示：左右滑动可查看完整的分组表格 ↔</span>
                 </div>
-
-                <table>
+                <div class="table-responsive">
+                    <table style="margin-top: 0;">
                     <thead>
                         <tr>
                             {% for missing_count in range(9) %}
@@ -322,6 +497,8 @@
                         </tr>
                     </tbody>
                 </table>
+                </div>
+            </div>
             </div>
             {% endif %}
             
@@ -329,8 +506,12 @@
             <div class="analysis-section">
                 <h3>🎯 本期开出号码遗漏次数分组</h3>
                 <p style="color: #666; font-size: 14px; margin-bottom: 15px;">说明：全部 35 个前区红球的遗漏分布，🔴 红色边框号码为本期开出号码</p>
-                <table>
-                    <thead>
+                <div class="swipe-tip">
+                    <span>💡 提示：左右滑动可查看完整的分组表格 ↔</span>
+                </div>
+                <div class="table-responsive">
+                    <table style="margin-top: 0;">
+                        <thead>
                         <tr>
                             {% for missing_count in range(9) %}
                             <th style="text-align: center; background: {% if missing_count == 0 %}#ffe3e3{% elif missing_count <= 5 %}#fff3bf{% elif missing_count <= 8 %}#d0ebff{% else %}#daebff{% endif %}; color: #333;">
@@ -378,14 +559,19 @@
                     </tbody>
                 </table>
             </div>
+            </div>
             {% endif %}
             
             {% if prev_analysis and prev_issue_data %}
             <div class="analysis-section">
                 <h3>📊 上一期遗漏次数分组（期号：{{ prev_issue_data.issue }}）</h3>
                 <p style="color: #666; font-size: 14px; margin-bottom: 15px;">开奖日期：{{ prev_issue_data.draw_date }} - 🔴 红色边框号码为上期开出号码</p>
-                <table>
-                    <thead>
+                <div class="swipe-tip">
+                    <span>💡 提示：左右滑动可查看完整的分组表格 ↔</span>
+                </div>
+                <div class="table-responsive">
+                    <table style="margin-top: 0;">
+                        <thead>
                         <tr>
                             {% for missing_count in range(9) %}
                             <th style="text-align: center; background: {% if missing_count == 0 %}#ffe3e3{% elif missing_count <= 5 %}#fff3bf{% elif missing_count <= 8 %}#d0ebff{% else %}#daebff{% endif %}; color: #333;">
@@ -432,6 +618,7 @@
                         </tr>
                     </tbody>
                 </table>
+            </div>
             </div>
             {% endif %}
             {% endif %}

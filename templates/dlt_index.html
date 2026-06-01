@@ -203,6 +203,107 @@
             height: 400px;
             margin-top: 20px;
         }
+        
+        .latest-stats {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .chart-card-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            .container {
+                max-width: 100%;
+            }
+            .header {
+                padding: 15px;
+                margin-bottom: 15px;
+            }
+            .header h1 {
+                font-size: 24px;
+            }
+            .latest-issue {
+                padding: 15px;
+                margin-top: 15px;
+            }
+            .latest-issue h2 {
+                font-size: 18px;
+                margin-bottom: 10px;
+                text-align: center;
+            }
+            .balls-display {
+                flex-direction: column;
+                gap: 10px;
+            }
+            .balls-section {
+                margin: 0;
+            }
+            .balls-section h4 {
+                font-size: 12px;
+                margin-bottom: 6px;
+            }
+            .ball {
+                width: 38px;
+                height: 38px;
+                font-size: 15px;
+                margin: 0 2px;
+            }
+            .latest-stats {
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+                font-size: 13px;
+            }
+            .nav-buttons {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+                gap: 8px;
+                margin-top: 15px;
+            }
+            .btn {
+                padding: 8px 12px;
+                font-size: 13px;
+                border-radius: 15px;
+                text-align: center;
+                width: 100%;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+                margin-bottom: 20px;
+            }
+            .stat-card {
+                padding: 15px;
+                border-radius: 10px;
+            }
+            .stat-card h3 {
+                font-size: 16px;
+                margin-bottom: 12px;
+            }
+            .missing-table th, .missing-table td {
+                padding: 8px;
+                font-size: 13px;
+            }
+            .chart-card-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+            .chart-container {
+                height: 280px;
+                margin-top: 10px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -240,7 +341,7 @@
                 </div>
                 
                 {% if analysis %}
-                <div style="margin-top: 20px; display: flex; justify-content: center; gap: 30px; flex-wrap: wrap;">
+                <div class="latest-stats">
                     <div>奇偶比：<strong>{{ analysis.red_odd_even }}</strong></div>
                     <div>前区和值：<strong>{{ analysis.red_sum }}</strong></div>
                     <div>后区和值：<strong>{{ analysis.blue_sum }}</strong></div>
@@ -338,7 +439,7 @@
         
         <div class="stat-card" style="margin-bottom: 30px;">
             <h3>🎯 冷热号分布（前区）</h3>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+            <div class="chart-card-grid">
                 <div>
                     <h4 style="margin-bottom: 15px; color: #11998e;">红球冷热号</h4>
                     <div style="display: flex; flex-direction: column; gap: 10px;">

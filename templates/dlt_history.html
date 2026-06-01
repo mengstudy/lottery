@@ -214,6 +214,107 @@
         .issue-link:hover {
             text-decoration: underline;
         }
+
+        /* 移动端响应式样式 */
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            margin-top: 15px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            background: white;
+        }
+
+        .swipe-tip {
+            display: none;
+            text-align: center;
+            color: #11998e;
+            font-size: 13px;
+            margin-top: 10px;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .container {
+                padding: 0;
+            }
+            
+            .header {
+                padding: 15px;
+                margin-bottom: 15px;
+                border-radius: 10px;
+            }
+            
+            .header h1 {
+                font-size: 22px;
+                text-align: center;
+                margin-bottom: 15px;
+            }
+            
+            .nav-buttons {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+                width: 100%;
+            }
+            
+            .btn {
+                padding: 10px 15px;
+                font-size: 13px;
+                text-align: center;
+                width: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 20px;
+            }
+            
+            .data-card {
+                padding: 15px;
+                border-radius: 10px;
+            }
+            
+            .swipe-tip {
+                display: block;
+            }
+            
+            th, td {
+                padding: 8px 6px;
+                font-size: 12px;
+            }
+            
+            .ball-small {
+                width: 22px;
+                height: 22px;
+                line-height: 22px;
+                font-size: 11px;
+                margin: 0 1px;
+            }
+            
+            .pagination {
+                gap: 5px;
+                margin-top: 20px;
+            }
+            
+            .page-link {
+                min-width: 35px;
+                height: 35px;
+                font-size: 12px;
+                padding: 0 8px;
+            }
+            
+            .jump-to-page {
+                flex-direction: column;
+                gap: 10px;
+                padding: 10px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -235,7 +336,9 @@
         {% endif %}
         
         <div class="data-card">
-            <table>
+            <div class="swipe-tip">💡 提示：左右滑动可查看完整历史数据 ↔</div>
+            <div class="table-responsive">
+                <table>
                 <thead>
                     <tr>
                         <th>期号</th>
@@ -286,6 +389,7 @@
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
             
             {% if total_pages > 1 %}
             <div class="pagination">
