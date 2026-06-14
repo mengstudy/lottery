@@ -570,7 +570,7 @@
         
         function updateLatestData() {
             // 显示口令输入框
-            const password = prompt('请输入操作口令：', '');
+            const password = prompt('请输入操作口令：', 'ssq2026');
             
             if (!password) {
                 alert('❌ 已取消操作');
@@ -598,7 +598,7 @@
         
         function updateAllHistory() {
             // 显示口令输入框
-            const password = prompt('请输入操作口令：', '');
+            const password = prompt('请输入操作口令：', 'ssq2026');
             
             if (!password) {
                 alert('❌ 已取消操作');
@@ -606,6 +606,7 @@
             }
             
             if (!confirm('⚠️ 注意：\n\n此操作将抓取所有历史开奖数据（约 3000 期）！\n\n可能需要几分钟时间，确定要继续吗？')) {
+                alert('❌ 已取消操作');
                 return;
             }
             

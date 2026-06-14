@@ -15,6 +15,7 @@ import io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 from database.db_manager import db_manager
+from database.kl8_db_manager import kl8_db_manager
 
 
 def main():
@@ -26,6 +27,7 @@ def main():
     # 初始化数据库
     print("\n正在初始化数据库...")
     db_manager.initialize()
+    kl8_db_manager.initialize()
     print("✓ 数据库初始化成功")
     
     # 启动 Flask 应用

@@ -313,6 +313,7 @@
             <p style="color: #666; margin-top: 10px;">前区 5红(1-35) + 后区 2蓝(1-12)</p>
             
             <div class="nav-buttons" style="margin-bottom: 20px;">
+                <a href="{{ url_for('kl8_index') }}" class="btn btn-primary" style="background: linear-gradient(135deg, #3a7bd5 0%, #3a6073 100%);">快乐8</a>
                 <a href="{{ url_for('dlt_index') }}" class="btn btn-primary">大乐透</a>
                 <a href="{{ url_for('ssq_index') }}" class="btn btn-ssq">双色球</a>
             </div>
@@ -464,7 +465,7 @@
     <script>
         function updateData() {
             const btn = event.target;
-            const password = prompt('请输入操作口令：', '');
+            const password = prompt('请输入操作口令：', 'ssq2026');
             
             if (!password) {
                 alert('❌ 已取消操作');

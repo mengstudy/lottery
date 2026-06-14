@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>快乐8 - 历史数据</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #3a7bd5 0%, #3a6073 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #3a7bd5;
+            font-size: 32px;
+            margin-bottom: 20px;
+        }
+        
+        .nav-buttons {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+            background: linear-gradient(135deg, #3a7bd5 0%, #3a6073 100%);
+            color: white;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(58, 123, 213, 0.4);
+        }
+        
+        .btn-update-all {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        .data-card {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .error-message {
+            background: #ffe3e3;
+            color: #c92a2a;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #c92a2a;
+            margin: 20px 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        th, td {
+            padding: 12px 10px;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        th {
+            background: linear-gradient(135deg, #3a7bd5 0%, #3a6073 100%);
+            color: white;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+            cursor: pointer;
+        }
+        
+        .ball-small {
+            display: inline-block;
+            width: 26px;
+            height: 26px;
+            line-height: 26px;
+            text-align: center;
+            border-radius: 50%;
+            margin: 1px;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+            white-space: nowrap;
+        }
+        
+        .balls-container {
+            display: flex;
+            flex-wrap: wrap;
+            max-width: 560px;
+        }
+        
+        .ball-red {
+            background: radial-gradient(circle at 30% 30%, #ff6b6b, #c92a2a);
+        }
+        
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .page-link {
+            min-width: 45px;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #3a7bd5;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #3a7bd5;
+            font-weight: bold;
+            transition: all 0.3s;
+            padding: 0 15px;
+        }
+        
+        .page-link:hover,
+        .page-link.active {
+            background: #3a7bd5;
+            color: white;
+        }
+        
+        .page-link.disabled {
+            background: #f8f9fa;
+            color: #6c757d;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+        
+        .jump-to-page {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .jump-to-page span {
+            color: #3a7bd5;
+            font-weight: bold;
+        }
+        
+        .page-input {
+            width: 80px;
+            padding: 8px 12px;
+            border: 2px solid #3a7bd5;
+            border-radius: 5px;
+            font-size: 14px;
+            text-align: center;
+        }
+        
+        .btn-jump {
+            padding: 8px 20px;
+            background: linear-gradient(135deg, #3a7bd5 0%, #3a6073 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-jump:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(58, 123, 213, 0.4);
+        }
+        
+        .issue-link {
+            color: #3a7bd5;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        
+        .issue-link:hover {
+            text-decoration: underline;
+        }
+        
+        .loading-spinner {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 30px 50px;
+            border-radius: 15px;
+            z-index: 9999;
+            text-align: center;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3a7bd5;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .region-text {
+            display: inline-block;
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* 移动端响应式样式 */
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            margin-top: 15px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            background: white;
+        }
+
+        .swipe-tip {
+            display: none;
+            text-align: center;
+            color: #3a7bd5;
+            font-size: 13px;
+            margin-top: 10px;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            .header {
+                padding: 15px;
+                margin-bottom: 15px;
+            }
+            .header h1 {
+                font-size: 22px;
+                text-align: center;
+            }
+            .nav-buttons {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+            .btn {
+                padding: 10px 15px;
+                font-size: 13px;
+                text-align: center;
+                border-radius: 20px;
+            }
+            .data-card {
+                padding: 15px;
+            }
+            .swipe-tip {
+                display: block;
+            }
+            th, td {
+                padding: 8px 6px;
+                font-size: 12px;
+            }
+            .ball-small {
+                width: 20px;
+                height: 20px;
+                line-height: 20px;
+                font-size: 10px;
+            }
+            .balls-container {
+                max-width: 240px;
+            }
+            .page-link {
+                min-width: 35px;
+                height: 35px;
+                font-size: 12px;
+                padding: 0 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📜 快乐8 - 历史开奖数据</h1>
+            <div class="nav-buttons">
+                <a href="{{ url_for('kl8_index') }}" class="btn">返回首页</a>
+                <a href="{{ url_for('ssq_index') }}" class="btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">🎱 双色球</a>
+                <a href="{{ url_for('dlt_index') }}" class="btn" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">🎰 大乐透</a>
+                <button onclick="updateLatestData()" class="btn">更新最新数据</button>
+                <button onclick="updateAllHistory()" class="btn btn-update-all">🔄 更新所有历史数据</button>
+            </div>
+        </div>
+        
+        {% if error %}
+        <div class="error-message">
+            {{ error }}
+        </div>
+        {% endif %}
+        
+        <div id="loadingSpinner" class="loading-spinner">
+            <div class="spinner"></div>
+            <div id="loadingText">正在更新数据...</div>
+        </div>
+        
+        <div class="data-card">
+            <div class="swipe-tip">💡 提示：左右滑动可查看完整历史数据 ↔</div>
+            <div class="table-responsive">
+                <table>
+                <thead>
+                    <tr>
+                        <th>期号</th>
+                        <th>开奖日期</th>
+                        <th>开奖红球号码 (20码)</th>
+                        <th>和值</th>
+                        <th>奇偶比</th>
+                        <th>最大遗漏</th>
+                        <th>中奖地区</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for result in results %}
+                    <tr onclick="location.href='{{ url_for('kl8_analysis', issue=result.issue) }}'">
+                        <td><a href="{{ url_for('kl8_analysis', issue=result.issue) }}" class="issue-link">{{ result.issue }}</a></td>
+                        <td>{{ result.draw_date }}</td>
+                        <td>
+                            <div class="balls-container">
+                                {% for i in range(20) %}
+                                <span class="ball-small ball-red">{{ '%02d' | format(result.red_balls[i]) }}</span>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td><strong>{{ result.get('red_sum', 0) }}</strong></td>
+                        <td>{{ result.get('odd_even', '-') }}</td>
+                        <td>{{ result.get('max_red_missing', 0) }}</td>
+                        <td>
+                            <span class="region-text">{{ result.get('region', '-') or '-' }}</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            
+            {% if total_pages > 1 %}
+            <div class="pagination">
+                <!-- 上一页 -->
+                {% if current_page > 1 %}
+                <a href="?page={{ current_page - 1 }}" class="page-link">上一页</a>
+                {% else %}
+                <span class="page-link disabled">上一页</span>
+                {% endif %}
+                
+                <!-- 第一页 -->
+                {% if start_page > 1 %}
+                <a href="?page=1" class="page-link">1</a>
+                {% if start_page > 2 %}
+                <span class="page-link">...</span>
+                {% endif %}
+                {% endif %}
+                
+                <!-- 中间页码 -->
+                {% for p in range(start_page, end_page + 1) %}
+                <a href="?page={{ p }}" class="page-link {% if p == current_page %}active{% endif %}">{{ p }}</a>
+                {% endfor %}
+                
+                <!-- 最后一页 -->
+                {% if end_page < total_pages %}
+                {% if end_page < total_pages - 1 %}
+                <span class="page-link">...</span>
+                {% endif %}
+                <a href="?page={{ total_pages }}" class="page-link">{{ total_pages }}</a>
+                {% endif %}
+                
+                <!-- 下一页 -->
+                {% if current_page < total_pages %}
+                <a href="?page={{ current_page + 1 }}" class="page-link">下一页</a>
+                {% else %}
+                <span class="page-link disabled">下一页</span>
+                {% endif %}
+            </div>
+            
+            <!-- 页码跳转 -->
+            <div class="jump-to-page">
+                <span>共 {{ total }} 条数据，{{ total_pages }} 页</span>
+                <form onsubmit="jumpToPage(event); return false;">
+                    <input type="number" id="pageInput" 
+                           min="1" max="{{ total_pages }}" 
+                           placeholder="页码" 
+                           class="page-input">
+                    <button type="submit" class="btn-jump">跳转</button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <script>
+        function jumpToPage(event) {
+            event.preventDefault();
+            const pageInput = document.getElementById('pageInput');
+            const page = parseInt(pageInput.value);
+            const maxPage = {{ total_pages }};
+            
+            if (isNaN(page) || page < 1) {
+                alert('请输入有效的页码（最小为 1）');
+                return;
+            }
+            
+            if (page > maxPage) {
+                alert(`最大页码为 ${maxPage}`);
+                return;
+            }
+            
+            window.location.href = `?page=${page}`;
+        }
+        
+        function updateLatestData() {
+            const password = prompt('请输入操作口令：', 'ssq2026');
+            
+            if (!password) {
+                alert('❌ 已取消操作');
+                return;
+            }
+            
+            fetch('{{ url_for("kl8_update_data") }}', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({password: password})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✅ ' + data.message);
+                    location.reload();
+                } else {
+                    alert('❌ ' + data.message);
+                }
+            })
+            .catch(error => {
+                alert('请求失败：' + error);
+            });
+        }
+        
+        function updateAllHistory() {
+            const password = prompt('请输入操作口令：', 'ssq2026');
+            
+            if (!password) {
+                alert('❌ 已取消操作');
+                return;
+            }
+            
+            if (!confirm('⚠️ 注意：\n\n此操作将抓取快乐8最近数月历史开奖数据（约 2000 期）！\n\n可能需要几分钟时间，确定要继续吗？')) {
+                alert('❌ 已取消操作');
+                return;
+            }
+            
+            const spinner = document.getElementById('loadingSpinner');
+            const loadingText = document.getElementById('loadingText');
+            spinner.style.display = 'block';
+            loadingText.textContent = '正在抓取快乐8历史数据，请稍候...';
+            
+            fetch('{{ url_for("kl8_update_all_history") }}', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({password: password})
+            })
+            .then(response => response.json())
+            .then(data => {
+                spinner.style.display = 'none';
+                if (data.success) {
+                    alert('✅ ' + data.message + '\n总计：' + data.total + ' 条');
+                    location.reload();
+                } else {
+                    alert('❌ ' + data.message);
+                }
+            })
+            .catch(error => {
+                spinner.style.display = 'none';
+                alert('请求失败：' + error);
+            });
+        }
+    </script>
+</body>
+</html>

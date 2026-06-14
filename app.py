@@ -16,6 +16,9 @@ from crawler.crawler import crawler
 from database.dlt_db_manager import dlt_db_manager
 from analyzer.dlt_stats_calculator import dlt_calculator
 from crawler.dlt_crawler import dlt_crawler
+from database.kl8_db_manager import kl8_db_manager
+from analyzer.kl8_stats_calculator import kl8_calculator
+from crawler.kl8_crawler import kl8_crawler
 from functools import wraps
 
 
@@ -1029,10 +1032,393 @@ def dlt_update_all_history():
         return jsonify({'success': False, 'message': f'更新失败：{str(e)}'})
 
 
+@app.route('/kl8')
+def kl8_index():
+    """快乐8首页"""
+    try:
+        latest_results = kl8_db_manager.get_recent_results(1)
+        if not latest_results:
+            return render_template('kl8_index.html', error="暂无数据，请先更新数据")
+        
+        latest = latest_results[0]
+        all_results = kl8_db_manager.get_all_results(order_by='draw_date')
+        
+        formatted_results = []
+        for result in all_results:
+            formatted_results.append({
+                'issue': result['issue'],
+                'red_balls': [result[f'red_{i}'] for i in range(1, 21)],
+                'draw_date': str(result['draw_date'])
+            })
+            
+        missing_stats = kl8_calculator.calculate_missing_values(formatted_results)
+        
+        if missing_stats:
+            latest_missing = missing_stats[-1]
+            ranking = kl8_calculator.get_current_missing_ranking(latest_missing)
+            hot_numbers, cold_numbers = kl8_calculator.classify_hot_cold_numbers(latest_missing)
+            analysis = kl8_calculator.analyze_issue(latest, latest_missing)
+            
+            return render_template('kl8_index.html',
+                                 latest=latest,
+                                 analysis=analysis.to_dict(),
+                                 red_ranking=ranking['red_ranking'],
+                                 hot_numbers=hot_numbers,
+                                 cold_numbers=cold_numbers)
+        else:
+            return render_template('kl8_index.html', latest=latest, error="无法计算遗漏值")
+            
+    except Exception as e:
+        return render_template('kl8_index.html', error=f"加载数据失败：{str(e)}", latest=None)
+
+
+@app.route('/kl8/history')
+def kl8_history():
+    """快乐8历史数据"""
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = 20
+        
+        all_results = kl8_db_manager.get_all_results(order_by='draw_date')
+        
+        results_list = []
+        for result in all_results:
+            results_list.append({
+                'issue': result['issue'],
+                'red_balls': [result[f'red_{i}'] for i in range(1, 21)],
+                'draw_date': str(result['draw_date']),
+                'region': result.get('region', '')
+            })
+            
+        if results_list:
+            results_for_calc = results_list.copy()
+            missing_stats = kl8_calculator.calculate_missing_values(results_for_calc)
+            results_list.reverse()
+            
+        total = len(results_list)
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        paginated_results = results_list[start_idx:end_idx]
+        
+        if results_list and missing_stats:
+            for i, result in enumerate(paginated_results):
+                reverse_idx = start_idx + i
+                forward_idx = len(results_list) - 1 - reverse_idx
+                
+                if 0 <= forward_idx < len(missing_stats):
+                    analysis = kl8_calculator.analyze_issue(result, missing_stats[forward_idx])
+                    result['odd_even'] = analysis.red_odd_even
+                    result['red_sum'] = analysis.red_sum
+                    result['max_red_missing'] = analysis.max_red_missing
+                    result['red_balls_missing'] = analysis.red_missing_values
+        else:
+            for result in paginated_results:
+                result['odd_even'] = '-'
+                result['red_sum'] = 0
+                result['max_red_missing'] = 0
+                result['red_balls_missing'] = [0] * 20
+                
+        total_pages = (total + per_page - 1) // per_page
+        page_range = 10
+        start_page = max(1, page - page_range // 2)
+        end_page = min(total_pages, start_page + page_range - 1)
+        
+        if end_page - start_page + 1 < page_range:
+            start_page = max(1, end_page - page_range + 1)
+            
+        return render_template('kl8_history.html',
+                             results=paginated_results,
+                             current_page=page,
+                             total_pages=total_pages,
+                             start_page=start_page,
+                             end_page=end_page,
+                             total=total)
+                             
+    except Exception as e:
+        return render_template('kl8_history.html', 
+                             error=f"加载历史数据失败：{str(e)}",
+                             results=[],
+                             current_page=page,
+                             total_pages=0,
+                             start_page=1,
+                             end_page=0,
+                             total=0)
+
+
+@app.route('/kl8/analysis/<issue>')
+def kl8_analysis(issue):
+    """快乐8单期详情分析页面"""
+    try:
+        all_results = kl8_db_manager.get_all_results(order_by='draw_date')
+        
+        target_result = None
+        target_idx = -1
+        for idx, result in enumerate(all_results):
+            if result['issue'] == issue:
+                target_result = result
+                target_idx = idx
+                break
+                
+        if not target_result:
+            return render_template('kl8_analysis.html', error=f"未找到期号 {issue} 的数据")
+            
+        formatted_result = {
+            'issue': target_result['issue'],
+            'red_balls': [target_result[f'red_{i}'] for i in range(1, 21)],
+            'draw_date': str(target_result['draw_date'])
+        }
+        
+        missing_stats = kl8_calculator.calculate_missing_values(all_results)
+        
+        target_missing = None
+        for stat in missing_stats:
+            if stat.issue == issue:
+                target_missing = stat
+                break
+                
+        if target_missing:
+            analysis_result = kl8_calculator.analyze_issue(formatted_result, target_missing)
+            
+            number_details = []
+            for i, ball in enumerate(formatted_result['red_balls']):
+                number_details.append({
+                    'type': '红球',
+                    'number': ball,
+                    'missing': analysis_result.red_missing_values[i]
+                })
+                
+            prev_issue_data = None
+            prev_analysis = None
+            if target_idx > 0:
+                prev_result = all_results[target_idx - 1]
+                prev_issue_data = {
+                    'issue': prev_result['issue'],
+                    'red_balls': [prev_result[f'red_{i}'] for i in range(1, 21)],
+                    'draw_date': str(prev_result['draw_date'])
+                }
+                for stat in missing_stats:
+                    if stat.issue == prev_result['issue']:
+                        prev_missing_groups = kl8_calculator.calculate_all_red_missing_groups(stat)
+                        prev_analysis = {
+                            'missing_groups': {str(k): v for k, v in prev_missing_groups.items()}
+                        }
+                        break
+                        
+            next_issue_data = None
+            next_analysis = None
+            if target_idx < len(all_results) - 1 and target_idx >= 0:
+                next_result = all_results[target_idx + 1]
+                next_issue_data = {
+                    'issue': next_result['issue'],
+                    'red_balls': [next_result[f'red_{i}'] for i in range(1, 21)],
+                    'draw_date': str(next_result['draw_date'])
+                }
+                for stat in missing_stats:
+                    if stat.issue == next_result['issue']:
+                        next_missing_groups = kl8_calculator.calculate_all_red_missing_groups(stat)
+                        next_analysis = {
+                            'missing_groups': {str(k): v for k, v in next_missing_groups.items()}
+                        }
+                        break
+            else:
+                simulated_groups = {}
+                current_drawn_red_balls = set(analysis_result.red_balls)
+                for red_num in range(1, 81):
+                    if red_num in current_drawn_red_balls:
+                        missing_val = 0
+                    else:
+                        missing_val = target_missing.red_missing.get(red_num, 0) + 1
+                    group_key = 9 if missing_val >= 9 else missing_val
+                    if group_key not in simulated_groups:
+                        simulated_groups[group_key] = []
+                    simulated_groups[group_key].append(red_num)
+                next_analysis = {
+                    'missing_groups': {str(k): v for k, v in simulated_groups.items()},
+                    'no_next_draw': True
+                }
+                
+            return render_template('kl8_analysis.html',
+                                 issue_data=formatted_result,
+                                 analysis=analysis_result.to_dict(),
+                                 number_details=number_details,
+                                 prev_issue_data=prev_issue_data,
+                                 prev_analysis=prev_analysis,
+                                 next_issue_data=next_issue_data,
+                                 next_analysis=next_analysis)
+        else:
+            return render_template('kl8_analysis.html',
+                                 issue_data=formatted_result,
+                                 error="无法计算遗漏值")
+                                 
+    except Exception as e:
+        return render_template('kl8_analysis.html',
+                             error=f"加载分析数据失败：{str(e)}",
+                             issue_data=None)
+
+
+@app.route('/kl8/missing_groups')
+def kl8_missing_groups():
+    """快乐8历史遗漏分组"""
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = 10
+        
+        all_results = kl8_db_manager.get_all_results(order_by='draw_date')
+        if not all_results:
+            return render_template('kl8_missing_groups.html', error="暂无数据，请先更新数据")
+            
+        formatted_results = []
+        for result in all_results:
+            formatted_results.append({
+                'issue': result['issue'],
+                'red_balls': [result[f'red_{i}'] for i in range(1, 21)],
+                'draw_date': str(result['draw_date'])
+            })
+            
+        missing_stats = kl8_calculator.calculate_missing_values(formatted_results)
+        
+        issues_with_groups = []
+        for i, stat in enumerate(missing_stats):
+            missing_groups = kl8_calculator.calculate_all_red_missing_groups(stat)
+            result = formatted_results[i] if i < len(formatted_results) else None
+            
+            if result:
+                red_missing_details = []
+                for ball in result['red_balls']:
+                    missing_val = stat.red_missing.get(ball, 0)
+                    red_missing_details.append({
+                        'ball': ball,
+                        'missing': missing_val
+                    })
+                red_missing_details.sort(key=lambda x: x['missing'])
+                
+                issues_with_groups.append({
+                    'issue': result['issue'],
+                    'draw_date': result['draw_date'],
+                    'red_balls': result['red_balls'],
+                    'missing_groups': {str(k): v for k, v in missing_groups.items()},
+                    'red_missing_details': red_missing_details
+                })
+                
+        issues_with_groups.reverse()
+        
+        total = len(issues_with_groups)
+        total_pages = (total + per_page - 1) // per_page
+        
+        if page < 1:
+            page = 1
+        elif page > total_pages:
+            page = total_pages
+            
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        paginated_issues = issues_with_groups[start_idx:end_idx]
+        
+        start_page = max(1, page - 2)
+        end_page = min(total_pages, page + 2)
+        
+        return render_template('kl8_missing_groups.html',
+                             issues=paginated_issues,
+                             current_page=page,
+                             total_pages=total_pages,
+                             start_page=start_page,
+                             end_page=end_page,
+                             total_count=total)
+                             
+    except Exception as e:
+        return render_template('kl8_missing_groups.html', error=f"加载数据失败：{str(e)}")
+
+
+@app.route('/kl8/api/update_data', methods=['POST'])
+@require_password
+def kl8_update_data():
+    """API: 更新快乐8最新数据"""
+    try:
+        new_results = kl8_crawler.fetch_latest_data()
+        
+        if not new_results:
+            return jsonify({'success': False, 'message': '抓取数据失败'})
+            
+        inserted_count = 0
+        for result in new_results:
+            if kl8_crawler.validate_result(result):
+                kl8_db_manager.insert_lottery_result(result)
+                inserted_count += 1
+                
+        return jsonify({
+            'success': True,
+            'message': f'成功更新 {inserted_count} 条快乐8数据',
+            'count': inserted_count
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'更新失败：{str(e)}'})
+
+
+@app.route('/kl8/api/update_all_history', methods=['POST'])
+@require_password
+def kl8_update_all_history():
+    """API: 更新快乐8历史数据"""
+    try:
+        all_results = kl8_crawler.fetch_all_history(max_pages=70)
+        if not all_results:
+            return jsonify({'success': False, 'message': '抓取历史数据失败'})
+            
+        return jsonify({
+            'success': True,
+            'message': f'成功更新 {len(all_results)} 条快乐8历史数据',
+            'count': len(all_results),
+            'total': len(all_results)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'更新失败：{str(e)}'})
+
+
+@app.route('/kl8/api/calculate_missing_tables', methods=['POST'])
+@require_password
+def kl8_calculate_missing_tables():
+    """API: 一键计算快乐8遗漏次数表"""
+    try:
+        import time
+        start_time = time.time()
+        
+        # 获取所有开奖数据（升序）
+        all_results = kl8_db_manager.get_all_results(order_by='draw_date')
+        
+        if not all_results:
+            return jsonify({'error': '没有快乐8开奖数据'}), 400
+            
+        total_count = len(all_results)
+        processed_count = 0
+        
+        # 清空旧的遗漏次数表
+        kl8_db_manager.delete_all_red_ball_missing()
+        
+        # 遍历计算每一期并入库
+        for idx, result in enumerate(all_results):
+            issue = result['issue']
+            red_missing, _ = kl8_calculator.calculate_all_missing_for_issue(all_results, idx)
+            kl8_db_manager.insert_red_ball_missing(issue, red_missing)
+            processed_count += 1
+            
+        elapsed_time = time.time() - start_time
+        
+        return jsonify({
+            'success': True,
+            'message': f'计算完成！共处理 {total_count} 期数据',
+            'total': total_count,
+            'processed': processed_count,
+            'elapsed_seconds': round(elapsed_time, 2)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     # 初始化数据库
     db_manager.initialize()
     dlt_db_manager.initialize()
+    kl8_db_manager.initialize()
     
     # 启动 Flask 应用
     app.run(debug=True, host='0.0.0.0', port=80)
