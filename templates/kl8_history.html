@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>双色球 - 历史数据</title>
+    <title>快乐8 - 历史数据</title>
     <style>
         * {
             margin: 0;
@@ -13,7 +13,7 @@
         
         body {
             font-family: 'Microsoft YaHei', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #3a7bd5 0%, #3a6073 100%);
             min-height: 100vh;
             padding: 20px;
         }
@@ -32,7 +32,7 @@
         }
         
         .header h1 {
-            color: #667eea;
+            color: #3a7bd5;
             font-size: 32px;
             margin-bottom: 20px;
         }
@@ -53,13 +53,13 @@
             transition: all 0.3s;
             text-decoration: none;
             display: inline-block;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #3a7bd5 0%, #3a6073 100%);
             color: white;
         }
         
         .btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 5px 20px rgba(58, 123, 213, 0.4);
         }
         
         .btn-update-all {
@@ -89,13 +89,13 @@
         }
         
         th, td {
-            padding: 15px;
+            padding: 12px 10px;
             text-align: left;
             border-bottom: 1px solid #dee2e6;
         }
         
         th {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #3a7bd5 0%, #3a6073 100%);
             color: white;
             font-weight: bold;
             position: sticky;
@@ -110,29 +110,26 @@
         
         .ball-small {
             display: inline-block;
-            width: 28px;
-            height: 28px;
-            line-height: 28px;
+            width: 26px;
+            height: 26px;
+            line-height: 26px;
             text-align: center;
             border-radius: 50%;
-            margin: 0 2px;
-            font-size: 13px;
+            margin: 1px;
+            font-size: 12px;
             font-weight: bold;
             color: white;
             white-space: nowrap;
         }
         
-        .red-balls-container {
-            display: inline-block;
-            white-space: nowrap;
+        .balls-container {
+            display: flex;
+            flex-wrap: wrap;
+            max-width: 560px;
         }
         
         .ball-red {
             background: radial-gradient(circle at 30% 30%, #ff6b6b, #c92a2a);
-        }
-        
-        .ball-blue {
-            background: radial-gradient(circle at 30% 30%, #4dabf7, #1864ab);
         }
         
         .pagination {
@@ -149,10 +146,10 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 2px solid #667eea;
+            border: 2px solid #3a7bd5;
             border-radius: 8px;
             text-decoration: none;
-            color: #667eea;
+            color: #3a7bd5;
             font-weight: bold;
             transition: all 0.3s;
             padding: 0 15px;
@@ -160,7 +157,7 @@
         
         .page-link:hover,
         .page-link.active {
-            background: #667eea;
+            background: #3a7bd5;
             color: white;
         }
         
@@ -183,14 +180,14 @@
         }
         
         .jump-to-page span {
-            color: #667eea;
+            color: #3a7bd5;
             font-weight: bold;
         }
         
         .page-input {
             width: 80px;
             padding: 8px 12px;
-            border: 2px solid #667eea;
+            border: 2px solid #3a7bd5;
             border-radius: 5px;
             font-size: 14px;
             text-align: center;
@@ -198,7 +195,7 @@
         
         .btn-jump {
             padding: 8px 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #3a7bd5 0%, #3a6073 100%);
             color: white;
             border: none;
             border-radius: 5px;
@@ -210,11 +207,11 @@
         
         .btn-jump:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 5px 20px rgba(58, 123, 213, 0.4);
         }
         
         .issue-link {
-            color: #667eea;
+            color: #3a7bd5;
             text-decoration: none;
             font-weight: bold;
         }
@@ -239,7 +236,7 @@
         
         .spinner {
             border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
+            border-top: 4px solid #3a7bd5;
             border-radius: 50%;
             width: 40px;
             height: 40px;
@@ -258,54 +255,6 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            cursor: pointer;
-        }
-        
-        .region-tooltip {
-            position: relative;
-            display: inline-block;
-            width: 100%;
-            height: 100%;
-        }
-        
-        .region-tooltip:hover .region-tooltip-text {
-            visibility: visible;
-            opacity: 1;
-        }
-        
-        .region-tooltip-text {
-            visibility: hidden;
-            opacity: 0;
-            max-width: 600px;
-            min-width: 200px;
-            background-color: rgba(0, 0, 0, 0.95);
-            color: #fff;
-            text-align: left;
-            border-radius: 8px;
-            padding: 12px 16px;
-            position: absolute;
-            z-index: 1000;
-            bottom: 125%;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 13px;
-            line-height: 1.6;
-            white-space: normal;
-            word-wrap: break-word;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            transition: opacity 0.3s ease-in-out;
-            pointer-events: none;
-        }
-        
-        .region-tooltip-text::after {
-            content: "";
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            margin-left: -8px;
-            border-width: 8px;
-            border-style: solid;
-            border-color: rgba(0, 0, 0, 0.95) transparent transparent transparent;
         }
 
         /* 移动端响应式样式 */
@@ -322,7 +271,7 @@
         .swipe-tip {
             display: none;
             text-align: center;
-            color: #667eea;
+            color: #3a7bd5;
             font-size: 13px;
             margin-top: 10px;
             margin-bottom: 5px;
@@ -333,79 +282,49 @@
             body {
                 padding: 10px;
             }
-            
-            .container {
-                padding: 0;
-            }
-            
             .header {
                 padding: 15px;
                 margin-bottom: 15px;
-                border-radius: 10px;
             }
-            
             .header h1 {
                 font-size: 22px;
                 text-align: center;
-                margin-bottom: 15px;
             }
-            
             .nav-buttons {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
                 gap: 8px;
-                width: 100%;
             }
-            
             .btn {
                 padding: 10px 15px;
                 font-size: 13px;
                 text-align: center;
-                width: 100%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
                 border-radius: 20px;
             }
-            
             .data-card {
                 padding: 15px;
-                border-radius: 10px;
             }
-            
             .swipe-tip {
                 display: block;
             }
-            
             th, td {
                 padding: 8px 6px;
                 font-size: 12px;
             }
-            
             .ball-small {
-                width: 22px;
-                height: 22px;
-                line-height: 22px;
-                font-size: 11px;
-                margin: 0 1px;
+                width: 20px;
+                height: 20px;
+                line-height: 20px;
+                font-size: 10px;
             }
-            
-            .pagination {
-                gap: 5px;
-                margin-top: 20px;
+            .balls-container {
+                max-width: 240px;
             }
-            
             .page-link {
                 min-width: 35px;
                 height: 35px;
                 font-size: 12px;
                 padding: 0 8px;
-            }
-            
-            .jump-to-page {
-                flex-direction: column;
-                gap: 10px;
-                padding: 10px;
             }
         }
     </style>
@@ -413,9 +332,10 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📜 历史开奖数据</h1>
+            <h1>📜 快乐8 - 历史开奖数据</h1>
             <div class="nav-buttons">
-                <a href="{{ url_for('ssq_index') }}" class="btn">返回首页</a>
+                <a href="{{ url_for('kl8_index') }}" class="btn">返回首页</a>
+                <a href="{{ url_for('ssq_index') }}" class="btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">🎱 双色球</a>
                 <a href="{{ url_for('dlt_index') }}" class="btn" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">🎰 大乐透</a>
                 <button onclick="updateLatestData()" class="btn">更新最新数据</button>
                 <button onclick="updateAllHistory()" class="btn btn-update-all">🔄 更新所有历史数据</button>
@@ -441,52 +361,30 @@
                     <tr>
                         <th>期号</th>
                         <th>开奖日期</th>
-                        <th>红球号码</th>
-                        <th>蓝球</th>
+                        <th>开奖红球号码 (20码)</th>
+                        <th>和值</th>
                         <th>奇偶比</th>
                         <th>最大遗漏</th>
-                        <th>蓝球遗漏</th>
-                        <th>红球遗漏详情</th>
                         <th>中奖地区</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for result in results %}
-                    <tr onclick="location.href='{{ url_for('ssq_analysis', issue=result.issue) }}'">
-                        <td><a href="{{ url_for('ssq_analysis', issue=result.issue) }}" class="issue-link">{{ result.issue }}</a></td>
+                    <tr onclick="location.href='{{ url_for('kl8_analysis', issue=result.issue) }}'">
+                        <td><a href="{{ url_for('kl8_analysis', issue=result.issue) }}" class="issue-link">{{ result.issue }}</a></td>
                         <td>{{ result.draw_date }}</td>
                         <td>
-                            <div class="red-balls-container">
-                                {% for i in range(6) %}
+                            <div class="balls-container">
+                                {% for i in range(20) %}
                                 <span class="ball-small ball-red">{{ '%02d' | format(result.red_balls[i]) }}</span>
                                 {% endfor %}
                             </div>
                         </td>
-                        <td><span class="ball-small ball-blue">{{ '%02d' | format(result.blue_ball) }}</span></td>
+                        <td><strong>{{ result.get('red_sum', 0) }}</strong></td>
                         <td>{{ result.get('odd_even', '-') }}</td>
                         <td>{{ result.get('max_red_missing', 0) }}</td>
-                        <td>{{ result.get('blue_missing', 0) }}</td>
                         <td>
-                            {% if result.get('red_balls_missing') %}
-                            <div style="display: flex; gap: 4px; align-items: center; justify-content: center;">
-                                {% set sorted_missing = result.red_balls_missing|sort %}
-                                {% for missing in sorted_missing %}
-                                <span style="font-size: 13px; color: #333;">{{ missing }}</span>
-                                {% if not loop.last %}
-                                <span style="font-size: 13px; color: #999;">-</span>
-                                {% endif %}
-                                {% endfor %}
-                            </div>
-                            {% else %}
-                            <span style="color: #999;">-</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% set region_text = result.get('region', '-') or '-' %}
-                            <div class="region-tooltip">
-                                <span class="region-text">{{ region_text }}</span>
-                                <span class="region-tooltip-text">{{ region_text }}</span>
-                            </div>
+                            <span class="region-text">{{ result.get('region', '-') or '-' }}</span>
                         </td>
                     </tr>
                     {% endfor %}
@@ -564,12 +462,10 @@
                 return;
             }
             
-            // 跳转到指定页
             window.location.href = `?page=${page}`;
         }
         
         function updateLatestData() {
-            // 显示口令输入框
             const password = prompt('请输入操作口令：', 'ssq2026');
             
             if (!password) {
@@ -577,7 +473,7 @@
                 return;
             }
             
-            fetch('{{ url_for("ssq_update_data") }}', {
+            fetch('{{ url_for("kl8_update_data") }}', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({password: password})
@@ -597,7 +493,6 @@
         }
         
         function updateAllHistory() {
-            // 显示口令输入框
             const password = prompt('请输入操作口令：', 'ssq2026');
             
             if (!password) {
@@ -605,7 +500,7 @@
                 return;
             }
             
-            if (!confirm('⚠️ 注意：\n\n此操作将抓取所有历史开奖数据（约 3000 期）！\n\n可能需要几分钟时间，确定要继续吗？')) {
+            if (!confirm('⚠️ 注意：\n\n此操作将抓取快乐8最近数月历史开奖数据（约 2000 期）！\n\n可能需要几分钟时间，确定要继续吗？')) {
                 alert('❌ 已取消操作');
                 return;
             }
@@ -613,9 +508,9 @@
             const spinner = document.getElementById('loadingSpinner');
             const loadingText = document.getElementById('loadingText');
             spinner.style.display = 'block';
-            loadingText.textContent = '正在抓取所有历史数据，请稍候...';
+            loadingText.textContent = '正在抓取快乐8历史数据，请稍候...';
             
-            fetch('{{ url_for("ssq_update_all_history") }}', {
+            fetch('{{ url_for("kl8_update_all_history") }}', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({password: password})

@@ -98,6 +98,48 @@
             overflow: hidden;
         }
 
+        .ssq-image {
+            background: linear-gradient(45deg, #dc2626, #2563eb);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .ssq-image::before {
+            content: '🎱';
+            font-size: 5rem;
+            opacity: 0.8;
+            transition: transform 0.4s;
+        }
+
+        .dlt-image {
+            background: linear-gradient(45deg, #f59e0b, #10b981);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .dlt-image::before {
+            content: '🎰';
+            font-size: 5rem;
+            opacity: 0.8;
+            transition: transform 0.4s;
+        }
+
+        .kl8-image {
+            background: linear-gradient(135deg, #3a7bd5, #3a6073);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .kl8-image::before {
+            content: '🎱';
+            font-size: 5rem;
+            opacity: 0.8;
+            transition: transform 0.4s;
+        }
+
         .mb-image {
             background: linear-gradient(45deg, #1e3a8a, #064e3b);
             /* Placeholder for actual game screenshot */
@@ -277,6 +319,36 @@
                 <h2 class="card-title">极速狂飙</h2>
                 <p class="card-desc">驾驶超级跑车在公路上驰骋。躲避障碍，不断加速，体验肾上腺素飙升的极限快感！</p>
                 <div class="play-btn">进入游戏</div>
+            </div>
+        </a>
+
+        <!-- 双色球数据分析 -->
+        <a href="/ssq" class="game-card">
+            <div class="card-image ssq-image"></div>
+            <div class="card-content">
+                <h2 class="card-title">双色球数据分析</h2>
+                <p class="card-desc">提供最新的双色球中奖结果展示、冷热号排行、遗漏值趋势图表以及历史遗漏分组分析，助你精准选号。</p>
+                <div class="play-btn">进入分析</div>
+            </div>
+        </a>
+
+        <!-- 大乐透数据分析 -->
+        <a href="/dlt" class="game-card">
+            <div class="card-image dlt-image"></div>
+            <div class="card-content">
+                <h2 class="card-title">大乐透数据分析</h2>
+                <p class="card-desc">实时获取超级大乐透开奖信息，统计红蓝球遗漏次数排行，分析冷热数据，提供全方位的走势图表支持。</p>
+                <div class="play-btn">进入分析</div>
+            </div>
+        </a>
+
+        <!-- 福彩快乐8数据分析 -->
+        <a href="/kl8" class="game-card">
+            <div class="card-image kl8-image"></div>
+            <div class="card-content">
+                <h2 class="card-title">福彩快乐8数据分析</h2>
+                <p class="card-desc">每日统计福彩快乐8开奖数据，提供号码奇偶比、和值指标、80个号码的高精度冷热号与历史遗漏走势图表。</p>
+                <div class="play-btn">进入分析</div>
             </div>
         </a>
     </main>

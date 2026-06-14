@@ -360,6 +360,7 @@
             {% endif %}
             
             <div class="nav-buttons">
+                <a href="{{ url_for('kl8_index') }}" class="btn btn-primary" style="background: linear-gradient(135deg, #3a7bd5 0%, #3a6073 100%);">🎱 快乐8</a>
                 <a href="{{ url_for('dlt_index') }}" class="btn btn-success">🎰 大乐透</a>
                 <a href="{{ url_for('ssq_history') }}" class="btn btn-primary">历史数据</a>
                 <a href="{{ url_for('ssq_missing_groups') }}" class="btn btn-success" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">📊 历史遗漏分组</a>
@@ -477,7 +478,7 @@
             const btn = event.target;
             
             // 显示口令输入框
-            const password = prompt('请输入操作口令：', '');
+            const password = prompt('请输入操作口令：', 'ssq2026');
             
             if (!password) {
                 alert('❌ 已取消操作');
@@ -515,7 +516,7 @@
             const btn = event.target;
             
             // 显示口令输入框
-            const password = prompt('请输入操作口令：', '');
+            const password = prompt('请输入操作口令：', 'ssq2026');
             
             if (!password) {
                 alert('❌ 已取消操作');
