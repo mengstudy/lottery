@@ -365,6 +365,7 @@
                         <th>和值</th>
                         <th>奇偶比</th>
                         <th>最大遗漏</th>
+                        <th>红球遗漏详情</th>
                         <th>中奖地区</th>
                     </tr>
                 </thead>
@@ -383,6 +384,21 @@
                         <td><strong>{{ result.get('red_sum', 0) }}</strong></td>
                         <td>{{ result.get('odd_even', '-') }}</td>
                         <td>{{ result.get('max_red_missing', 0) }}</td>
+                        <td>
+                            {% if result.get('red_balls_missing') %}
+                            <div style="display: flex; gap: 4px; align-items: center; justify-content: center; flex-wrap: wrap; max-width: 250px; margin: 0 auto;">
+                                {% set sorted_missing = result.red_balls_missing|sort %}
+                                {% for missing in sorted_missing %}
+                                <span style="font-size: 13px; color: #333;">{{ missing }}</span>
+                                {% if not loop.last %}
+                                <span style="font-size: 13px; color: #999;">-</span>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <span style="color: #999;">-</span>
+                            {% endif %}
+                        </td>
                         <td>
                             <span class="region-text">{{ result.get('region', '-') or '-' }}</span>
                         </td>
