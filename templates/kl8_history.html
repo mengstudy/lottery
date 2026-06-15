@@ -308,8 +308,19 @@
                 display: block;
             }
             th, td {
-                padding: 8px 6px;
-                font-size: 12px;
+                padding: 6px 4px !important;
+                font-size: 11px !important;
+            }
+            /* 移动端遗漏详情横向一字排开，支持横向滑动 */
+            .missing-detail-container {
+                max-width: none !important;
+                flex-wrap: nowrap !important;
+                gap: 3px !important;
+                justify-content: center !important;
+            }
+            .missing-detail-num,
+            .missing-detail-sep {
+                font-size: 11px !important;
             }
             .ball-small {
                 width: 20px;
@@ -318,7 +329,8 @@
                 font-size: 10px;
             }
             .balls-container {
-                max-width: 240px;
+                max-width: none !important;
+                flex-wrap: nowrap !important;
             }
             .page-link {
                 min-width: 35px;
@@ -386,12 +398,12 @@
                         <td>{{ result.get('max_red_missing', 0) }}</td>
                         <td>
                             {% if result.get('red_balls_missing') %}
-                            <div style="display: flex; gap: 4px; align-items: center; justify-content: center; flex-wrap: wrap; max-width: 250px; margin: 0 auto;">
+                            <div class="missing-detail-container" style="display: flex; gap: 4px; align-items: center; justify-content: center; flex-wrap: wrap; max-width: 250px; margin: 0 auto;">
                                 {% set sorted_missing = result.red_balls_missing|sort %}
                                 {% for missing in sorted_missing %}
-                                <span style="font-size: 13px; color: #333;">{{ missing }}</span>
+                                <span class="missing-detail-num" style="font-size: 13px; color: #333;">{{ missing }}</span>
                                 {% if not loop.last %}
-                                <span style="font-size: 13px; color: #999;">-</span>
+                                <span class="missing-detail-sep" style="font-size: 13px; color: #999;">-</span>
                                 {% endif %}
                                 {% endfor %}
                             </div>
