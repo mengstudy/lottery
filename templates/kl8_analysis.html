@@ -399,9 +399,9 @@
                             <div>
                                 <h5 style="color: #3a7bd5; margin-bottom: 8px; font-size: 15px;">📋 收集到的红球号码 (他人频次)</h5>
                                 <p style="color: #666; font-size: 12px; margin-bottom: 10px; line-height: 1.4;">
-                                    输入购买列表，以空格/逗号或多行分隔，系统将显示角标频次。
+                                    输入购买列表，每行连续数字按2位分割，支持多行，系统将显示角标频次。
                                 </p>
-                                <textarea id="collectedBallsInput" placeholder="输入收集到的号码，例如：&#10;05, 12, 45, 80..." style="width: 100%; min-height: 80px; padding: 10px; border: 1px solid #ced4da; border-radius: 8px; font-size: 13px; outline: none; resize: vertical;" oninput="updateCompareAndSelection()"></textarea>
+                                <textarea id="collectedBallsInput" placeholder="输入收集到的号码，例如：&#10;05124580..." style="width: 100%; min-height: 80px; padding: 10px; border: 1px solid #ced4da; border-radius: 8px; font-size: 13px; outline: none; resize: vertical;" oninput="updateCompareAndSelection()"></textarea>
                             </div>
                             <div>
                                 <div style="display: flex; gap: 10px; margin-top: 10px;">
@@ -730,14 +730,20 @@
             const val = document.getElementById('collectedBallsInput').value;
             ballFreqMap.clear();
             
-            const numbers = val.replace(/[,，\s]+/g, ' ').split(' ');
             let validCount = 0;
-            numbers.forEach(num => {
-                const cleanNum = num.trim().padStart(2, '0');
-                const valInt = parseInt(cleanNum);
-                if (valInt >= 1 && valInt <= 80) {
-                    validCount++;
-                    ballFreqMap.set(cleanNum, (ballFreqMap.get(cleanNum) || 0) + 1);
+            const lines = val.split('\n');
+            lines.forEach(lineText => {
+                const cleaned = lineText.replace(/\D/g, '');
+                for (let i = 0; i < cleaned.length; i += 2) {
+                    if (i + 1 < cleaned.length) {
+                        const numStr = cleaned.substring(i, i + 2);
+                        const valInt = parseInt(numStr, 10);
+                        if (valInt >= 1 && valInt <= 80) {
+                            const formatted = valInt.toString().padStart(2, '0');
+                            validCount++;
+                            ballFreqMap.set(formatted, (ballFreqMap.get(formatted) || 0) + 1);
+                        }
+                    }
                 }
             });
             

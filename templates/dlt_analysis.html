@@ -384,9 +384,9 @@
                                     📋 收集到的前区红球号码 (他人频次)
                                 </h5>
                                 <p style="color: #666; font-size: 12px; margin-bottom: 10px; line-height: 1.4;">
-                                    输入别人购买的号码（空格、逗号或多行分隔），系统将统计频次并在下方预测球旁展示角标。
+                                    输入别人购买的号码（每行连续数字按2位分割，支持多行），系统将统计频次并在下方预测球旁展示角标。
                                 </p>
-                                <textarea id="collectedBallsInput" placeholder="输入别人买过的前区号码，例如：&#10;05, 12, 18, 05, 35..." style="width: 100%; min-height: 80px; padding: 10px; border: 1px solid #ced4da; border-radius: 8px; font-family: monospace; font-size: 13px; outline: none; transition: border-color 0.2s; resize: vertical;" oninput="updateCompareAndSelection()"></textarea>
+                                <textarea id="collectedBallsInput" placeholder="输入别人买过的前区号码，例如：&#10;0512180535..." style="width: 100%; min-height: 80px; padding: 10px; border: 1px solid #ced4da; border-radius: 8px; font-family: monospace; font-size: 13px; outline: none; transition: border-color 0.2s; resize: vertical;" oninput="updateCompareAndSelection()"></textarea>
                             </div>
                             <div>
                                 <div style="display: flex; gap: 10px; margin-top: 10px;">
@@ -765,16 +765,38 @@
         function updateCompareAndSelection() {
             // A. 解析他人收集号码的频次
             const inputVal = document.getElementById('collectedBallsInput').value;
-            const numbers = inputVal.match(/\b\d+\b/g) || [];
             const validBalls = [];
             const ballFreq = {};
+            const parsedGroups = [];
             
-            numbers.forEach(numStr => {
-                const num = parseInt(numStr, 10);
-                if (num >= 1 && num <= 35) {
-                    const formatted = num.toString().padStart(2, '0');
-                    validBalls.push(formatted);
-                    ballFreq[formatted] = (ballFreq[formatted] || 0) + 1;
+            const lines = inputVal.split('\n');
+            lines.forEach((lineText, idx) => {
+                const cleaned = lineText.replace(/\D/g, '');
+                const ballsInLine = [];
+                const seenInLine = new Set();
+                
+                for (let i = 0; i < cleaned.length; i += 2) {
+                    if (i + 1 < cleaned.length) {
+                        const numStr = cleaned.substring(i, i + 2);
+                        const num = parseInt(numStr, 10);
+                        if (num >= 1 && num <= 35) {
+                            const formatted = num.toString().padStart(2, '0');
+                            validBalls.push(formatted);
+                            ballFreq[formatted] = (ballFreq[formatted] || 0) + 1;
+                            
+                            if (!seenInLine.has(formatted)) {
+                                ballsInLine.push(formatted);
+                                seenInLine.add(formatted);
+                            }
+                        }
+                    }
+                }
+                
+                if (ballsInLine.length > 0) {
+                    parsedGroups.push({
+                        index: idx + 1,
+                        balls: ballsInLine
+                    });
                 }
             });
 
@@ -787,33 +809,6 @@
             } else {
                 summaryDiv.style.display = 'none';
             }
-
-            // 按行（组）解析收集到的号码并计算匹配数
-            const lines = inputVal.split('\n');
-            const parsedGroups = [];
-            lines.forEach((lineText, idx) => {
-                const tokens = lineText.match(/\b\d+\b/g) || [];
-                const ballsInLine = [];
-                const seenInLine = new Set();
-                
-                tokens.forEach(tok => {
-                    const num = parseInt(tok, 10);
-                    if (num >= 1 && num <= 35) {
-                        const formatted = num.toString().padStart(2, '0');
-                        if (!seenInLine.has(formatted)) {
-                            ballsInLine.push(formatted);
-                            seenInLine.add(formatted);
-                        }
-                    }
-                });
-                
-                if (ballsInLine.length > 0) {
-                    parsedGroups.push({
-                        index: idx + 1,
-                        balls: ballsInLine
-                    });
-                }
-            });
 
             const groupsContainer = document.getElementById('parsedGroupsContainer');
             const listEl = document.getElementById('parsedGroupsList');
