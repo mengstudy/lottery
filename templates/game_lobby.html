@@ -211,6 +211,20 @@
             transition: transform 0.4s;
         }
 
+        .video-search-image {
+            background: linear-gradient(45deg, #8b5cf6, #ec4899);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .video-search-image::before {
+            content: '🎬';
+            font-size: 5rem;
+            opacity: 0.8;
+            transition: transform 0.4s;
+        }
+
         .game-card:hover .card-image::before {
             transform: scale(1.2) rotate(10deg);
         }
@@ -349,6 +363,16 @@
                 <h2 class="card-title">福彩快乐8数据分析</h2>
                 <p class="card-desc">每日统计福彩快乐8开奖数据，提供号码奇偶比、和值指标、80个号码的高精度冷热号与历史遗漏走势图表。</p>
                 <div class="play-btn">进入分析</div>
+            </div>
+        </a>
+
+        <!-- 聚合视频搜索 -->
+        <a href="/video/search" class="game-card">
+            <div class="card-image video-search-image"></div>
+            <div class="card-content">
+                <h2 class="card-title">聚合视频搜索</h2>
+                <p class="card-desc">影视搜索神器！聚合量子、非凡、红牛、暴风等高品质采集源，实时解密 TVBox 订阅地址，一键复制全网影视播放直链。</p>
+                <div class="play-btn">进入搜索</div>
             </div>
         </a>
     </main>

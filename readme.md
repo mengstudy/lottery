@@ -183,6 +183,20 @@ python3 start.py
 
 ---
 
+### 🅳 聚合视频搜索与 TVBox 看板
+
+**访问地址：** http://localhost/video/search
+
+**功能特点：**
+- **聚合多站检索**：后端采用多线程并发技术，实时对接量子资源、非凡资源、红牛资源、暴风资源四大优质 CMS 接口，自动排重并合并多路线播放源。
+- **TVBox 订阅隐写解密**：动态拉取 TVBox 源配置（`http://www.饭太硬.cc/tv`），利用图片隐写算法及 Base64 算法还原 49+ 站点详情，支持一键复制配置 JSON。
+- **高颜值后台下载管理器**：
+  - **M3U8 无损合并下载**：支持 HLS 流的多级嵌套 M3U8 (Master Playlist) 自动跳转寻址与解析，提供单集分片并发 5 高速下载并进行二进制无损合并，保存为标准的 `.ts` 视频。
+  - **多剧集批量顺序下载**：点击一键下载整部剧集时，系统会以“并发 3 集”的优先级排队下载，实现高效率与防内存过载的平衡。
+  - **独立的悬浮管理器**：采用磨砂玻璃拟物化设计，无论用户在页面上如何切换分集、源线路甚至刷新搜索，均不会干扰后台的默默下载。
+
+---
+
 ## 🎯 遗漏次数分组说明
 
 | 分组 | 遗漏次数 | 颜色 | 说明 |
@@ -253,7 +267,8 @@ lottery/
 │   ├── models.py              # 数据模型定义
 │   ├── stats_calculator.py   # 双色球统计分析
 │   ├── dlt_stats_calculator.py # 大乐透统计分析
-│   └── kl8_stats_calculator.py # 快乐8统计分析
+│   ├── kl8_stats_calculator.py # 快乐8统计分析
+│   └── video_searcher.py      # TVBox订阅解密与影视并发直搜
 │
 ├── templates/
 │   ├── index.html             # 双色球首页
@@ -267,7 +282,8 @@ lottery/
 │   ├── kl8_index.html        # 快乐8首页
 │   ├── kl8_history.html       # 快乐8历史数据
 │   ├── kl8_analysis.html      # 快乐8详情分析
-│   └── kl8_missing_groups.html # 快乐8遗漏分组
+│   ├── kl8_missing_groups.html # 快乐8遗漏分组
+│   └── video_search.html      # 聚合视频搜索与后台下载管理器页面
 │
 └── data/
     ├── lottery.db             # 双色球数据库

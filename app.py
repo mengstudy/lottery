@@ -20,6 +20,7 @@ from database.kl8_db_manager import kl8_db_manager
 from analyzer.kl8_stats_calculator import kl8_calculator
 from crawler.kl8_crawler import kl8_crawler
 from functools import wraps
+from analyzer.video_searcher import search_aggregate, decrypt_tvbox_config
 
 
 # 操作口令（统一配置）
@@ -1412,6 +1413,36 @@ def kl8_calculate_missing_tables():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/video/search')
+def video_search_page():
+    """视频搜索页面"""
+    return render_template('video_search.html')
+
+
+@app.route('/api/video/query')
+def api_video_query():
+    """视频搜索 API"""
+    wd = request.args.get('wd', '').strip()
+    if not wd:
+        return jsonify({'success': False, 'message': '搜索关键词不能为空', 'list': []})
+    try:
+        results = search_aggregate(wd)
+        return jsonify({'success': True, 'list': results})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'搜索发生异常: {str(e)}', 'list': []})
+
+
+@app.route('/api/video/tvbox_sources')
+def api_tvbox_sources():
+    """解密获取 TVBox 订阅源列表"""
+    try:
+        config = decrypt_tvbox_config()
+        sites = config.get('sites', [])
+        return jsonify({'success': True, 'sites': sites})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'获取TVBox配置失败: {str(e)}', 'sites': []})
 
 
 if __name__ == '__main__':

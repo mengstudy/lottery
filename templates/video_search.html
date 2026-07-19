@@ -1,0 +1,2547 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎬 聚合视频搜索 & TVBox 订阅解析</title>
+    <!-- Google Fonts Inter & Outfit -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- mux.js: 用于将 TS 分片转封装为 fMP4（碎片化 MP4），参考 m3u8-downloader 的 mux-mp4.js 方案 -->
+    <script src="https://cdn.jsdelivr.net/npm/mux.js@7.0.3/dist/mux.js"></script>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: rgba(22, 30, 49, 0.7);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --primary-purple: #8b5cf6;
+            --primary-pink: #ec4899;
+            --primary-blue: #3b82f6;
+            --primary-green: #10b981;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --glass-blur: blur(16px);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(139, 92, 246, 0.12) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(236, 72, 153, 0.12) 0px, transparent 50%),
+                radial-gradient(at 50% 100%, rgba(59, 130, 246, 0.1) 0px, transparent 50%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        /* 顶部导航 */
+        .navbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(11, 15, 25, 0.8);
+            backdrop-filter: var(--glass-blur);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-logo {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.6rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary-purple), var(--primary-pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .back-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 0.6rem 1.2rem;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--primary-purple);
+            transform: translateX(-3px);
+        }
+
+        /* 主体布局 */
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 2.5rem 1.5rem;
+            flex-grow: 1;
+        }
+
+        /* 标签页导航 */
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.8rem;
+        }
+
+        .tab-item {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            font-weight: 600;
+            padding: 0.5rem 1.5rem;
+            cursor: pointer;
+            position: relative;
+            transition: color 0.3s;
+        }
+
+        .tab-item:hover {
+            color: var(--text-main);
+        }
+
+        .tab-item.active {
+            color: var(--text-main);
+        }
+
+        .tab-item.active::after {
+            content: '';
+            position: absolute;
+            bottom: -0.9rem;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary-purple), var(--primary-pink));
+            border-radius: 3px;
+        }
+
+        /* 搜索框部分 */
+        .search-section {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 2rem;
+            backdrop-filter: var(--glass-blur);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            margin-bottom: 2rem;
+            transition: border-color 0.3s;
+        }
+
+        .search-section:focus-within {
+            border-color: rgba(139, 92, 246, 0.4);
+        }
+
+        .search-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            font-family: 'Outfit', sans-serif;
+            background: linear-gradient(135deg, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .search-wrapper {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .search-input-wrapper {
+            flex-grow: 1;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            background: rgba(11, 15, 25, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 1.1rem 1.2rem;
+            font-size: 1.05rem;
+            color: var(--text-main);
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        .search-input:focus {
+            border-color: var(--primary-purple);
+            box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15);
+        }
+
+        .search-btn {
+            background: linear-gradient(135deg, var(--primary-purple), var(--primary-pink));
+            border: none;
+            color: white;
+            font-weight: 700;
+            padding: 0 2rem;
+            border-radius: 14px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+        }
+
+        .search-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(139, 92, 246, 0.5);
+        }
+
+        /* 饭太硬源订阅提示头 */
+        .tvbox-notice-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 14px;
+            padding: 1rem 1.5rem;
+            margin-bottom: 2rem;
+            font-size: 0.95rem;
+        }
+
+        .notice-content {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            color: #93c5fd;
+        }
+
+        .notice-copy-btn {
+            background: rgba(59, 130, 246, 0.15);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: #93c5fd;
+            padding: 0.4rem 0.8rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .notice-copy-btn:hover {
+            background: var(--primary-blue);
+            color: white;
+        }
+
+        /* 结果区域 */
+        .content-panel {
+            display: none;
+        }
+
+        .content-panel.active {
+            display: block;
+        }
+
+        /* 结果列表 - 骨架屏加载 */
+        .loading-skeleton {
+            display: none;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .skeleton-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            height: 180px;
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .skeleton-card::after {
+            content: '';
+            display: block;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+            animation: loading-sweep 1.5s infinite;
+        }
+
+        @keyframes loading-sweep {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        /* 无数据提示 */
+        .empty-state {
+            text-align: center;
+            padding: 5rem 2rem;
+            color: var(--text-muted);
+        }
+
+        .empty-icon {
+            font-size: 4rem;
+            margin-bottom: 1.5rem;
+            opacity: 0.5;
+        }
+
+        /* 视频搜索结果卡片 */
+        .video-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 1.8rem;
+            margin-bottom: 1.8rem;
+            backdrop-filter: var(--glass-blur);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s;
+        }
+
+        .video-card:hover {
+            border-color: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+        }
+
+        .video-header {
+            display: flex;
+            gap: 1.8rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .video-pic {
+            width: 110px;
+            height: 154px;
+            object-fit: cover;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            background-color: rgba(0,0,0,0.3);
+            flex-shrink: 0;
+        }
+
+        .video-info {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .video-name {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 0.5rem;
+        }
+
+        .video-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 0.8rem;
+            font-size: 0.9rem;
+        }
+
+        .meta-tag {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            padding: 0.25rem 0.6rem;
+            border-radius: 6px;
+            color: var(--text-muted);
+        }
+
+        .meta-tag.type {
+            background: rgba(139, 92, 246, 0.1);
+            border-color: rgba(139, 92, 246, 0.2);
+            color: #c084fc;
+            font-weight: 600;
+        }
+
+        .video-people {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+            margin-bottom: 0.6rem;
+        }
+
+        .video-desc {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+
+        /* 展开的线路部分 */
+        .video-sources {
+            border-top: 1px solid var(--border-color);
+            padding-top: 1.5rem;
+        }
+
+        .source-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .source-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .source-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .source-badge {
+            background: linear-gradient(135deg, var(--primary-blue), var(--primary-purple));
+            color: white;
+            font-size: 0.75rem;
+            padding: 0.15rem 0.5rem;
+            border-radius: 5px;
+            font-weight: 700;
+        }
+
+        .episode-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+            gap: 0.8rem;
+        }
+
+        .episode-btn {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 0.65rem 0.5rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            position: relative;
+        }
+
+        .episode-btn:hover {
+            background: rgba(139, 92, 246, 0.1);
+            border-color: var(--primary-purple);
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        /* 批量选择模式 */
+        .episode-btn.selectable {
+            padding-left: 1.5rem;
+        }
+
+        .episode-btn.selectable::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0.3rem;
+            transform: translateY(-50%);
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255, 255, 255, 0.25);
+            border-radius: 3px;
+            transition: all 0.2s;
+        }
+
+        .episode-btn.selected {
+            background: rgba(139, 92, 246, 0.25);
+            border-color: var(--primary-purple);
+            color: #c4b5fd;
+        }
+
+        .episode-btn.selected::before {
+            content: '✓';
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 700;
+            color: #fff;
+            background: var(--primary-purple);
+            border-color: var(--primary-purple);
+        }
+
+        .select-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            padding: 0.6rem 0.8rem;
+            background: rgba(139, 92, 246, 0.08);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 8px;
+            margin-bottom: 0.6rem;
+        }
+
+        .select-toolbar-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-main);
+            padding: 0.3rem 0.7rem;
+            border-radius: 6px;
+            font-size: 0.78rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .select-toolbar-btn:hover {
+            background: rgba(139, 92, 246, 0.2);
+            border-color: var(--primary-purple);
+        }
+
+        .select-toolbar-btn.primary {
+            background: var(--primary-purple);
+            border-color: var(--primary-purple);
+            color: #fff;
+        }
+
+        .select-count {
+            color: var(--primary-pink);
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-left: auto;
+        }
+
+        /* 点击集数后的操作栏 */
+        .episode-actions-wrapper {
+            grid-column: 1 / -1;
+            background: rgba(11, 15, 25, 0.8);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 0.8rem 1.2rem;
+            margin-top: 0.4rem;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .action-url-text {
+            flex-grow: 1;
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: var(--primary-blue);
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 0.6rem;
+            flex-shrink: 0;
+        }
+
+        .act-btn {
+            border: none;
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .act-btn.copy {
+            background: var(--primary-purple);
+            color: white;
+        }
+
+        .act-btn.copy:hover {
+            background: #7c3aed;
+        }
+
+        .act-btn.open {
+            background: rgba(255, 255, 255, 0.08);
+            color: white;
+            border: 1px solid var(--border-color);
+        }
+
+        .act-btn.open:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        /* TVBox 列表部分 */
+        .tvbox-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .tvbox-search-wrapper {
+            width: 300px;
+        }
+
+        .tvbox-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .source-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+            backdrop-filter: var(--glass-blur);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: all 0.3s;
+        }
+
+        .source-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(139, 92, 246, 0.3);
+        }
+
+        .source-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.8rem;
+        }
+
+        .source-card-name {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: white;
+        }
+
+        .source-card-type {
+            font-size: 0.75rem;
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            font-weight: 700;
+            background: rgba(236, 72, 153, 0.15);
+            color: var(--primary-pink);
+        }
+
+        .source-card-api {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-family: monospace;
+            word-break: break-all;
+            margin-bottom: 1rem;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .source-card-bottom {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            border-top: 1px solid var(--border-color);
+            padding-top: 0.8rem;
+        }
+
+        .source-tag {
+            color: var(--text-muted);
+        }
+
+        .source-detail-btn {
+            background: transparent;
+            border: none;
+            color: var(--primary-blue);
+            font-weight: 600;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .source-detail-btn:hover {
+            color: #60a5fa;
+            text-decoration: underline;
+        }
+
+        /* 弹窗遮罩 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .modal-card {
+            background: #0f172a;
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            width: 100%;
+            max-width: 550px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+            animation: modalScale 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes modalScale {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .modal-header {
+            padding: 1.2rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: white;
+        }
+
+        .modal-close {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .modal-close:hover {
+            color: white;
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .json-preview {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 1rem;
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: #38bdf8;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .modal-footer {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.8rem;
+        }
+
+        /* 全局 Toast */
+        .toast-box {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--primary-green);
+            color: white;
+            padding: 0.8rem 1.8rem;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+            z-index: 2000;
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .toast-box.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+        /* 📥 后台下载管理器悬浮面板样式 */
+        .download-manager-panel {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            width: 380px;
+            max-height: 400px;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .dm-header {
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #fff;
+        }
+
+        .dm-close-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+            line-height: 1;
+            padding: 0 0.2rem;
+            transition: color 0.2s;
+        }
+
+        .dm-close-btn:hover {
+            color: #fff;
+        }
+
+        .dm-stats {
+            padding: 0.4rem 1rem;
+            display: flex;
+            gap: 1rem;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .dm-stats strong {
+            color: #e2e8f0;
+            font-weight: 600;
+        }
+
+        .dm-tasks-list {
+            padding: 1rem;
+            overflow-y: auto;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+
+        .dm-task-item {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 0.8rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .dm-task-title {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: #e2e8f0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .dm-task-status-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .dm-task-prog-bg {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 3px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .dm-task-prog-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary-purple), var(--primary-pink));
+            transition: width 0.3s ease;
+        }
+
+        .dm-task-controls {
+            display: flex;
+            gap: 0.4rem;
+            margin-top: 0.2rem;
+        }
+
+        .dm-ctrl-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-muted);
+            padding: 0.2rem 0.5rem;
+            border-radius: 5px;
+            font-size: 0.7rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .dm-ctrl-btn:hover {
+            background: rgba(255, 255, 255, 0.12);
+            color: #fff;
+        }
+
+        .dm-ctrl-btn.danger:hover {
+            background: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+        /* 触发胶囊按钮 */
+        .download-manager-trigger {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 0.7rem 1.2rem;
+            background: linear-gradient(135deg, var(--primary-purple), var(--primary-pink));
+            border-radius: 50px;
+            box-shadow: 0 8px 20px rgba(139, 92, 246, 0.3);
+            z-index: 998;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #fff;
+            display: none;
+            align-items: center;
+            gap: 0.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.2s;
+        }
+
+        .download-manager-trigger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(139, 92, 246, 0.4);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 顶部导航 -->
+    <header class="navbar">
+        <div class="nav-logo">🎬 MovieSearch</div>
+        <a href="/" class="back-btn">
+            <span>🏠</span> 返回游戏大厅
+        </a>
+    </header>
+
+    <div class="container">
+        <!-- Tab 切换 -->
+        <nav class="tabs">
+            <button class="tab-item active" onclick="switchTab('search')">影视聚合直搜</button>
+            <button class="tab-item" onclick="switchTab('tvbox')">TVBox 订阅配置看板</button>
+        </nav>
+
+        <!-- Tab 1: 聚合搜索 -->
+        <div id="panel-search" class="content-panel active">
+            <!-- 搜索框 -->
+            <section class="search-section">
+                <h3 class="search-title">聚合影视检索</h3>
+                <div class="search-wrapper">
+                    <div class="search-input-wrapper">
+                        <input type="text" id="keyword-input" class="search-input" placeholder="输入影视作品名称（例如：流浪地球、斗罗大陆...）" onkeydown="if(event.key==='Enter') triggerSearch()">
+                    </div>
+                    <button class="search-btn" onclick="triggerSearch()">
+                        <span>🔍</span> 聚合搜索
+                    </button>
+                </div>
+            </section>
+
+            <!-- 骨架屏加载 -->
+            <div id="search-loading" class="loading-skeleton">
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+            </div>
+
+            <!-- 搜索结果容器 -->
+            <div id="search-results">
+                <div class="empty-state">
+                    <div class="empty-icon">🍿</div>
+                    <p>在上方搜索框输入您喜爱的影视名称，多线直搜</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: TVBox 看板 -->
+        <div id="panel-tvbox" class="content-panel">
+            <!-- 订阅源提示 -->
+            <div class="tvbox-notice-bar">
+                <div class="notice-content">
+                    <span>📡</span>
+                    <span><strong>当前 TVBox 订阅：</strong>http://www.饭太硬.cc/tv (已自动动态获取并解密)</span>
+                </div>
+                <button class="notice-copy-btn" onclick="copyText('http://www.饭太硬.cc/tv')">复制订阅链接</button>
+            </div>
+
+            <!-- 看板头部搜索 -->
+            <div class="tvbox-panel-header">
+                <h3 class="search-title">配置源线路列表 (共 <span id="tvbox-count">0</span> 个)</h3>
+                <div class="tvbox-search-wrapper">
+                    <input type="text" id="tvbox-filter" class="search-input" placeholder="筛选站点名称..." oninput="filterTVBoxSources()">
+                </div>
+            </div>
+
+            <!-- TVBox 站点卡片网格 -->
+            <div id="tvbox-grid" class="tvbox-grid">
+                <!-- 动态渲染 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 模态配置弹窗 -->
+    <div class="modal-overlay" id="detail-modal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h4 class="modal-title" id="modal-site-name">站点详情</h4>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <pre class="json-preview" id="modal-json-content"></pre>
+            </div>
+            <div class="modal-footer">
+                <button class="act-btn open" onclick="closeModal()">关闭</button>
+                <button class="act-btn copy" id="modal-copy-btn">复制配置 JSON</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 提示 -->
+    <div class="toast-box" id="toast-box">
+        <span>✓</span> <span id="toast-message">复制成功</span>
+    </div>
+
+    <script>
+        // 全局状态管理
+        let tvboxSources = [];
+        let activeActionRow = null;
+
+        // 并发队列，用于限制并发下载 TS 分片数
+        class DownloadQueue {
+            constructor(concurrency = 3) {
+                this.concurrency = concurrency;
+                this.queue = [];
+                this.activeCount = 0;
+            }
+
+            add(fn) {
+                return new Promise((resolve, reject) => {
+                    this.queue.push({ fn, resolve, reject });
+                    this.next();
+                });
+            }
+
+            next() {
+                if (this.activeCount >= this.concurrency || this.queue.length === 0) {
+                    return;
+                }
+
+                const { fn, resolve, reject } = this.queue.shift();
+                this.activeCount++;
+
+                fn()
+                    .then(result => {
+                        this.activeCount--;
+                        resolve(result);
+                        this.next();
+                    })
+                    .catch(err => {
+                        this.activeCount--;
+                        reject(err);
+                        this.next();
+                    });
+            }
+        }
+
+        // 解析拼接相对/绝对 URL 路径
+        function resolveUrl(baseUrl, relativeUrl) {
+            if (relativeUrl.startsWith('http://') || relativeUrl.startsWith('https://')) {
+                return relativeUrl;
+            }
+            const baseObj = new URL(baseUrl);
+            if (relativeUrl.startsWith('/')) {
+                return baseObj.origin + relativeUrl;
+            }
+            const pathParts = baseObj.pathname.split('/');
+            pathParts.pop();
+            const basePath = pathParts.join('/');
+            return baseObj.origin + basePath + '/' + relativeUrl;
+        }
+
+        // 递归解析多级嵌套（如红牛资源等含有 Master Playlist 的子 M3U8）直到获取真实 TS 切片列表
+        // 同时解析 #EXT-X-KEY 加密信息（修复加密流下载后文件损坏的问题）
+        async function getRealTsUrls(m3u8Url) {
+            let currentUrl = m3u8Url;
+            let retries = 5; // 支持最多 5 级跳转寻址
+            let encryptionInfo = null; // {method, keyUri, iv}
+
+            while (retries > 0) {
+                const response = await fetch(currentUrl);
+                if (!response.ok) throw new Error(`请求 M3U8 失败: ${response.status}`);
+                const text = await response.text();
+
+                const lines = text.split('\n');
+                const tsUrls = [];
+                let isMaster = false;
+                let subM3u8Url = null;
+
+                for (let line of lines) {
+                    line = line.trim();
+                    if (!line) continue;
+
+                    // 解析加密密钥信息 #EXT-X-KEY:METHOD=AES-128,URI="...",IV=0x...
+                    // 修复核心：之前完全忽略了此标签，导致加密分片未解密、拼接后文件损坏
+                    if (line.startsWith('#EXT-X-KEY')) {
+                        const methodMatch = line.match(/METHOD=([^,]+)/);
+                        const uriMatch = line.match(/URI="([^"]+)"/);
+                        const ivMatch = line.match(/IV=([^,]+)/);
+                        const method = methodMatch ? methodMatch[1].trim() : 'NONE';
+                        if (method !== 'NONE') {
+                            encryptionInfo = {
+                                method: method,
+                                keyUri: uriMatch ? resolveUrl(currentUrl, uriMatch[1]) : null,
+                                iv: ivMatch ? ivMatch[1].trim() : null
+                            };
+                            console.log('检测到加密流，加密方式:', method, '密钥地址:', encryptionInfo.keyUri);
+                        }
+                    }
+
+                    // 判断是否含有多清晰度/主播放列表特征
+                    if (line.startsWith('#EXT-X-STREAM-INF') || line.includes('.m3u8')) {
+                        isMaster = true;
+                    }
+
+                    if (!line.startsWith('#')) {
+                        const resolved = resolveUrl(currentUrl, line);
+                        if (line.includes('.m3u8') || resolved.includes('.m3u8')) {
+                            subM3u8Url = resolved;
+                        } else {
+                            tsUrls.push(resolved);
+                        }
+                    }
+                }
+
+                if (isMaster && subM3u8Url) {
+                    console.log("检测到多级 M3U8 嵌套，重新寻址跳转至:", subM3u8Url);
+                    currentUrl = subM3u8Url;
+                    retries--;
+                } else {
+                    return { tsUrls, encryptionInfo };
+                }
+            }
+            throw new Error('嵌套层级过深或未能成功解析到真实的 TS 分片列表');
+        }
+
+        // 获取并缓存 AES 解密密钥（同一密钥只需请求一次）
+        const aesKeyCache = new Map(); // keyUri -> CryptoKey
+        async function fetchAesKey(keyUri) {
+            if (aesKeyCache.has(keyUri)) {
+                return aesKeyCache.get(keyUri);
+            }
+            const res = await fetch(keyUri);
+            if (!res.ok) throw new Error(`获取 AES 密钥失败: ${res.status}`);
+            const keyBuffer = await res.arrayBuffer();
+            const cryptoKey = await crypto.subtle.importKey(
+                'raw', keyBuffer, { name: 'AES-CBC' }, false, ['decrypt']
+            );
+            aesKeyCache.set(keyUri, cryptoKey);
+            return cryptoKey;
+        }
+
+        // 解密单个 TS 分片（AES-128-CBC，HLS 标准加密方式）
+        async function decryptTsFragment(arrayBuffer, encryptionInfo, segmentIndex) {
+            if (!encryptionInfo || encryptionInfo.method === 'NONE' || !encryptionInfo.keyUri) {
+                return arrayBuffer;
+            }
+            const cryptoKey = await fetchAesKey(encryptionInfo.keyUri);
+
+            // 确定 IV：m3u8 中指定则用指定值，否则用分片序号（128 位大端整数）
+            let iv;
+            if (encryptionInfo.iv) {
+                const ivHex = encryptionInfo.iv.replace(/^0x/i, '');
+                iv = new Uint8Array(16);
+                for (let i = 0; i < Math.min(ivHex.length, 32); i += 2) {
+                    iv[i / 2] = parseInt(ivHex.substr(i, 2), 16);
+                }
+            } else {
+                iv = new Uint8Array(16);
+                const view = new DataView(iv.buffer);
+                view.setUint32(12, segmentIndex);
+            }
+
+            try {
+                return await crypto.subtle.decrypt(
+                    { name: 'AES-CBC', iv: iv }, cryptoKey, arrayBuffer
+                );
+            } catch (e) {
+                // 解密失败：可能是该分片未加密、数据不完整、或服务器返回了非 TS 内容
+                // 检查原始数据是否为有效 TS（同步字节 0x47），是则直接用原始数据，否则跳过
+                const bytes = new Uint8Array(arrayBuffer);
+                if (bytes.length > 0 && bytes[0] === 0x47) {
+                    console.warn(`分片 ${segmentIndex} 解密失败但数据为有效 TS，可能未加密，使用原始数据`);
+                    return arrayBuffer;
+                }
+                console.warn(`分片 ${segmentIndex} 解密失败且数据非有效 TS，跳过该分片`);
+                return null;
+            }
+        }
+
+        // 使用 mux.js 将 TS 分片列表转封装为 fMP4（碎片化 MP4，主流播放器通用支持）
+        // 修复：HLS 采集站 TS 分片的 PTS 往往从编码器启动累计值开始（可达数万秒），
+        //       直接转封装会导致 MP4 时长膨胀（如 11 分钟视频显示 13 小时）。
+        //       方案：合并为连续 buffer + 归一化时间戳 + 修补 mvhd/mehd duration。
+        async function remuxTsToMp4(tsChunks) {
+            if (typeof muxjs === 'undefined') {
+                throw new Error('mux.js 库未加载，无法转封装为 MP4');
+            }
+
+            // 1. 将所有已解密 TS 分片拼接为一个连续 buffer
+            //    让 Transmuxer 按连续流处理，避免分片边界处时间戳归一化异常
+            const validChunks = tsChunks.filter(c => c);
+            const totalTsLength = validChunks.reduce((acc, c) => acc + c.byteLength, 0);
+            const combinedTs = new Uint8Array(totalTsLength);
+            let tsOffset = 0;
+            for (const chunk of validChunks) {
+                combinedTs.set(new Uint8Array(chunk), tsOffset);
+                tsOffset += chunk.byteLength;
+            }
+
+            return new Promise((resolve, reject) => {
+                // 2. keepOriginalTimestamps: false —— 归一化首帧时间戳到 0
+                const transmuxer = new muxjs.mp4.Transmuxer({
+                    keepOriginalTimestamps: false
+                });
+                const outputParts = [];
+                let hasInit = false;
+                let settled = false;
+
+                const timeout = setTimeout(() => {
+                    if (!settled) {
+                        settled = true;
+                        reject(new Error('转封装超时'));
+                    }
+                }, 60000);
+
+                transmuxer.on('data', (segment) => {
+                    if (!hasInit && segment.initSegment) {
+                        outputParts.push(segment.initSegment);
+                        hasInit = true;
+                    }
+                    if (segment.data) {
+                        outputParts.push(segment.data);
+                    }
+                });
+
+                transmuxer.on('done', () => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timeout);
+
+                    if (outputParts.length === 0) {
+                        reject(new Error('转封装未产生任何数据'));
+                        return;
+                    }
+
+                    // 拼接所有输出段为一个完整的 fMP4 文件
+                    const totalLength = outputParts.reduce((acc, part) => acc + part.byteLength, 0);
+                    const result = new Uint8Array(totalLength);
+                    let offset = 0;
+                    for (const part of outputParts) {
+                        result.set(part, offset);
+                        offset += part.byteLength;
+                    }
+
+                    // 3. 修复 fMP4 时间线：归一化 tfdt + 计算真实时长 + 写回 mvhd/mehd
+                    fixMp4Timeline(result);
+
+                    resolve(result.buffer);
+                });
+
+                // 一次性推入合并后的完整 TS 数据
+                transmuxer.push(combinedTs);
+                transmuxer.flush();
+            });
+        }
+
+        // 修复 fMP4 时间线
+        // 问题：HLS 采集站 TS 分片的 PTS 从编码器累计值开始（可达数万秒），
+        //       mux.js 把高 PTS 写入各 moof 的 tfdt 和 moov 的 mvhd/mehd duration，
+        //       导致 MP4 时长膨胀（如 11 分钟显示 13 小时）。
+        // 修复：
+        //   1. 读取 mvhd timescale
+        //   2. 遍历所有 moof → traf → tfdt 和 trun，提取每分片的起始解码时间和时长
+        //   3. 找到最小 tfdt 作为偏移量，所有 tfdt 减去偏移（归一化到 0 起始）
+        //   4. 计算真实总时长 = (最后分片 tfdt - 偏移) + 最后分片时长
+        //   5. 将真实时长写入 mvhd 和 mehd 的 duration 字段
+        // 这样播放器既能显示正确时长，又能正常快进定位。
+        function fixMp4Timeline(uint8) {
+            const view = new DataView(uint8.buffer);
+            const len = uint8.byteLength;
+
+            // 读取 box 头部（size + type）
+            function readBox(at) {
+                if (at + 8 > len) return null;
+                return {
+                    size: view.getUint32(at),
+                    type: String.fromCharCode(
+                        view.getUint8(at + 4), view.getUint8(at + 5),
+                        view.getUint8(at + 6), view.getUint8(at + 7)
+                    )
+                };
+            }
+
+            // 在容器 box 内查找指定类型的子 box
+            function findBox(containerStart, containerEnd, targetType) {
+                let p = containerStart;
+                while (p < containerEnd - 8) {
+                    const b = readBox(p);
+                    if (!b || b.size === 0) break;
+                    if (b.type === targetType) return { offset: p, size: b.size };
+                    p += b.size;
+                }
+                return null;
+            }
+
+            // 读取 tfdt 的 baseMediaDecodeTime（可能 4 字节或 8 字节）
+            function readTfdt(tfdtOffset) {
+                const version = view.getUint8(tfdtOffset + 8);
+                const dataPos = tfdtOffset + 12; // version(1) + flags(3)
+                if (version === 0) {
+                    return { value: view.getUint32(dataPos), version, dataPos };
+                } else {
+                    // 64 位：高位 * 2^32 + 低位
+                    const hi = view.getUint32(dataPos);
+                    const lo = view.getUint32(dataPos + 4);
+                    return { value: hi * 0x100000000 + lo, version, dataPos };
+                }
+            }
+
+            // 写入 tfdt 的 baseMediaDecodeTime
+            function writeTfdt(tfdtInfo, newValue) {
+                if (tfdtInfo.version === 0) {
+                    view.setUint32(tfdtInfo.dataPos, newValue);
+                } else {
+                    view.setUint32(tfdtInfo.dataPos, Math.floor(newValue / 0x100000000));
+                    view.setUint32(tfdtInfo.dataPos + 4, newValue & 0xFFFFFFFF);
+                }
+            }
+
+            // 从 trun 计算分片时长（所有 sample duration 之和）
+            function calcFragmentDuration(trafStart, trafEnd) {
+                const trun = findBox(trafStart, trafEnd, 'trun');
+                if (!trun) return 0;
+
+                const trunPos = trun.offset + 8; // 跳过 size + type
+                const flags = view.getUint32(trunPos) & 0x00FFFFFF; // version(1) + flags(3)
+                let pos = trunPos + 4; // 跳过 version + flags
+
+                const sampleCount = view.getUint32(pos);
+                pos += 4;
+
+                // data_offset（flags & 0x0001）
+                if (flags & 0x0001) pos += 4;
+                // first_sample_flags（flags & 0x0004）
+                if (flags & 0x0004) pos += 4;
+
+                const hasDuration = !!(flags & 0x0100);
+                const hasSize = !!(flags & 0x0200);
+                const hasFlags = !!(flags & 0x0400);
+                const hasCTO = !!(flags & 0x0800);
+                const entrySize = (hasDuration ? 4 : 0) + (hasSize ? 4 : 0) +
+                                  (hasFlags ? 4 : 0) + (hasCTO ? 4 : 0);
+
+                let totalDuration = 0;
+                if (hasDuration) {
+                    for (let i = 0; i < sampleCount; i++) {
+                        totalDuration += view.getUint32(pos);
+                        pos += entrySize;
+                    }
+                } else {
+                    // 无逐帧 duration，尝试从 tfhd 读默认值
+                    const tfhd = findBox(trafStart, trafEnd, 'tfhd');
+                    if (tfhd) {
+                        const tfhdPos = tfhd.offset + 8;
+                        const tfhdFlags = view.getUint32(tfhdPos) & 0x00FFFFFF;
+                        let tp = tfhdPos + 4 + 4; // version+flags + track_id
+                        if (tfhdFlags & 0x0008) { // default_sample_duration_present
+                            const defDur = view.getUint32(tp);
+                            totalDuration = defDur * sampleCount;
+                        }
+                    }
+                }
+                return totalDuration;
+            }
+
+            // ── Step 1: 读取 mvhd 的 timescale ──
+            let timescale = 0;
+            let mvhdOffset = -1;
+            let mvhdVersion = 0;
+            let moovOffset = -1;
+            let moovEnd = 0;
+
+            let pos = 0;
+            while (pos < len - 8) {
+                const box = readBox(pos);
+                if (!box || box.size === 0) break;
+                if (box.type === 'moov') {
+                    moovOffset = pos;
+                    moovEnd = pos + box.size;
+                    const mvhd = findBox(pos + 8, moovEnd, 'mvhd');
+                    if (mvhd) {
+                        mvhdOffset = mvhd.offset;
+                        mvhdVersion = view.getUint8(mvhd.offset + 8);
+                        if (mvhdVersion === 0) {
+                            timescale = view.getUint32(mvhd.offset + 20);
+                        } else {
+                            timescale = view.getUint32(mvhd.offset + 28);
+                        }
+                    }
+                    break;
+                }
+                pos += box.size;
+            }
+
+            if (timescale === 0) {
+                console.warn('fixMp4Timeline: 未找到 timescale，跳过');
+                return;
+            }
+
+            // ── Step 2: 遍历所有 moof，提取 tfdt 和分片时长 ──
+            const fragments = []; // {tfdtInfo, duration}
+            pos = 0;
+            while (pos < len - 8) {
+                const box = readBox(pos);
+                if (!box || box.size === 0) break;
+
+                if (box.type === 'moof') {
+                    const moofEnd = pos + box.size;
+                    const traf = findBox(pos + 8, moofEnd, 'traf');
+                    if (traf) {
+                        const trafEnd = traf.offset + traf.size;
+                        const tfdtBox = findBox(traf.offset + 8, trafEnd, 'tfdt');
+                        if (tfdtBox) {
+                            const tfdtInfo = readTfdt(tfdtBox.offset);
+                            const duration = calcFragmentDuration(traf.offset + 8, trafEnd);
+                            fragments.push({ tfdtInfo, duration });
+                        }
+                    }
+                }
+                pos += box.size;
+            }
+
+            if (fragments.length === 0) {
+                console.warn('fixMp4Timeline: 未找到 moof 分片，跳过');
+                return;
+            }
+
+            // ── Step 3: 归一化 tfdt（减去最小值，让时间线从 0 开始）──
+            const minTfdt = Math.min(...fragments.map(f => f.tfdtInfo.value));
+            for (const frag of fragments) {
+                const newTfdt = frag.tfdtInfo.value - minTfdt;
+                writeTfdt(frag.tfdtInfo, newTfdt);
+            }
+
+            // ── Step 4: 计算真实总时长 ──
+            const lastFrag = fragments[fragments.length - 1];
+            const totalDuration = (lastFrag.tfdtInfo.value - minTfdt) + lastFrag.duration;
+            console.log(`fixMp4Timeline: timescale=${timescale}, 总时长=${totalDuration} (${(totalDuration / timescale).toFixed(1)}秒, 约${(totalDuration / timescale / 60).toFixed(1)}分钟)`);
+
+            // ── Step 5: 写回 mvhd duration ──
+            if (mvhdOffset >= 0) {
+                if (mvhdVersion === 0) {
+                    view.setUint32(mvhdOffset + 24, totalDuration);
+                } else {
+                    view.setUint32(mvhdOffset + 32, Math.floor(totalDuration / 0x100000000));
+                    view.setUint32(mvhdOffset + 36, totalDuration & 0xFFFFFFFF);
+                }
+            }
+
+            // ── Step 6: 写回 mehd duration（moov → mvex → mehd）──
+            if (moovOffset >= 0) {
+                const mvex = findBox(moovOffset + 8, moovEnd, 'mvex');
+                if (mvex) {
+                    const mvexEnd = mvex.offset + mvex.size;
+                    const mehd = findBox(mvex.offset + 8, mvexEnd, 'mehd');
+                    if (mehd) {
+                        const mehdVer = view.getUint8(mehd.offset + 8);
+                        if (mehdVer === 0) {
+                            view.setUint32(mehd.offset + 12, totalDuration);
+                        } else {
+                            view.setUint32(mehd.offset + 12, Math.floor(totalDuration / 0x100000000));
+                            view.setUint32(mehd.offset + 16, totalDuration & 0xFFFFFFFF);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 解析真实视频地址：处理分享页等非直链 URL
+        // 如果 URL 明显是视频直链（.m3u8/.mp4/.ts/.flv），直接返回
+        // 否则 fetch 检查 Content-Type，如果是 HTML 则从中提取真实视频地址
+        async function resolveVideoUrl(url) {
+            // 明显的视频直链，无需解析
+            if (/\.(m3u8|mp4|ts|flv)(\?|#|$)/i.test(url)) {
+                return url;
+            }
+            try {
+                const res = await fetch(url);
+                const contentType = (res.headers.get('Content-Type') || '').toLowerCase();
+
+                // 如果返回的是 HTML 页面（分享页/播放页），尝试提取真实视频地址
+                if (contentType.includes('text/html')) {
+                    console.log('检测到分享页面，正在解析真实视频地址...', url);
+                    const html = await res.text();
+                    const videoUrl = extractVideoUrlFromHtml(html, url);
+                    if (videoUrl) {
+                        console.log('已解析到视频地址:', videoUrl);
+                        return videoUrl;
+                    }
+                    console.warn('未能从分享页面中提取到视频地址');
+                }
+                return url;
+            } catch (e) {
+                console.warn('解析视频地址失败（可能是 CORS 限制）:', e.message);
+                return url;
+            }
+        }
+
+        // 从 HTML 中提取视频地址（m3u8 / mp4）
+        function extractVideoUrlFromHtml(html, baseUrl) {
+            // 按优先级尝试多种匹配模式
+            const patterns = [
+                // JS 变量赋值：url: "...", src: "...", file: "...", source: "..."
+                /(?:url|src|source|file|api|playUrl|videoUrl)\s*[:=]\s*["'](https?:\/\/[^"']*\.m3u8[^"']*)["']/i,
+                /(?:url|src|source|file|api|playUrl|videoUrl)\s*[:=]\s*["'](https?:\/\/[^"']*\.mp4[^"']*)["']/i,
+                // 带引号的完整 URL
+                /["'](https?:\/\/[^"']*\.m3u8[^"']*)["']/i,
+                /["'](https?:\/\/[^"']*\.mp4[^"']*)["']/i,
+                // <video src="..."> 或 <source src="...">
+                /<(?:video|source)[^>]+src=["']([^"']+)["']/i,
+            ];
+
+            for (const pattern of patterns) {
+                const match = html.match(pattern);
+                if (match && match[1]) {
+                    let found = match[1];
+                    // 处理相对路径
+                    if (found.startsWith('//')) {
+                        found = 'https:' + found;
+                    } else if (!found.startsWith('http')) {
+                        found = resolveUrl(baseUrl, found);
+                    }
+                    return found;
+                }
+            }
+            return null;
+        }
+
+        // 前端浏览器下载总控
+        async function startBrowserDownload(videoName, epName, playUrl, lineId) {
+            // 解析真实视频地址（分享页 → 提取 m3u8/mp4 直链）
+            const resolvedUrl = await resolveVideoUrl(playUrl);
+            if (resolvedUrl !== playUrl) {
+                console.log('原始地址:', playUrl, '→ 解析为:', resolvedUrl);
+                playUrl = resolvedUrl;
+            }
+
+            // 去重：同一视频地址在当前页面只下载一次
+            if (downloadedUrls.has(playUrl)) {
+                showToast(`「${epName}」已下载过，跳过`, 'info');
+                console.log('跳过重复下载:', playUrl);
+                return;
+            }
+            downloadedUrls.add(playUrl);
+
+            // 生成本次下载任务的唯一 ID
+            const taskId = 'task-' + Date.now() + '-' + Math.round(Math.random() * 1000);
+
+            // 创建任务状态（支持暂停/删除）
+            const taskState = {
+                paused: false,
+                deleted: false,
+                abortController: new AbortController(),
+                playUrl: playUrl
+            };
+            taskStates.set(taskId, taskState);
+
+            // 自动兼容含有集数索引的 lineId
+            let cleanLineId = lineId;
+            if (!document.getElementById(`prog-container-${lineId}`) && lineId.includes('-')) {
+                const lastDash = lineId.lastIndexOf('-');
+                cleanLineId = lineId.substring(0, lastDash);
+            }
+
+            const progContainer = document.getElementById(`prog-container-${cleanLineId}`);
+            const progText = document.getElementById(`prog-text-${cleanLineId}`);
+            const progBar = document.getElementById(`prog-bar-${cleanLineId}`);
+
+            if (progContainer) {
+                progContainer.style.display = 'block';
+            }
+            if (progBar) {
+                progBar.style.width = '0%';
+                progBar.style.background = 'linear-gradient(90deg, var(--primary-purple), var(--primary-pink))';
+            }
+
+            // 动态向下载管理器插入专属任务条
+            const taskList = document.getElementById('dm-tasks-list');
+            if (taskList) {
+                const taskItem = document.createElement('div');
+                taskItem.className = 'dm-task-item';
+                taskItem.id = `dm-${taskId}`;
+                taskItem.innerHTML = `
+                    <div class="dm-task-title" title="${videoName} - ${epName}">${videoName} - ${epName}</div>
+                    <div class="dm-task-status-row">
+                        <span id="dm-status-text-${taskId}">初始化中...</span>
+                        <span id="dm-percent-text-${taskId}">0%</span>
+                    </div>
+                    <div class="dm-task-prog-bg">
+                        <div id="dm-bar-${taskId}" class="dm-task-prog-bar"></div>
+                    </div>
+                    <div class="dm-task-controls">
+                        <button class="dm-ctrl-btn" id="dm-pause-${taskId}" onclick="togglePauseDownload('${taskId}')">暂停</button>
+                        <button class="dm-ctrl-btn danger" onclick="deleteDownload('${taskId}')">删除</button>
+                    </div>
+                `;
+                taskList.appendChild(taskItem);
+            }
+
+            // 自动滑出显示下载管理器面板
+            toggleDownloadManager(true);
+            
+            // 更新活跃任务计数器
+            activeTasksCount++;
+            totalDownloadCount++;
+            updateDownloadStats();
+            const trigger = document.getElementById('download-manager-trigger');
+            if (trigger) trigger.style.display = 'flex';
+
+            const updateProgress = (text, percent = 0, isError = false) => {
+                if (progText) progText.textContent = text;
+                if (progBar) progBar.style.width = `${percent}%`;
+                if (isError) {
+                    if (progBar) progBar.style.background = '#ef4444'; // 红色
+                    if (progText) progText.style.color = '#f87171';
+                } else if (percent === 100) {
+                    if (progBar) progBar.style.background = '#10b981'; // 绿色
+                    if (progText) progText.style.color = '#34d399';
+                } else {
+                    if (progText) progText.style.color = 'var(--text-muted)';
+                }
+
+                // 同步更新下载管理器项
+                const dmText = document.getElementById(`dm-status-text-${taskId}`);
+                const dmPercent = document.getElementById(`dm-percent-text-${taskId}`);
+                const dmBar = document.getElementById(`dm-bar-${taskId}`);
+                
+                if (dmText) dmText.textContent = text;
+                if (dmPercent) dmPercent.textContent = `${percent}%`;
+                if (dmBar) {
+                    dmBar.style.width = `${percent}%`;
+                    if (isError) {
+                        dmBar.style.background = '#ef4444';
+                    } else if (percent === 100) {
+                        dmBar.style.background = '#10b981';
+                    }
+                }
+            };
+
+            // 全局包裹 try 捕获下载流程
+            try {
+
+            const isM3u8 = playUrl.includes('.m3u8') || playUrl.includes('index.m3u8') || playUrl.includes('m3u8');
+
+            if (isM3u8) {
+                try {
+                    updateProgress('正在解析多级 M3U8 索引...', 5);
+                    const { tsUrls, encryptionInfo } = await getRealTsUrls(playUrl);
+
+                    if (tsUrls.length === 0) {
+                        throw new Error('未在 M3U8 中查找到视频分片文件');
+                    }
+
+                    const encrypted = encryptionInfo && encryptionInfo.method !== 'NONE';
+                    updateProgress(
+                        `解析成功，共 ${tsUrls.length} 个分片${encrypted ? '（检测到 ' + encryptionInfo.method + ' 加密，将自动解密）' : ''}。开始并发下载(并发度:3)...`,
+                        10
+                    );
+
+                    const chunks = new Array(tsUrls.length);
+                    const queue = new DownloadQueue(3);
+                    let downloadedCount = 0;
+
+                    const downloadTasks = tsUrls.map((url, idx) => {
+                        return queue.add(async () => {
+                            // 已删除则跳过
+                            if (taskState.deleted) return;
+                            // 暂停则等待恢复
+                            while (taskState.paused && !taskState.deleted) {
+                                await new Promise(r => setTimeout(r, 500));
+                            }
+                            if (taskState.deleted) return;
+
+                            let retries = 5;
+                            while (retries > 0) {
+                                // 下载过程中也可能被暂停
+                                while (taskState.paused && !taskState.deleted) {
+                                    await new Promise(r => setTimeout(r, 500));
+                                }
+                                if (taskState.deleted) return;
+
+                                try {
+                                    const res = await fetch(url);
+                                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                                    const buffer = await res.arrayBuffer();
+                                    // 如果流是加密的，先解密再保存
+                                    chunks[idx] = encrypted
+                                        ? await decryptTsFragment(buffer, encryptionInfo, idx)
+                                        : buffer;
+                                    downloadedCount++;
+                                    const percent = Math.round((downloadedCount / tsUrls.length) * 70) + 10;
+                                    updateProgress(`正在并发下载分片: ${downloadedCount}/${tsUrls.length} (${Math.round((downloadedCount / tsUrls.length) * 100)}%)`, percent);
+                                    break;
+                                } catch (e) {
+                                    // 用户删除则直接退出，不重试
+                                    if (taskState.deleted) return;
+                                    retries--;
+                                    if (retries === 0) {
+                                        throw new Error(`分片 ${idx} 下载重试失败: ${e.message}`);
+                                    }
+                                    await new Promise(r => setTimeout(r, 1000));
+                                }
+                            }
+                        });
+                    });
+
+                    await Promise.all(downloadTasks);
+
+                    // 已删除则不继续转封装和保存
+                    if (taskState.deleted) return;
+
+                    // 尝试转封装为 MP4（失败时回退为 .ts）
+                    let blob;
+                    let filename;
+                    try {
+                        updateProgress('分片下载完毕，正在转封装为 MP4 格式...', 85);
+                        const mp4Buffer = await remuxTsToMp4(chunks);
+                        blob = new Blob([mp4Buffer], { type: 'video/mp4' });
+                        filename = `${videoName} - ${epName}.mp4`;
+                        updateProgress('转封装成功！正在保存为 .mp4 文件...', 100);
+                    } catch (remuxErr) {
+                        console.warn('MP4 转封装失败，回退为 .ts 格式:', remuxErr);
+                        blob = new Blob(chunks, { type: 'video/mp2t' });
+                        filename = `${videoName} - ${epName}.ts`;
+                        updateProgress('MP4 转封装失败，已回退保存为 .ts 格式（请使用 PotPlayer 或 VLC 播放）', 100);
+                    }
+
+                    const blobUrl = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = blobUrl;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(blobUrl);
+
+                    showToast('视频下载成功！');
+                } catch (err) {
+                    if (taskState.deleted) return; // 用户删除，静默退出
+                    console.error(err);
+                    updateProgress(`下载失败: ${err.message}`, 100, true);
+                    showToast('下载失败，请查看错误提示', 'error');
+                }
+            } else {
+                try {
+                    updateProgress('正在请求视频直链资源...', 10);
+                    const res = await fetch(playUrl);
+                    if (!res.ok) throw new Error(`状态码: ${res.status}`);
+                    
+                    const reader = res.body.getReader();
+                    const contentLength = +res.headers.get('Content-Length') || 0;
+                    
+                    let receivedLength = 0;
+                    const chunks = [];
+                    while(true) {
+                        const {done, value} = await reader.read();
+                        if (done) break;
+                        chunks.push(value);
+                        receivedLength += value.length;
+                        
+                        if (contentLength) {
+                            const percent = Math.round((receivedLength / contentLength) * 90) + 10;
+                            updateProgress(`正在下载视频文件: ${Math.round((receivedLength / 1024 / 1024) * 10) / 10}MB`, percent);
+                        } else {
+                            updateProgress(`正在下载视频文件: ${Math.round((receivedLength / 1024 / 1024) * 10) / 10}MB...`, 50);
+                        }
+                    }
+
+                    updateProgress('视频资源下载完成，合并生成本地文件...', 95);
+                    const blob = new Blob(chunks);
+                    updateProgress('视频文件下载完成！正在保存...', 100);
+
+                    const filename = `${videoName} - ${epName}.mp4`;
+                    const blobUrl = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = blobUrl;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(blobUrl);
+                    showToast('视频文件下载成功！');
+                } catch (err) {
+                    console.error(err);
+                    if (err.message.includes('Failed to fetch') || err.name === 'TypeError') {
+                        updateProgress('检测到该播放源因跨域安全策略(CORS)限制浏览器直接下载。已为您唤起新标签页下载/播放。', 100, true);
+                        showToast('已唤起新标签页下载/播放', 'error');
+                        const a = document.createElement('a');
+                        a.href = playUrl;
+                        a.target = '_blank';
+                        a.download = `${videoName} - ${epName}.mp4`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                    } else {
+                        updateProgress(`下载失败: ${err.message}`, 100, true);
+                        showToast('下载失败，请直接复制地址或在标签页中播放', 'error');
+                    }
+                }
+            }
+        } finally {
+                // 用户主动删除的任务已由 deleteDownload 处理清理，跳过
+                if (!taskState.deleted) {
+                    activeTasksCount = Math.max(0, activeTasksCount - 1);
+                    completedDownloadCount++;
+                    updateDownloadStats();
+
+                    const trigger = document.getElementById('download-manager-trigger');
+                    if (activeTasksCount === 0) {
+                        setTimeout(() => {
+                            if (activeTasksCount === 0 && trigger) {
+                                trigger.style.display = 'none';
+                            }
+                        }, 5000);
+                    }
+
+                    // 4 秒后自动从面板移除已经完成或失败的任务项
+                    setTimeout(() => {
+                        const el = document.getElementById(`dm-${taskId}`);
+                        if (el) el.remove();
+                    }, 4000);
+                }
+                taskStates.delete(taskId);
+            }
+        }
+
+        // 标签切换
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-item').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.content-panel').forEach(panel => panel.classList.remove('active'));
+
+            if (tab === 'search') {
+                document.querySelectorAll('.tab-item')[0].classList.add('active');
+                document.getElementById('panel-search').classList.add('active');
+            } else {
+                document.querySelectorAll('.tab-item')[1].classList.add('active');
+                document.getElementById('panel-tvbox').classList.add('active');
+                if (tvboxSources.length === 0) {
+                    loadTVBoxSources();
+                }
+            }
+        }
+
+        // 触发视频搜索
+        function triggerSearch() {
+            const keyword = document.getElementById('keyword-input').value.trim();
+            if (!keyword) {
+                showToast('请输入要搜索的影视名', 'error');
+                return;
+            }
+
+            const resultsContainer = document.getElementById('search-results');
+            const loadingSkeleton = document.getElementById('search-loading');
+
+            resultsContainer.style.display = 'none';
+            loadingSkeleton.style.display = 'flex';
+
+            fetch(`/api/video/query?wd=${encodeURIComponent(keyword)}`)
+                .then(res => res.json())
+                .then(data => {
+                    loadingSkeleton.style.display = 'none';
+                    resultsContainer.style.display = 'block';
+
+                    if (data.success && data.list && data.list.length > 0) {
+                        renderSearchResults(data.list);
+                    } else {
+                        resultsContainer.innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-icon">🔍</div>
+                                <p>未找到相关影视结果，请更换关键词重试</p>
+                            </div>
+                        `;
+                    }
+                })
+                .catch(err => {
+                    loadingSkeleton.style.display = 'none';
+                    resultsContainer.style.display = 'block';
+                    resultsContainer.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon">⚠️</div>
+                            <p>请求发生异常，请稍后重试: ${err}</p>
+                        </div>
+                    `;
+                });
+        }
+
+        // 渲染搜索结果
+        function renderSearchResults(list) {
+            const container = document.getElementById('search-results');
+            container.innerHTML = '';
+
+            list.forEach((video, videoIdx) => {
+                // 构建播放源线路
+                let sourcesHtml = '';
+                
+                // 遍历每个采集站
+                for (const [sourceName, playLines] of Object.entries(video.sources)) {
+                    // 遍历采集站下的每条子路线
+                    for (const [lineName, episodes] of Object.entries(playLines)) {
+                        const lineUniqueId = `line-${videoIdx}-${sourceName}-${lineName}`.replace(/[^a-zA-Z0-9-]/g, '_');
+                        
+                        // 将该线下的所有集数缓存到全局，方便一键批量下载读取
+                        if (!window.episodesCache) window.episodesCache = {};
+                        window.episodesCache[lineUniqueId] = episodes;
+
+                        sourcesHtml += `
+                            <div class="source-group">
+                                <div class="source-title" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <span>📶</span> ${sourceName}
+                                        <span class="source-badge">${lineName}</span>
+                                    </div>
+                                    <div style="display: flex; gap: 0.4rem;">
+                                        <button class="notice-copy-btn" style="background: rgba(139, 92, 246, 0.15); border-color: rgba(139, 92, 246, 0.3); color: var(--primary-purple); padding: 0.3rem 0.6rem; font-size: 0.8rem; margin: 0;" onclick="toggleSelectMode('${lineUniqueId}')">
+                                            ☑ 批量选择
+                                        </button>
+                                        <button class="notice-copy-btn" style="background: rgba(236, 72, 153, 0.15); border-color: rgba(236, 72, 153, 0.3); color: var(--primary-pink); padding: 0.3rem 0.6rem; font-size: 0.8rem; margin: 0;" onclick="triggerBatchDownload('${escapeUrl(video.name)}', '${lineUniqueId}')">
+                                            📥 一键下载整部
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="batch-prog-${lineUniqueId}" style="display: none; width: 100%; margin-bottom: 0.8rem; padding: 0.8rem; background: rgba(255,255,255,0.02); border: 1px dashed rgba(255,255,255,0.1); border-radius: 10px; font-size: 0.85rem;">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.3rem;">
+                                        <span id="batch-text-${lineUniqueId}" style="color: var(--primary-pink); font-weight: 600;">准备批量下载...</span>
+                                    </div>
+                                    <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; border: 1px solid var(--border-color);">
+                                        <div id="batch-bar-${lineUniqueId}" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--primary-purple), var(--primary-pink)); transition: width 0.3s;"></div>
+                                    </div>
+                                </div>
+                                <div id="select-toolbar-${lineUniqueId}" class="select-toolbar" style="display: none;">
+                                    <button class="select-toolbar-btn" onclick="selectAllEpisodes('${lineUniqueId}', true)">全选</button>
+                                    <button class="select-toolbar-btn" onclick="selectAllEpisodes('${lineUniqueId}', false)">取消全选</button>
+                                    <button class="select-toolbar-btn primary" onclick="downloadSelected('${escapeUrl(video.name)}', '${lineUniqueId}')">📥 下载选中</button>
+                                    <button class="select-toolbar-btn" onclick="exitSelectMode('${lineUniqueId}')">退出选择</button>
+                                    <span class="select-count" id="select-count-${lineUniqueId}">已选 0 集</span>
+                                </div>
+                                <div class="episode-grid">
+                        `;
+
+                        // 遍历分集
+                        episodes.forEach((ep, epIdx) => {
+                            sourcesHtml += `
+                                <button class="episode-btn" data-line-id="${lineUniqueId}" data-ep-idx="${epIdx}" onclick="onEpisodeClick(this, '${lineUniqueId}-${epIdx}', '${escapeUrl(ep.url)}', '${escapeUrl(video.name)}', '${escapeUrl(ep.name)}')">
+                                    ${ep.name}
+                                </button>
+                            `;
+                        });
+
+                        // 预埋的操作行（作为手风琴平滑展开）
+                        sourcesHtml += `
+                                    <div class="episode-actions-wrapper" id="act-${lineUniqueId}" style="flex-direction: column; align-items: stretch; gap: 0.6rem;">
+                                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; width: 100%;">
+                                            <div class="action-url-text" id="url-${lineUniqueId}">直链地址</div>
+                                            <div class="action-buttons">
+                                                <button class="act-btn copy" id="btn-copy-${lineUniqueId}">📋 复制地址</button>
+                                                <button class="act-btn copy" id="btn-down-${lineUniqueId}" style="background: var(--primary-pink); color: white;">📥 浏览器下载</button>
+                                                <a class="act-btn open" id="btn-open-${lineUniqueId}" target="_blank">🔗 浏览器打开</a>
+                                            </div>
+                                        </div>
+                                        <div id="prog-container-${lineUniqueId}" style="display: none; width: 100%; font-size: 0.85rem; border-top: 1px solid var(--border-color); padding-top: 0.6rem;">
+                                            <div style="display: flex; justify-content: space-between; margin-bottom: 0.3rem;">
+                                                <span id="prog-text-${lineUniqueId}" style="color: var(--text-muted);">准备下载: 0%</span>
+                                            </div>
+                                            <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; border: 1px solid var(--border-color);">
+                                                <div id="prog-bar-${lineUniqueId}" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--primary-purple), var(--primary-pink)); transition: width 0.2s;"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+
+                // 统一的默认海报
+                const picUrl = video.pic || 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?q=80&w=2070';
+
+                const cardHtml = `
+                    <article class="video-card">
+                        <div class="video-header">
+                            <img class="video-pic" src="${picUrl}" alt="${video.name}" onerror="this.src='https://images.unsplash.com/photo-1594909122845-11baa439b7bf?q=80&w=2070'">
+                            <div class="video-info">
+                                <h2 class="video-name">${video.name}</h2>
+                                <div class="video-meta">
+                                    <span class="meta-tag type">${video.type || '未分类'}</span>
+                                    <span class="meta-tag">${video.remarks || '状态未知'}</span>
+                                    <span class="meta-tag">📅 ${video.updated || '时间未知'}</span>
+                                </div>
+                                <div class="video-people">
+                                    <p><strong>导演:</strong> ${video.director || '未知'}</p>
+                                    <p><strong>主演:</strong> ${video.actor || '未知'}</p>
+                                </div>
+                                <p class="video-desc">${video.desc || '暂无简介'}</p>
+                            </div>
+                        </div>
+                        <div class="video-sources">
+                            ${sourcesHtml}
+                        </div>
+                    </article>
+                `;
+                container.insertAdjacentHTML('beforeend', cardHtml);
+            });
+        }
+
+        // 展开/收起 集数操作直链
+        // 集数点击路由：选择模式下切换选中，正常模式下展开操作栏
+        function onEpisodeClick(btn, lineIdBase, playUrl, videoName, epName) {
+            const lineId = btn.dataset.lineId;
+            if (selectModeLines.has(lineId)) {
+                const epIdx = parseInt(btn.dataset.epIdx);
+                const selected = selectedEps.get(lineId);
+                if (selected.has(epIdx)) {
+                    selected.delete(epIdx);
+                    btn.classList.remove('selected');
+                } else {
+                    selected.add(epIdx);
+                    btn.classList.add('selected');
+                }
+                const countEl = document.getElementById(`select-count-${lineId}`);
+                if (countEl) countEl.textContent = `已选 ${selected.size} 集`;
+            } else {
+                toggleEpisodeActions(btn, lineIdBase, playUrl, videoName, epName);
+            }
+        }
+
+        // 进入/退出批量选择模式
+        function toggleSelectMode(lineUniqueId) {
+            if (selectModeLines.has(lineUniqueId)) {
+                exitSelectMode(lineUniqueId);
+            } else {
+                selectModeLines.add(lineUniqueId);
+                selectedEps.set(lineUniqueId, new Set());
+                const toolbar = document.getElementById(`select-toolbar-${lineUniqueId}`);
+                if (toolbar) toolbar.style.display = 'flex';
+                document.querySelectorAll(`[data-line-id="${lineUniqueId}"]`).forEach(btn => {
+                    btn.classList.add('selectable');
+                });
+            }
+        }
+
+        function exitSelectMode(lineUniqueId) {
+            selectModeLines.delete(lineUniqueId);
+            selectedEps.delete(lineUniqueId);
+            const toolbar = document.getElementById(`select-toolbar-${lineUniqueId}`);
+            if (toolbar) toolbar.style.display = 'none';
+            document.querySelectorAll(`[data-line-id="${lineUniqueId}"]`).forEach(btn => {
+                btn.classList.remove('selectable', 'selected');
+            });
+        }
+
+        function selectAllEpisodes(lineUniqueId, selectAll) {
+            const selected = selectedEps.get(lineUniqueId);
+            if (!selected) return;
+            selected.clear();
+            document.querySelectorAll(`[data-line-id="${lineUniqueId}"]`).forEach(btn => {
+                if (selectAll) {
+                    selected.add(parseInt(btn.dataset.epIdx));
+                    btn.classList.add('selected');
+                } else {
+                    btn.classList.remove('selected');
+                }
+            });
+            const countEl = document.getElementById(`select-count-${lineUniqueId}`);
+            if (countEl) countEl.textContent = `已选 ${selected.size} 集`;
+        }
+
+        function downloadSelected(videoName, lineUniqueId) {
+            const selected = selectedEps.get(lineUniqueId);
+            if (!selected || selected.size === 0) {
+                showToast('请先选择要下载的集数', 'error');
+                return;
+            }
+            const allEpisodes = window.episodesCache ? window.episodesCache[lineUniqueId] : null;
+            if (!allEpisodes) {
+                showToast('未找到剧集数据', 'error');
+                return;
+            }
+            // 按集数顺序排列
+            const chosen = Array.from(selected).sort((a, b) => a - b).map(idx => allEpisodes[idx]);
+            exitSelectMode(lineUniqueId);
+            triggerBatchDownload(videoName, lineUniqueId, chosen);
+        }
+
+        function toggleEpisodeActions(btnEl, lineIdBase, playUrl, videoName, epName) {
+            // lineIdBase 比如 line_0_量子资源_lzm3u8-0
+            // 真实的 action wrapper id 应该是去掉了末尾的“-${epIdx}”
+            const lastDash = lineIdBase.lastIndexOf('-');
+            const lineId = lineIdBase.substring(0, lastDash);
+            
+            const actionRow = document.getElementById(`act-${lineId}`);
+            const urlText = document.getElementById(`url-${lineId}`);
+            const copyBtn = document.getElementById(`btn-copy-${lineId}`);
+            const downBtn = document.getElementById(`btn-down-${lineId}`);
+            const openBtn = document.getElementById(`btn-open-${lineId}`);
+            const progContainer = document.getElementById(`prog-container-${lineId}`);
+
+            // 如果当前点击的与上一个展开的行相同且是展开状态，则关闭
+            if (activeActionRow === actionRow && actionRow.style.display === 'flex') {
+                actionRow.style.display = 'none';
+                activeActionRow = null;
+                return;
+            }
+
+            // 关闭旧的操作行
+            if (activeActionRow) {
+                activeActionRow.style.display = 'none';
+            }
+
+            // 隐藏旧的进度条
+            if (progContainer) {
+                progContainer.style.display = 'none';
+            }
+
+            // 写入最新选中的播放地址
+            urlText.textContent = playUrl;
+            
+            // 重新绑定复制、下载和打开按钮事件
+            copyBtn.onclick = () => {
+                copyText(playUrl);
+            };
+            downBtn.onclick = () => {
+                startBrowserDownload(videoName, epName, playUrl, lineId);
+            };
+            openBtn.href = playUrl;
+
+            // 平滑展开
+            actionRow.style.display = 'flex';
+            activeActionRow = actionRow;
+        }
+
+        // 触发整部剧集的批量并发下载 (集数并发 3，单集分片并发 5)
+        async function triggerBatchDownload(videoName, lineUniqueId, customEpisodes) {
+            const episodes = customEpisodes || (window.episodesCache ? window.episodesCache[lineUniqueId] : null);
+            if (!episodes || episodes.length === 0) {
+                showToast('未找到可下载的剧集列表', 'error');
+                return;
+            }
+
+            const batchStatusDiv = document.getElementById(`batch-prog-${lineUniqueId}`);
+            const batchText = document.getElementById(`batch-text-${lineUniqueId}`);
+            const batchBar = document.getElementById(`batch-bar-${lineUniqueId}`);
+
+            batchStatusDiv.style.display = 'block';
+            batchBar.style.width = '0%';
+            batchBar.style.background = 'linear-gradient(90deg, var(--primary-purple), var(--primary-pink))';
+            batchText.textContent = `准备并发下载... (共 ${episodes.length} 集，并发 3 集)`;
+
+            const epQueue = new DownloadQueue(3); // 集数并发为 3
+            let processedCount = 0;
+
+            const downloadTasks = episodes.map((ep, i) => {
+                return epQueue.add(async () => {
+                    const epLineId = `${lineUniqueId}-${i}`;
+                    
+                    // 将对应线路的操作行展开显示
+                    const actionRow = document.getElementById(`act-${lineUniqueId}`);
+                    if (actionRow) {
+                        actionRow.style.display = 'flex';
+                        activeActionRow = actionRow;
+                    }
+
+                    try {
+                        // 启动单集下载（内部自动将分片并发设为5）
+                        await startBrowserDownload(videoName, ep.name, ep.url, epLineId);
+                    } catch (e) {
+                        console.error(`批量下载分集 [${ep.name}] 发生错误:`, e);
+                    }
+
+                    processedCount++;
+                    const percent = Math.round((processedCount / episodes.length) * 100);
+                    batchText.textContent = `批量下载中: 已处理 ${processedCount}/${episodes.length} 集...`;
+                    batchBar.style.width = `${percent}%`;
+                });
+            });
+
+            // 等待所有的集数全部下载完毕
+            await Promise.all(downloadTasks);
+
+            batchText.textContent = '整部剧集批量并发下载任务已全部处理完毕！';
+            batchBar.style.width = '100%';
+            batchBar.style.background = 'var(--primary-green)';
+            showToast('整部剧集批量下载全部唤起并合并成功！');
+        }
+
+        // 加载 TVBox 源线路看板
+        function loadTVBoxSources() {
+            const grid = document.getElementById('tvbox-grid');
+            grid.innerHTML = `
+                <div class="empty-state" style="grid-column: 1/-1;">
+                    <p>正在解密并拉取 TVBox 源配置...</p>
+                </div>
+            `;
+
+            fetch('/api/video/tvbox_sources')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.sites) {
+                        tvboxSources = data.sites;
+                        document.getElementById('tvbox-count').textContent = tvboxSources.length;
+                        renderTVBoxSources(tvboxSources);
+                    } else {
+                        grid.innerHTML = `
+                            <div class="empty-state" style="grid-column: 1/-1;">
+                                <p>获取订阅源失败: ${data.message || '未知异常'}</p>
+                            </div>
+                        `;
+                    }
+                })
+                .catch(err => {
+                    grid.innerHTML = `
+                        <div class="empty-state" style="grid-column: 1/-1;">
+                            <p>请求失败: ${err}</p>
+                        </div>
+                    `;
+                });
+        }
+
+        // 渲染 TVBox 线路列表
+        function renderTVBoxSources(sites) {
+            const grid = document.getElementById('tvbox-grid');
+            grid.innerHTML = '';
+
+            if (sites.length === 0) {
+                grid.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <p>没有筛选到符合条件的站点</p>
+                    </div>
+                `;
+                return;
+            }
+
+            sites.forEach(site => {
+                const typeText = site.type === 3 ? 'DRPY / JS' : (site.type === 0 ? 'XML 采集' : (site.type === 1 ? 'JSON 采集' : `类型:${site.type}`));
+                const searchable = site.searchable === 0 ? '❌ 禁搜索' : '🔍 可搜索';
+                
+                const card = `
+                    <div class="source-card">
+                        <div>
+                            <div class="source-card-header">
+                                <span class="source-card-name">${site.name}</span>
+                                <span class="source-card-type">${typeText}</span>
+                            </div>
+                            <div class="source-card-api">API: ${site.api}</div>
+                        </div>
+                        <div class="source-card-bottom">
+                            <span class="source-tag">${searchable}</span>
+                            <button class="source-detail-btn" onclick="showSiteDetail('${site.key}')">详情 / 配置 JSON</button>
+                        </div>
+                    </div>
+                `;
+                grid.insertAdjacentHTML('beforeend', card);
+            });
+        }
+
+        // 过滤筛选 TVBox
+        function filterTVBoxSources() {
+            const query = document.getElementById('tvbox-filter').value.toLowerCase().trim();
+            const filtered = tvboxSources.filter(s => 
+                s.name.toLowerCase().includes(query) || 
+                (s.key && s.key.toLowerCase().includes(query)) ||
+                (s.api && s.api.toLowerCase().includes(query))
+            );
+            renderTVBoxSources(filtered);
+        }
+
+        // 展示站点模态弹窗
+        function showSiteDetail(key) {
+            const site = tvboxSources.find(s => s.key === key);
+            if (!site) return;
+
+            document.getElementById('modal-site-name').textContent = `站点配置: ${site.name}`;
+            const jsonStr = JSON.stringify(site, null, 2);
+            document.getElementById('modal-json-content').textContent = jsonStr;
+            
+            const copyBtn = document.getElementById('modal-copy-btn');
+            copyBtn.onclick = () => {
+                copyText(jsonStr);
+                closeModal();
+            };
+
+            document.getElementById('detail-modal').style.display = 'flex';
+        }
+
+        // 关闭弹窗
+        function closeModal() {
+            document.getElementById('detail-modal').style.display = 'none';
+        }
+
+        // 复制文本工具函数
+        function copyText(text) {
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showToast('复制成功');
+                }).catch(err => {
+                    fallbackCopy(text);
+                });
+            } else {
+                fallbackCopy(text);
+            }
+        }
+
+        function fallbackCopy(text) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed"; 
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showToast('复制成功');
+            } catch (err) {
+                showToast('复制失败，请手动选择复制', 'error');
+            }
+            document.body.removeChild(textArea);
+        }
+
+        // 全局 Toast 动画
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast-box');
+            const toastMsg = document.getElementById('toast-message');
+            
+            toastMsg.textContent = message;
+            if (type === 'error') {
+                toast.style.background = '#ef4444';
+                toast.style.boxShadow = '0 10px 25px rgba(239, 68, 68, 0.3)';
+            } else {
+                toast.style.background = 'var(--primary-green)';
+                toast.style.boxShadow = '0 10px 25px rgba(16, 185, 129, 0.3)';
+            }
+            
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 2000);
+        }
+
+        // 转义 URL 防止 JS 语法崩溃
+        function escapeUrl(url) {
+            return url.replace(/'/g, "\\'");
+        }
+
+        // 📥 全局后台下载任务管理器控制
+        let activeTasksCount = 0;
+        let totalDownloadCount = 0;     // 总下载数（含成/败/删）
+        let completedDownloadCount = 0; // 已完成数（不含被删除的）
+        // 记录当前页面已下载（或正在下载）的 m3u8 地址，避免单集与批量下载重复
+        const downloadedUrls = new Set();
+        // 记录每个下载任务的状态（暂停/删除/中止控制器）
+        const taskStates = new Map(); // taskId -> { paused, deleted, abortController, playUrl }
+        // 批量选择模式状态
+        const selectModeLines = new Set(); // 正在选择模式的 lineUniqueId
+        const selectedEps = new Map(); // lineUniqueId -> Set<epIdx>
+        
+        function toggleDownloadManager(show) {
+            const dm = document.getElementById('download-manager');
+            if (dm) {
+                dm.style.display = show ? 'flex' : 'none';
+            }
+        }
+
+        function togglePauseDownload(taskId) {
+            const state = taskStates.get(taskId);
+            if (!state || state.deleted) return;
+            state.paused = !state.paused;
+            const btn = document.getElementById(`dm-pause-${taskId}`);
+            const statusText = document.getElementById(`dm-status-text-${taskId}`);
+            if (state.paused) {
+                if (btn) btn.textContent = '继续';
+                if (statusText) statusText.textContent = '⏸ 已暂停';
+            } else {
+                if (btn) btn.textContent = '暂停';
+            }
+            syncPauseAllBtn();
+        }
+
+        function togglePauseAll() {
+            const allBtn = document.getElementById('dm-pause-all');
+            if (!allBtn) return;
+            // 判断是否有正在运行的任务
+            let anyRunning = false;
+            taskStates.forEach(s => { if (!s.deleted && !s.paused) anyRunning = true; });
+            const shouldPause = anyRunning;
+            taskStates.forEach((state, taskId) => {
+                if (state.deleted) return;
+                state.paused = shouldPause;
+                const btn = document.getElementById(`dm-pause-${taskId}`);
+                const statusText = document.getElementById(`dm-status-text-${taskId}`);
+                if (shouldPause) {
+                    if (btn) btn.textContent = '继续';
+                    if (statusText) statusText.textContent = '⏸ 已暂停';
+                } else {
+                    if (btn) btn.textContent = '暂停';
+                }
+            });
+            allBtn.textContent = shouldPause ? '全部继续' : '全部暂停';
+        }
+
+        // 单个任务暂停/恢复后同步"全部暂停"按钮文字
+        function syncPauseAllBtn() {
+            const allBtn = document.getElementById('dm-pause-all');
+            if (!allBtn) return;
+            let anyRunning = false;
+            let anyPaused = false;
+            taskStates.forEach(s => {
+                if (s.deleted) return;
+                if (s.paused) anyPaused = true; else anyRunning = true;
+            });
+            if (anyRunning) {
+                allBtn.textContent = '全部暂停';
+            } else if (anyPaused) {
+                allBtn.textContent = '全部继续';
+            }
+        }
+
+        function deleteDownload(taskId) {
+            const state = taskStates.get(taskId);
+            if (state) {
+                state.deleted = true;
+                state.paused = false;
+                state.abortController.abort();
+                // 允许重新下载
+                downloadedUrls.delete(state.playUrl);
+            }
+            // 移除任务条
+            const el = document.getElementById(`dm-${taskId}`);
+            if (el) el.remove();
+            // 更新计数
+            activeTasksCount = Math.max(0, activeTasksCount - 1);
+            updateDownloadStats();
+            const trigger = document.getElementById('download-manager-trigger');
+            if (activeTasksCount === 0 && trigger) {
+                trigger.style.display = 'none';
+            }
+            taskStates.delete(taskId);
+        }
+
+        function updateDownloadStats() {
+            const totalEl = document.getElementById('dm-total');
+            const doneEl = document.getElementById('dm-done');
+            const activeEl = document.getElementById('dm-active-stats');
+            const triggerCount = document.getElementById('dm-active-count');
+            if (totalEl) totalEl.textContent = totalDownloadCount;
+            if (doneEl) doneEl.textContent = completedDownloadCount;
+            if (activeEl) activeEl.textContent = activeTasksCount;
+            if (triggerCount) triggerCount.textContent = activeTasksCount;
+        }
+    </script>
+    
+    <!-- 📥 后台下载管理器悬浮面板 -->
+    <div id="download-manager" class="download-manager-panel">
+        <div class="dm-header">
+            <span>📥 后台下载管理器</span>
+            <div style="display:flex;align-items:center;gap:0.4rem;">
+                <button id="dm-pause-all" class="dm-ctrl-btn" style="font-size:0.72rem;" onclick="togglePauseAll()">全部暂停</button>
+                <button class="dm-close-btn" onclick="toggleDownloadManager(false)">−</button>
+            </div>
+        </div>
+        <div class="dm-stats" id="dm-stats">
+            <span>📊 总 <strong id="dm-total">0</strong></span>
+            <span>✅ 完成 <strong id="dm-done">0</strong></span>
+            <span>⏳ 进行中 <strong id="dm-active-stats">0</strong></span>
+        </div>
+        <div id="dm-tasks-list" class="dm-tasks-list"></div>
+    </div>
+    
+    <!-- 触发悬浮按钮 -->
+    <div id="download-manager-trigger" class="download-manager-trigger" onclick="toggleDownloadManager(true)">
+        <span>📥</span> <span id="dm-active-count">0</span> 个任务下载中...
+    </div>
+</body>
+</html>
