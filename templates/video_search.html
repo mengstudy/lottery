@@ -4,10 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🎬 聚合视频搜索 & TVBox 订阅解析</title>
-    <!-- Google Fonts Inter & Outfit -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
-    <!-- mux.js: 用于将 TS 分片转封装为 fMP4（碎片化 MP4），参考 m3u8-downloader 的 mux-mp4.js 方案 -->
-    <script src="https://cdn.jsdelivr.net/npm/mux.js@7.0.3/dist/mux.js"></script>
+    <!-- 注入内嵌 Favicon 消除 404 报错 -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎬</text></svg>">
     <style>
         :root {
             --bg-color: #0b0f19;
@@ -26,7 +24,7 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
         }
 
         body {
@@ -57,7 +55,7 @@
         }
 
         .nav-logo {
-            font-family: 'Outfit', sans-serif;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             font-size: 1.6rem;
             font-weight: 800;
             background: linear-gradient(135deg, var(--primary-purple), var(--primary-pink));
@@ -159,7 +157,7 @@
             font-size: 1.5rem;
             font-weight: 700;
             margin-bottom: 1rem;
-            font-family: 'Outfit', sans-serif;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #fff, #94a3b8);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -1916,7 +1914,12 @@
             }
         }
 
-        // 触发视频搜索
+        // 全局流式变量与映射缓存
+        window.activeEventSource = null;
+        window.videoCardMap = {};
+        window.videoGlobalIdx = 0;
+
+        // 触发视频流式搜索
         function triggerSearch() {
             const keyword = document.getElementById('keyword-input').value.trim();
             if (!keyword) {
@@ -1924,61 +1927,170 @@
                 return;
             }
 
+            // 若已有连接在运行，先行中断
+            if (window.activeEventSource) {
+                window.activeEventSource.close();
+                window.activeEventSource = null;
+            }
+
             const resultsContainer = document.getElementById('search-results');
             const loadingSkeleton = document.getElementById('search-loading');
 
-            resultsContainer.style.display = 'none';
+            // 重置状态与映射
+            window.videoCardMap = {};
+            window.videoGlobalIdx = 0;
+            
             loadingSkeleton.style.display = 'flex';
+            resultsContainer.style.display = 'none';
+            resultsContainer.innerHTML = `
+                <div id="stream-status-bar" style="margin-bottom: 1.5rem; padding: 0.8rem 1.2rem; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 12px; font-size: 0.9rem; color: var(--primary-purple); display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 0.6rem;">
+                        <span class="pulse-dot" style="display: inline-block; width: 10px; height: 10px; background: var(--primary-purple); border-radius: 50%; box-shadow: 0 0 10px var(--primary-purple);"></span>
+                        <span id="stream-status-text">⚡ 正在并发流式检索中 (就绪: 0 源)...</span>
+                    </div>
+                    <span id="stream-status-count" style="font-size: 0.8rem; opacity: 0.8;">就绪进度: 0/4</span>
+                </div>
+                <div id="stream-cards-container"></div>
+            `;
 
-            fetch(`/api/video/query?wd=${encodeURIComponent(keyword)}`)
-                .then(res => res.json())
-                .then(data => {
-                    loadingSkeleton.style.display = 'none';
-                    resultsContainer.style.display = 'block';
+            let receivedCount = 0;
+            let totalSources = 4;
+            let hasReceivedAnyData = false;
 
-                    if (data.success && data.list && data.list.length > 0) {
-                        renderSearchResults(data.list);
-                    } else {
-                        resultsContainer.innerHTML = `
+            const eventSource = new EventSource(`/api/video/stream_query?wd=${encodeURIComponent(keyword)}`);
+            window.activeEventSource = eventSource;
+
+            eventSource.onmessage = function(e) {
+                if (e.data === '[DONE]') {
+                    eventSource.close();
+                    window.activeEventSource = null;
+                    const statusText = document.getElementById('stream-status-text');
+                    const pulseDot = document.querySelector('.pulse-dot');
+                    if (pulseDot) pulseDot.style.background = 'var(--primary-green)';
+                    if (statusText) statusText.innerText = `✅ 检索完成 (共响应 ${receivedCount}/${totalSources} 个数据源)`;
+                    
+                    if (!hasReceivedAnyData) {
+                        loadingSkeleton.style.display = 'none';
+                        resultsContainer.style.display = 'block';
+                        document.getElementById('stream-cards-container').innerHTML = `
                             <div class="empty-state">
                                 <div class="empty-icon">🔍</div>
                                 <p>未找到相关影视结果，请更换关键词重试</p>
                             </div>
                         `;
                     }
-                })
-                .catch(err => {
-                    loadingSkeleton.style.display = 'none';
-                    resultsContainer.style.display = 'block';
-                    resultsContainer.innerHTML = `
+                    return;
+                }
+
+                try {
+                    const data = JSON.parse(e.data);
+                    if (data.error) {
+                        showToast(data.error, 'error');
+                        return;
+                    }
+
+                    receivedCount++;
+                    if (data.total_sources) totalSources = data.total_sources;
+
+                    const statusText = document.getElementById('stream-status-text');
+                    const statusCount = document.getElementById('stream-status-count');
+                    if (statusText) statusText.innerText = `⚡ 正在并发流式检索中 (最新就绪: ${data.source})...`;
+                    if (statusCount) statusCount.innerText = `就绪进度: ${receivedCount}/${totalSources}`;
+
+                    if (data.results && data.results.length > 0) {
+                        hasReceivedAnyData = true;
+                        loadingSkeleton.style.display = 'none';
+                        resultsContainer.style.display = 'block';
+                        appendStreamResults(data.source, data.results);
+                    }
+                } catch (err) {
+                    console.error('解析流式数据失败:', err);
+                }
+            };
+
+            eventSource.onerror = function(err) {
+                console.error('SSE 连接异常:', err);
+                eventSource.close();
+                window.activeEventSource = null;
+                loadingSkeleton.style.display = 'none';
+                resultsContainer.style.display = 'block';
+                if (!hasReceivedAnyData) {
+                    document.getElementById('stream-cards-container').innerHTML = `
                         <div class="empty-state">
                             <div class="empty-icon">⚠️</div>
-                            <p>请求发生异常，请稍后重试: ${err}</p>
+                            <p>请求发生异常，请稍后重试</p>
                         </div>
                     `;
-                });
+                }
+            };
         }
 
-        // 渲染搜索结果
-        function renderSearchResults(list) {
-            const container = document.getElementById('search-results');
-            container.innerHTML = '';
+        // 流式增量渲染卡片与线路
+        function appendStreamResults(sourceName, resultsList) {
+            const cardsContainer = document.getElementById('stream-cards-container');
+            if (!cardsContainer) return;
 
-            list.forEach((video, videoIdx) => {
-                // 构建播放源线路
-                let sourcesHtml = '';
+            resultsList.forEach(item => {
+                const itemKey = (item.name + '_' + (item.type || '')).toLowerCase().replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_');
                 
-                // 遍历每个采集站
-                for (const [sourceName, playLines] of Object.entries(video.sources)) {
-                    // 遍历采集站下的每条子路线
-                    for (const [lineName, episodes] of Object.entries(playLines)) {
-                        const lineUniqueId = `line-${videoIdx}-${sourceName}-${lineName}`.replace(/[^a-zA-Z0-9-]/g, '_');
+                let cardObj = window.videoCardMap[itemKey];
+                if (!cardObj) {
+                    const videoIdx = window.videoGlobalIdx++;
+                    const picUrl = item.pic || 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?q=80&w=2070';
+                    
+                    const cardEl = document.createElement('article');
+                    cardEl.className = 'video-card';
+                    cardEl.innerHTML = `
+                        <div class="video-header">
+                            <img class="video-pic" src="${picUrl}" alt="${item.name}" onerror="this.src='https://images.unsplash.com/photo-1594909122845-11baa439b7bf?q=80&w=2070'">
+                            <div class="video-info">
+                                <h2 class="video-name">${item.name}</h2>
+                                <div class="video-meta">
+                                    <span class="meta-tag type">${item.type || '未分类'}</span>
+                                    <span class="meta-tag">${item.remarks || '状态未知'}</span>
+                                    <span class="meta-tag">📅 ${item.updated || '时间未知'}</span>
+                                </div>
+                                <div class="video-people">
+                                    <p><strong>导演:</strong> ${item.director || '未知'}</p>
+                                    <p><strong>主演:</strong> ${item.actor || '未知'}</p>
+                                </div>
+                                <p class="video-desc">${item.desc || '暂无简介'}</p>
+                            </div>
+                        </div>
+                        <div class="video-sources"></div>
+                    `;
+                    cardsContainer.appendChild(cardEl);
+
+                    cardObj = {
+                        el: cardEl,
+                        sourcesContainer: cardEl.querySelector('.video-sources'),
+                        videoName: item.name,
+                        videoIdx: videoIdx
+                    };
+                    window.videoCardMap[itemKey] = cardObj;
+                } else {
+                    if (item.pic && cardObj.el.querySelector('.video-pic').src.includes('unsplash')) {
+                        cardObj.el.querySelector('.video-pic').src = item.pic;
+                    }
+                }
+
+                if (item.play_lines) {
+                    for (const [lineName, episodes] of Object.entries(item.play_lines)) {
+                        const lineUniqueId = `line-${cardObj.videoIdx}-${sourceName}-${lineName}`.replace(/[^a-zA-Z0-9-]/g, '_');
                         
-                        // 将该线下的所有集数缓存到全局，方便一键批量下载读取
                         if (!window.episodesCache) window.episodesCache = {};
                         window.episodesCache[lineUniqueId] = episodes;
 
-                        sourcesHtml += `
+                        let episodesHtml = '';
+                        episodes.forEach((ep, epIdx) => {
+                            episodesHtml += `
+                                <button class="episode-btn" data-line-id="${lineUniqueId}" data-ep-idx="${epIdx}" onclick="onEpisodeClick(this, '${lineUniqueId}-${epIdx}', '${escapeUrl(ep.url)}', '${escapeUrl(cardObj.videoName)}', '${escapeUrl(ep.name)}')">
+                                    ${ep.name}
+                                </button>
+                            `;
+                        });
+
+                        const sourceGroupHtml = `
                             <div class="source-group">
                                 <div class="source-title" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                                     <div style="display: flex; align-items: center; gap: 0.5rem;">
@@ -1989,7 +2101,7 @@
                                         <button class="notice-copy-btn" style="background: rgba(139, 92, 246, 0.15); border-color: rgba(139, 92, 246, 0.3); color: var(--primary-purple); padding: 0.3rem 0.6rem; font-size: 0.8rem; margin: 0;" onclick="toggleSelectMode('${lineUniqueId}')">
                                             ☑ 批量选择
                                         </button>
-                                        <button class="notice-copy-btn" style="background: rgba(236, 72, 153, 0.15); border-color: rgba(236, 72, 153, 0.3); color: var(--primary-pink); padding: 0.3rem 0.6rem; font-size: 0.8rem; margin: 0;" onclick="triggerBatchDownload('${escapeUrl(video.name)}', '${lineUniqueId}')">
+                                        <button class="notice-copy-btn" style="background: rgba(236, 72, 153, 0.15); border-color: rgba(236, 72, 153, 0.3); color: var(--primary-pink); padding: 0.3rem 0.6rem; font-size: 0.8rem; margin: 0;" onclick="triggerBatchDownload('${escapeUrl(cardObj.videoName)}', '${lineUniqueId}')">
                                             📥 一键下载整部
                                         </button>
                                     </div>
@@ -2005,24 +2117,12 @@
                                 <div id="select-toolbar-${lineUniqueId}" class="select-toolbar" style="display: none;">
                                     <button class="select-toolbar-btn" onclick="selectAllEpisodes('${lineUniqueId}', true)">全选</button>
                                     <button class="select-toolbar-btn" onclick="selectAllEpisodes('${lineUniqueId}', false)">取消全选</button>
-                                    <button class="select-toolbar-btn primary" onclick="downloadSelected('${escapeUrl(video.name)}', '${lineUniqueId}')">📥 下载选中</button>
+                                    <button class="select-toolbar-btn primary" onclick="downloadSelected('${escapeUrl(cardObj.videoName)}', '${lineUniqueId}')">📥 下载选中</button>
                                     <button class="select-toolbar-btn" onclick="exitSelectMode('${lineUniqueId}')">退出选择</button>
                                     <span class="select-count" id="select-count-${lineUniqueId}">已选 0 集</span>
                                 </div>
                                 <div class="episode-grid">
-                        `;
-
-                        // 遍历分集
-                        episodes.forEach((ep, epIdx) => {
-                            sourcesHtml += `
-                                <button class="episode-btn" data-line-id="${lineUniqueId}" data-ep-idx="${epIdx}" onclick="onEpisodeClick(this, '${lineUniqueId}-${epIdx}', '${escapeUrl(ep.url)}', '${escapeUrl(video.name)}', '${escapeUrl(ep.name)}')">
-                                    ${ep.name}
-                                </button>
-                            `;
-                        });
-
-                        // 预埋的操作行（作为手风琴平滑展开）
-                        sourcesHtml += `
+                                    ${episodesHtml}
                                     <div class="episode-actions-wrapper" id="act-${lineUniqueId}" style="flex-direction: column; align-items: stretch; gap: 0.6rem;">
                                         <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; width: 100%;">
                                             <div class="action-url-text" id="url-${lineUniqueId}">直链地址</div>
@@ -2044,38 +2144,12 @@
                                 </div>
                             </div>
                         `;
+                        cardObj.sourcesContainer.insertAdjacentHTML('beforeend', sourceGroupHtml);
                     }
                 }
-
-                // 统一的默认海报
-                const picUrl = video.pic || 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?q=80&w=2070';
-
-                const cardHtml = `
-                    <article class="video-card">
-                        <div class="video-header">
-                            <img class="video-pic" src="${picUrl}" alt="${video.name}" onerror="this.src='https://images.unsplash.com/photo-1594909122845-11baa439b7bf?q=80&w=2070'">
-                            <div class="video-info">
-                                <h2 class="video-name">${video.name}</h2>
-                                <div class="video-meta">
-                                    <span class="meta-tag type">${video.type || '未分类'}</span>
-                                    <span class="meta-tag">${video.remarks || '状态未知'}</span>
-                                    <span class="meta-tag">📅 ${video.updated || '时间未知'}</span>
-                                </div>
-                                <div class="video-people">
-                                    <p><strong>导演:</strong> ${video.director || '未知'}</p>
-                                    <p><strong>主演:</strong> ${video.actor || '未知'}</p>
-                                </div>
-                                <p class="video-desc">${video.desc || '暂无简介'}</p>
-                            </div>
-                        </div>
-                        <div class="video-sources">
-                            ${sourcesHtml}
-                        </div>
-                    </article>
-                `;
-                container.insertAdjacentHTML('beforeend', cardHtml);
             });
         }
+
 
         // 展开/收起 集数操作直链
         // 集数点击路由：选择模式下切换选中，正常模式下展开操作栏
@@ -2543,5 +2617,8 @@
     <div id="download-manager-trigger" class="download-manager-trigger" onclick="toggleDownloadManager(true)">
         <span>📥</span> <span id="dm-active-count">0</span> 个任务下载中...
     </div>
+
+    <!-- mux.js: 后置异步加载，用于切片下载时将 TS 封装为 MP4，不影响首屏解析速度 -->
+    <script src="https://cdn.jsdelivr.net/npm/mux.js@7.0.3/dist/mux.js" defer></script>
 </body>
 </html>

@@ -207,3 +207,37 @@ def search_aggregate(keyword):
                 merged[key]["director"] = item["director"]
                 
     return list(merged.values())
+
+
+def search_stream_generator(keyword):
+    """
+    流式检索生成器：每就绪一个源，即刻 yield 该源的检索结果
+    
+    Args:
+        keyword (str): 检索关键词
+        
+    Yields:
+        dict: {"source": 采集站名称, "results": 该站检索结果列表, "total_sources": 总源数}
+    """
+    if not keyword:
+        return
+
+    total_sources = len(CMS_SOURCES)
+    with ThreadPoolExecutor(max_workers=total_sources) as executor:
+        futures = {
+            executor.submit(search_single_source, name, url, keyword): name 
+            for name, url in CMS_SOURCES.items()
+        }
+        for future in as_completed(futures):
+            site_name = futures[future]
+            try:
+                results = future.result()
+            except Exception as e:
+                print(f"流式检索源 [{site_name}] 异常: {e}")
+                results = []
+            yield {
+                "source": site_name,
+                "results": results,
+                "total_sources": total_sources
+            }
+

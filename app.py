@@ -3,7 +3,7 @@ Flask 应用主入口
 提供 Web 界面和 API 接口
 """
 import json
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, Response, stream_with_context
 from pathlib import Path
 import sys
 
@@ -20,7 +20,8 @@ from database.kl8_db_manager import kl8_db_manager
 from analyzer.kl8_stats_calculator import kl8_calculator
 from crawler.kl8_crawler import kl8_crawler
 from functools import wraps
-from analyzer.video_searcher import search_aggregate, decrypt_tvbox_config
+from analyzer.video_searcher import search_aggregate, decrypt_tvbox_config, search_stream_generator
+
 
 
 # 操作口令（统一配置）
@@ -1432,6 +1433,27 @@ def api_video_query():
         return jsonify({'success': True, 'list': results})
     except Exception as e:
         return jsonify({'success': False, 'message': f'搜索发生异常: {str(e)}', 'list': []})
+
+
+@app.route('/api/video/stream_query')
+def api_video_stream_query():
+    """流式视频搜索 API (Server-Sent Events)"""
+    wd = request.args.get('wd', '').strip()
+    if not wd:
+        return Response("data: {\"error\": \"搜索关键词不能为空\"}\n\n", mimetype='text/event-stream')
+
+    def generate():
+        try:
+            for chunk in search_stream_generator(wd):
+                data_str = json.dumps(chunk, ensure_ascii=False)
+                yield f"data: {data_str}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            err_data = json.dumps({"error": str(e)}, ensure_ascii=False)
+            yield f"data: {err_data}\n\n"
+
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
+
 
 
 @app.route('/api/video/tvbox_sources')
