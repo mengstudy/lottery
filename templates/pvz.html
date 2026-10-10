@@ -1,0 +1,1839 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>植物大战僵尸 - 经典网页版</title>
+    <style>
+        :root {
+            --primary: #48bb78;
+            --primary-dark: #2f855a;
+            --accent: #ecc94b;
+            --danger: #e53e3e;
+            --bg-dark: #1a202c;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            background-image: radial-gradient(circle at 50% 20%, #2d3748 0%, #171923 100%);
+            color: #fff;
+            font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow-x: hidden;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .header-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 1040px;
+            margin-bottom: 8px;
+            padding: 0 4px;
+        }
+
+        .back-btn {
+            background: rgba(255, 255, 255, 0.12);
+            color: #e2e8f0;
+            text-decoration: none;
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+            color: #fff;
+            transform: translateX(-2px);
+        }
+
+        .title-text {
+            font-size: 1.4rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #68d391, #ecc94b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 1px;
+        }
+
+        .game-wrapper {
+            position: relative;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            overflow: hidden;
+            background: #27272a;
+        }
+
+        #gameCanvas {
+            display: block;
+            cursor: pointer;
+            background: #48bb78;
+        }
+
+        /* 顶部卡槽面板 */
+        .top-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            display: flex;
+            gap: 8px;
+            background: rgba(45, 24, 16, 0.88);
+            padding: 6px 10px;
+            border-radius: 10px;
+            border: 2px solid #8d5b32;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            z-index: 10;
+        }
+
+        .sun-counter {
+            background: #fff8db;
+            border: 2px solid #b7791f;
+            border-radius: 8px;
+            padding: 2px 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-width: 65px;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .sun-counter .icon {
+            font-size: 22px;
+            line-height: 1;
+            filter: drop-shadow(0 0 4px #ecc94b);
+        }
+
+        .sun-counter .num {
+            font-size: 18px;
+            font-weight: 900;
+            color: #744210;
+        }
+
+        .cards-list {
+            display: flex;
+            gap: 6px;
+        }
+
+        .card-slot {
+            width: 62px;
+            height: 72px;
+            background: #e2d9b6;
+            border: 2px solid #714b23;
+            border-radius: 6px;
+            position: relative;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 3px 2px;
+            transition: transform 0.15s, border-color 0.15s;
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-slot:hover {
+            transform: translateY(-2px);
+            border-color: #ecc94b;
+        }
+
+        .card-slot.selected {
+            border-color: #38a169;
+            box-shadow: 0 0 12px #48bb78;
+            transform: translateY(-4px);
+        }
+
+        .card-slot.disabled {
+            filter: grayscale(80%) brightness(70%);
+            cursor: not-allowed;
+        }
+
+        .card-avatar {
+            font-size: 28px;
+            line-height: 1.1;
+        }
+
+        .card-name {
+            font-size: 11px;
+            font-weight: 800;
+            color: #2d3748;
+            text-align: center;
+            line-height: 1;
+        }
+
+        .card-cost {
+            font-size: 12px;
+            font-weight: 900;
+            color: #744210;
+            background: rgba(255, 236, 153, 0.9);
+            border-radius: 10px;
+            padding: 0 6px;
+        }
+
+        .card-cooldown-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 0%;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 4px;
+            pointer-events: none;
+            transition: height 0.05s linear;
+        }
+
+        .shovel-slot {
+            width: 52px;
+            height: 72px;
+            background: #a0aec0;
+            border: 2px solid #4a5568;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            transition: all 0.15s;
+        }
+
+        .shovel-slot:hover {
+            transform: translateY(-2px);
+            border-color: #ecc94b;
+        }
+
+        .shovel-slot.selected {
+            border-color: #e53e3e;
+            box-shadow: 0 0 12px #e53e3e;
+            transform: translateY(-4px);
+        }
+
+        .shovel-icon {
+            font-size: 24px;
+        }
+
+        .shovel-text {
+            font-size: 11px;
+            font-weight: 800;
+            color: #1a202c;
+        }
+
+        /* 顶部右侧状态条 */
+        .level-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(45, 24, 16, 0.88);
+            border: 2px solid #8d5b32;
+            padding: 6px 14px;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 180px;
+            z-index: 10;
+        }
+
+        .level-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            font-weight: 700;
+            color: #feebc8;
+        }
+
+        .wave-progress-bar {
+            width: 100%;
+            height: 12px;
+            background: #2d3748;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid #718096;
+            position: relative;
+        }
+
+        .wave-progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #48bb78, #ecc94b, #e53e3e);
+            transition: width 0.3s;
+        }
+
+        /* 游戏弹窗与遮罩 */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.78);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            backdrop-filter: blur(6px);
+        }
+
+        .modal-box {
+            background: linear-gradient(135deg, #2d3748, #1a202c);
+            border: 3px solid #8d5b32;
+            border-radius: 16px;
+            padding: 30px 40px;
+            text-align: center;
+            max-width: 440px;
+            width: 90%;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(104, 211, 145, 0.2);
+            animation: zoomIn 0.3s ease;
+        }
+
+        .modal-title {
+            font-size: 28px;
+            font-weight: 900;
+            margin-bottom: 12px;
+        }
+
+        .modal-desc {
+            font-size: 15px;
+            color: #cbd5e0;
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        .btn-game {
+            background: linear-gradient(135deg, #48bb78 0%, #2f855a 100%);
+            color: white;
+            border: none;
+            padding: 12px 32px;
+            font-size: 18px;
+            font-weight: 800;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 15px rgba(72, 187, 120, 0.4);
+            display: inline-block;
+        }
+
+        .btn-game:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(72, 187, 120, 0.6);
+        }
+
+        .controls-hint {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 10px;
+            color: #a0aec0;
+            font-size: 13px;
+        }
+
+        .controls-hint span {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .controls-hint kbd {
+            background: #4a5568;
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            border: 1px solid #718096;
+        }
+
+        @keyframes zoomIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        @media (max-width: 1050px) {
+            #gameCanvas {
+                width: 100%;
+                height: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header-bar">
+        <a href="/" class="back-btn">
+            <span>←</span> 返回大厅
+        </a>
+        <h1 class="title-text">🌻 植物大战僵尸 (Plants vs. Zombies)</h1>
+        <div style="width: 80px;"></div>
+    </div>
+
+    <div class="game-wrapper" id="gameWrapper">
+        <canvas id="gameCanvas" width="1000" height="600"></canvas>
+
+        <!-- 顶部卡牌栏 -->
+        <div class="top-panel" id="topPanel">
+            <div class="sun-counter">
+                <div class="icon">☀️</div>
+                <div class="num" id="sunVal">150</div>
+            </div>
+
+            <div class="cards-list" id="cardsList">
+                <!-- 向日葵 -->
+                <div class="card-slot" data-type="sunflower" data-cost="50" onclick="selectCard('sunflower')">
+                    <div class="card-avatar">🌻</div>
+                    <div class="card-name">向日葵</div>
+                    <div class="card-cost">50</div>
+                    <div class="card-cooldown-overlay" id="cd-sunflower"></div>
+                </div>
+                <!-- 豌豆射手 -->
+                <div class="card-slot" data-type="peashooter" data-cost="100" onclick="selectCard('peashooter')">
+                    <div class="card-avatar">🌱</div>
+                    <div class="card-name">豌豆射手</div>
+                    <div class="card-cost">100</div>
+                    <div class="card-cooldown-overlay" id="cd-peashooter"></div>
+                </div>
+                <!-- 寒冰射手 -->
+                <div class="card-slot" data-type="snowpea" data-cost="175" onclick="selectCard('snowpea')">
+                    <div class="card-avatar">❄️</div>
+                    <div class="card-name">寒冰射手</div>
+                    <div class="card-cost">175</div>
+                    <div class="card-cooldown-overlay" id="cd-snowpea"></div>
+                </div>
+                <!-- 坚果墙 -->
+                <div class="card-slot" data-type="wallnut" data-cost="50" onclick="selectCard('wallnut')">
+                    <div class="card-avatar">🌰</div>
+                    <div class="card-name">坚果墙</div>
+                    <div class="card-cost">50</div>
+                    <div class="card-cooldown-overlay" id="cd-wallnut"></div>
+                </div>
+                <!-- 樱桃炸弹 -->
+                <div class="card-slot" data-type="cherrybomb" data-cost="150" onclick="selectCard('cherrybomb')">
+                    <div class="card-avatar">🍒</div>
+                    <div class="card-name">樱桃炸弹</div>
+                    <div class="card-cost">150</div>
+                    <div class="card-cooldown-overlay" id="cd-cherrybomb"></div>
+                </div>
+            </div>
+
+            <!-- 铲子 -->
+            <div class="shovel-slot" id="shovelSlot" onclick="selectShovel()">
+                <div class="shovel-icon">⛏️</div>
+                <div class="shovel-text">铲除</div>
+            </div>
+        </div>
+
+        <!-- 关卡进度信息 -->
+        <div class="level-panel">
+            <div class="level-info">
+                <span>防守进度</span>
+                <span id="waveText">第 1 波 / 共 3 波</span>
+            </div>
+            <div class="wave-progress-bar">
+                <div class="wave-progress-fill" id="waveFill"></div>
+            </div>
+        </div>
+
+        <!-- 开始界面 -->
+        <div class="overlay" id="startOverlay">
+            <div class="modal-box">
+                <div class="modal-title" style="color: #68d391;">🌻 准备防守后院！</div>
+                <div class="modal-desc">
+                    种植向日葵收集阳光，部署豌豆射手阻击入侵僵尸。<br>
+                    坚果墙可阻挡啃咬，寒冰射手能减缓移速，樱桃炸弹能群体秒杀。<br>
+                    最后防线除草机将在危急时启动保底！
+                </div>
+                <button class="btn-game" onclick="startGame()">开始战斗</button>
+            </div>
+        </div>
+
+        <!-- 胜利界面 -->
+        <div class="overlay" id="winOverlay" style="display: none;">
+            <div class="modal-box">
+                <div class="modal-title" style="color: #ecc94b;">🏆 胜利！后院守住了！</div>
+                <div class="modal-desc">
+                    太棒了！你击溃了所有波次的僵尸大军，成功保卫了后院花园！
+                </div>
+                <button class="btn-game" onclick="restartGame()">再玩一局</button>
+            </div>
+        </div>
+
+        <!-- 失败界面 -->
+        <div class="overlay" id="loseOverlay" style="display: none;">
+            <div class="modal-box">
+                <div class="modal-title" style="color: #e53e3e;">🧠 僵尸吃掉了你的脑子！</div>
+                <div class="modal-desc">
+                    防线失守，僵尸冲进了屋子。合理搭配向日葵与射手，准备重整旗鼓吧！
+                </div>
+                <button class="btn-game" style="background: linear-gradient(135deg, #e53e3e, #9b2c2c);" onclick="restartGame()">重新开始</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="controls-hint">
+        <span><kbd>鼠标左键</kbd> 点击卡牌后在草坪网格种植，点击阳光收集</span>
+        <span><kbd>数字键 1~5</kbd> 快捷选卡</span>
+        <span><kbd>S</kbd> 铲子工具</span>
+        <span><kbd>ESC</kbd> 取消选择</span>
+    </div>
+
+    <script>
+        /* ================= 音频音效引擎 (Web Audio API) ================= */
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            const now = audioCtx.currentTime;
+
+            if (type === 'sun') {
+                // 收集阳光：清脆的双音琶音
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(587.33, now); // D5
+                osc.frequency.exponentialRampToValueAtTime(880, now + 0.12); // A5
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            } else if (type === 'plant') {
+                // 种植：沉稳泥土放置声
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(220, now);
+                osc.frequency.exponentialRampToValueAtTime(110, now + 0.15);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            } else if (type === 'shoot') {
+                // 豌豆射出：短促啵噗声
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.exponentialRampToValueAtTime(300, now + 0.08);
+                gain.gain.setValueAtTime(0.12, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.08);
+            } else if (type === 'hit') {
+                // 击中僵尸：啪嗒声
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(60, now + 0.06);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.06);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.06);
+            } else if (type === 'boom') {
+                // 爆炸音效：重低音轰鸣
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(120, now);
+                osc.frequency.exponentialRampToValueAtTime(20, now + 0.5);
+                gain.gain.setValueAtTime(0.6, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.6);
+            } else if (type === 'mower') {
+                // 割草机引擎轰鸣
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(80, now);
+                osc.frequency.linearRampToValueAtTime(220, now + 0.5);
+                gain.gain.setValueAtTime(0.25, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.8);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.8);
+            } else if (type === 'win') {
+                // 胜利号角
+                [523.25, 659.25, 783.99, 1046.5].forEach((f, idx) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(f, now + idx * 0.12);
+                    gain.gain.setValueAtTime(0.2, now + idx * 0.12);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.4);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now + idx * 0.12);
+                    osc.stop(now + idx * 0.12 + 0.4);
+                });
+            } else if (type === 'lose') {
+                // 失败音效
+                [392, 349.23, 311.13, 261.63].forEach((f, idx) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(f, now + idx * 0.18);
+                    gain.gain.setValueAtTime(0.2, now + idx * 0.18);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.18 + 0.35);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now + idx * 0.18);
+                    osc.stop(now + idx * 0.18 + 0.35);
+                });
+            }
+        }
+
+        /* ================= 游戏核心参数与配置 ================= */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const GRID_ROWS = 5;
+        const GRID_COLS = 9;
+        const GRID_OFFSET_X = 140; // 草坪起始X
+        const GRID_OFFSET_Y = 95;  // 草坪起始Y
+        const CELL_WIDTH = 90;     // 格子宽
+        const CELL_HEIGHT = 98;    // 格子高
+
+        const PLANT_CONFIGS = {
+            sunflower: { name: '向日葵', cost: 50, cd: 6000, maxHp: 300 },
+            peashooter: { name: '豌豆射手', cost: 100, cd: 6500, maxHp: 300 },
+            snowpea: { name: '寒冰射手', cost: 175, cd: 7500, maxHp: 300 },
+            wallnut: { name: '坚果墙', cost: 50, cd: 18000, maxHp: 4000 },
+            cherrybomb: { name: '樱桃炸弹', cost: 150, cd: 25000, maxHp: 300 }
+        };
+
+        let gameState = 'ready'; // ready, playing, gameover, won
+        let sun = 150;
+        let selectedTool = null; // 'sunflower', 'peashooter', 'snowpea', 'wallnut', 'cherrybomb', 'shovel'
+        let mouseX = 0;
+        let mouseY = 0;
+        let isHoveringGrid = false;
+        let hoverRow = -1;
+        let hoverCol = -1;
+
+        let lastTime = 0;
+        let naturalSunTimer = 0;
+
+        // 实体容器
+        let grid = []; // 5 x 9 矩阵
+        let zombies = [];
+        let projectiles = [];
+        let suns = [];
+        let lawnmowers = [];
+        let particles = [];
+        let floatTexts = [];
+
+        // 冷却计时器记录
+        let cooldowns = {
+            sunflower: 0,
+            peashooter: 0,
+            snowpea: 0,
+            wallnut: 0,
+            cherrybomb: 0
+        };
+
+        // 波次系统
+        let currentWave = 1;
+        const TOTAL_WAVES = 3;
+        let waveTimer = 0;
+        let waveSpawnQueue = [];
+        let waveZombieCountTotal = 0;
+        let waveZombieKilled = 0;
+        let waveNoticeText = '';
+        let waveNoticeTimer = 0;
+
+        /* ================= 初始化与重置 ================= */
+        function initGrid() {
+            grid = [];
+            for (let r = 0; r < GRID_ROWS; r++) {
+                grid[r] = [];
+                for (let c = 0; c < GRID_COLS; c++) {
+                    grid[r][c] = null;
+                }
+            }
+        }
+
+        function initLawnmowers() {
+            lawnmowers = [];
+            for (let r = 0; r < GRID_ROWS; r++) {
+                lawnmowers.push({
+                    row: r,
+                    x: GRID_OFFSET_X - 65,
+                    y: GRID_OFFSET_Y + r * CELL_HEIGHT + CELL_HEIGHT / 2,
+                    state: 'idle', // idle, moving, gone
+                    speed: 8
+                });
+            }
+        }
+
+        function startWave(waveNum) {
+            currentWave = waveNum;
+            document.getElementById('waveText').innerText = `第 ${waveNum} 波 / 共 ${TOTAL_WAVES} 波`;
+            document.getElementById('waveFill').style.width = `${((waveNum - 1) / TOTAL_WAVES) * 100}%`;
+
+            waveSpawnQueue = [];
+            let count = 0;
+
+            if (waveNum === 1) {
+                // 第一波：6 只普通僵尸 + 1 只路障
+                for (let i = 0; i < 6; i++) {
+                    waveSpawnQueue.push({ type: 'normal', delay: 3000 + i * 3500 });
+                }
+                waveSpawnQueue.push({ type: 'conehead', delay: 18000 });
+                count = 7;
+            } else if (waveNum === 2) {
+                // 第二波：中量进攻 + 路障 + 铁桶
+                waveNoticeText = '⚠️ 僵尸大波来袭！';
+                waveNoticeTimer = 2000;
+                playSound('mower');
+                const types = ['normal', 'normal', 'conehead', 'normal', 'conehead', 'buckethead', 'normal', 'conehead'];
+                types.forEach((t, idx) => {
+                    waveSpawnQueue.push({ type: t, delay: 2000 + idx * 2200 });
+                });
+                count = types.length;
+            } else {
+                // 第三波：最终大波
+                waveNoticeText = '🚨 最终决战大波僵尸来袭！';
+                waveNoticeTimer = 3000;
+                playSound('mower');
+                const types = ['normal', 'conehead', 'normal', 'buckethead', 'conehead', 'buckethead', 'conehead', 'buckethead', 'normal', 'conehead', 'normal', 'buckethead'];
+                types.forEach((t, idx) => {
+                    waveSpawnQueue.push({ type: t, delay: 1500 + idx * 1600 });
+                });
+                count = types.length;
+            }
+
+            waveZombieCountTotal = count;
+            waveZombieKilled = 0;
+            waveTimer = 0;
+        }
+
+        function startGame() {
+            document.getElementById('startOverlay').style.display = 'none';
+            document.getElementById('winOverlay').style.display = 'none';
+            document.getElementById('loseOverlay').style.display = 'none';
+
+            sun = 150;
+            updateSunDisplay();
+            initGrid();
+            initLawnmowers();
+            zombies = [];
+            projectiles = [];
+            suns = [];
+            particles = [];
+            floatTexts = [];
+            selectedTool = null;
+            updateCardUI();
+
+            for (let key in cooldowns) {
+                cooldowns[key] = 0;
+            }
+
+            startWave(1);
+            gameState = 'playing';
+            lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function restartGame() {
+            startGame();
+        }
+
+        /* ================= 阳光与卡片逻辑 ================= */
+        function updateSunDisplay() {
+            document.getElementById('sunVal').innerText = sun;
+            updateCardUI();
+        }
+
+        function updateCardUI() {
+            const slots = document.querySelectorAll('.card-slot');
+            slots.forEach(slot => {
+                const type = slot.dataset.type;
+                const cost = parseInt(slot.dataset.cost);
+                const isCd = cooldowns[type] > 0;
+                const canAfford = sun >= cost;
+
+                if (!canAfford || isCd) {
+                    slot.classList.add('disabled');
+                } else {
+                    slot.classList.remove('disabled');
+                }
+
+                if (selectedTool === type) {
+                    slot.classList.add('selected');
+                } else {
+                    slot.classList.remove('selected');
+                }
+
+                // 冷却进度遮罩
+                const cdOverlay = document.getElementById(`cd-${type}`);
+                if (cdOverlay) {
+                    if (isCd) {
+                        const pct = (cooldowns[type] / PLANT_CONFIGS[type].cd) * 100;
+                        cdOverlay.style.height = `${pct}%`;
+                    } else {
+                        cdOverlay.style.height = '0%';
+                    }
+                }
+            });
+
+            const shovel = document.getElementById('shovelSlot');
+            if (selectedTool === 'shovel') {
+                shovel.classList.add('selected');
+            } else {
+                shovel.classList.remove('selected');
+            }
+        }
+
+        function selectCard(type) {
+            if (gameState !== 'playing') return;
+            const config = PLANT_CONFIGS[type];
+            if (cooldowns[type] > 0 || sun < config.cost) {
+                return;
+            }
+            if (selectedTool === type) {
+                selectedTool = null;
+            } else {
+                selectedTool = type;
+            }
+            updateCardUI();
+        }
+
+        function selectShovel() {
+            if (gameState !== 'playing') return;
+            if (selectedTool === 'shovel') {
+                selectedTool = null;
+            } else {
+                selectedTool = 'shovel';
+            }
+            updateCardUI();
+        }
+
+        /* ================= 实体工厂函数 ================= */
+        function spawnSun(x, y, targetY = null, source = 'sky') {
+            suns.push({
+                x: x,
+                y: y,
+                targetY: targetY !== null ? targetY : y,
+                source: source, // sky, plant
+                collected: false,
+                life: 9000, // 自动存活 9 秒
+                rot: 0,
+                radius: 26
+            });
+        }
+
+        function plantAt(row, col, type) {
+            const config = PLANT_CONFIGS[type];
+            sun -= config.cost;
+            cooldowns[type] = config.cd;
+            updateSunDisplay();
+            playSound('plant');
+
+            const plant = {
+                type: type,
+                row: row,
+                col: col,
+                x: GRID_OFFSET_X + col * CELL_WIDTH + CELL_WIDTH / 2,
+                y: GRID_OFFSET_Y + row * CELL_HEIGHT + CELL_HEIGHT / 2,
+                hp: config.maxHp,
+                maxHp: config.maxHp,
+                timer: 0,
+                shootTimer: 0,
+                frame: 0
+            };
+
+            // 特殊植物逻辑
+            if (type === 'cherrybomb') {
+                plant.explodeTimer = 1200; // 1.2秒后起爆
+            }
+
+            grid[row][col] = plant;
+            createPuffParticles(plant.x, plant.y, '#68d391');
+        }
+
+        function spawnZombie(type, row) {
+            let hp = 200;
+            let speed = 0.32;
+            let armor = 0;
+            let maxArmor = 0;
+
+            if (type === 'conehead') {
+                armor = 280;
+                maxArmor = 280;
+            } else if (type === 'buckethead') {
+                armor = 800;
+                maxArmor = 800;
+            }
+
+            zombies.push({
+                type: type,
+                row: row,
+                x: canvas.width + 30,
+                y: GRID_OFFSET_Y + row * CELL_HEIGHT + CELL_HEIGHT / 2,
+                hp: hp,
+                maxHp: hp,
+                armor: armor,
+                maxArmor: maxArmor,
+                speed: speed,
+                isEating: false,
+                slowTimer: 0,
+                eatTimer: 0,
+                headBob: 0,
+                hitFlash: 0
+            });
+        }
+
+        function createPuffParticles(x, y, color) {
+            for (let i = 0; i < 10; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 1 + Math.random() * 2.5;
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    radius: 3 + Math.random() * 4,
+                    color: color,
+                    alpha: 1,
+                    decay: 0.03
+                });
+            }
+        }
+
+        function addFloatText(text, x, y, color = '#fff') {
+            floatTexts.push({
+                text: text,
+                x: x,
+                y: y,
+                vy: -0.8,
+                alpha: 1,
+                color: color
+            });
+        }
+
+        /* ================= 游戏主循环 (Update & Render) ================= */
+        function gameLoop(time) {
+            if (gameState !== 'playing') return;
+
+            const dt = Math.min(time - lastTime, 50); // 防止切后台巨大 dt
+            lastTime = time;
+
+            update(dt);
+            render();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function update(dt) {
+            // 冷却递减
+            for (let key in cooldowns) {
+                if (cooldowns[key] > 0) {
+                    cooldowns[key] -= dt;
+                    if (cooldowns[key] <= 0) cooldowns[key] = 0;
+                }
+            }
+            updateCardUI();
+
+            // 天空掉落阳光
+            naturalSunTimer += dt;
+            if (naturalSunTimer > 7500) {
+                naturalSunTimer = 0;
+                const rx = GRID_OFFSET_X + 40 + Math.random() * (GRID_COLS * CELL_WIDTH - 80);
+                const ry = GRID_OFFSET_Y + 50 + Math.random() * (GRID_ROWS * CELL_HEIGHT - 100);
+                spawnSun(rx, -30, ry, 'sky');
+            }
+
+            // 更新波次与僵尸生成
+            waveTimer += dt;
+            for (let i = waveSpawnQueue.length - 1; i >= 0; i--) {
+                const item = waveSpawnQueue[i];
+                if (waveTimer >= item.delay) {
+                    const row = Math.floor(Math.random() * GRID_ROWS);
+                    spawnZombie(item.type, row);
+                    waveSpawnQueue.splice(i, 1);
+                }
+            }
+
+            if (waveNoticeTimer > 0) {
+                waveNoticeTimer -= dt;
+            }
+
+            // 更新植物状态与行为
+            for (let r = 0; r < GRID_ROWS; r++) {
+                for (let c = 0; c < GRID_COLS; c++) {
+                    const plant = grid[r][c];
+                    if (!plant) continue;
+
+                    plant.timer += dt;
+                    plant.frame += 0.05;
+
+                    // 1. 向日葵生产阳光
+                    if (plant.type === 'sunflower') {
+                        if (plant.timer > 12000) {
+                            plant.timer = 0;
+                            spawnSun(plant.x + 10, plant.y - 15, plant.y + 10, 'plant');
+                            createPuffParticles(plant.x, plant.y, '#ecc94b');
+                        }
+                    }
+
+                    // 2. 豌豆射手 / 寒冰射手 射击检测
+                    if (plant.type === 'peashooter' || plant.type === 'snowpea') {
+                        plant.shootTimer += dt;
+                        // 检查当前行右侧是否有僵尸
+                        const hasZombieAhead = zombies.some(z => z.row === r && z.x > plant.x && z.x < canvas.width + 10);
+                        if (hasZombieAhead && plant.shootTimer > 1400) {
+                            plant.shootTimer = 0;
+                            projectiles.push({
+                                type: plant.type === 'snowpea' ? 'ice' : 'pea',
+                                row: r,
+                                x: plant.x + 28,
+                                y: plant.y - 14,
+                                speed: 6,
+                                damage: 20
+                            });
+                            playSound('shoot');
+                        }
+                    }
+
+                    // 3. 樱桃炸弹爆炸倒计时
+                    if (plant.type === 'cherrybomb') {
+                        plant.explodeTimer -= dt;
+                        if (plant.explodeTimer <= 0) {
+                            // 轰炸周围 3x3 范围
+                            playSound('boom');
+                            createPuffParticles(plant.x, plant.y, '#e53e3e');
+                            for (let i = 0; i < 20; i++) {
+                                createPuffParticles(plant.x + (Math.random() - 0.5) * 120, plant.y + (Math.random() - 0.5) * 120, '#ecc94b');
+                            }
+
+                            zombies.forEach(z => {
+                                const dist = Math.hypot(z.x - plant.x, z.y - plant.y);
+                                if (dist < 160) {
+                                    z.hp = 0;
+                                    z.armor = 0;
+                                }
+                            });
+
+                            grid[r][c] = null;
+                        }
+                    }
+
+                    // 植物阵亡
+                    if (plant.hp <= 0) {
+                        grid[r][c] = null;
+                        createPuffParticles(plant.x, plant.y, '#a0aec0');
+                    }
+                }
+            }
+
+            // 更新子弹
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const p = projectiles[i];
+                p.x += p.speed;
+
+                // 碰撞僵尸检测
+                let hit = false;
+                for (let j = 0; j < zombies.length; j++) {
+                    const z = zombies[j];
+                    if (z.row === p.row && Math.abs(z.x - p.x) < 25) {
+                        hit = true;
+                        playSound('hit');
+
+                        // 护甲优先扣除
+                        if (z.armor > 0) {
+                            z.armor -= p.damage;
+                            if (z.armor < 0) {
+                                z.hp += z.armor;
+                                z.armor = 0;
+                            }
+                        } else {
+                            z.hp -= p.damage;
+                        }
+
+                        z.hitFlash = 100;
+
+                        if (p.type === 'ice') {
+                            z.slowTimer = 4000; // 减速 4 秒
+                            createPuffParticles(p.x, p.y, '#63b3ed');
+                        } else {
+                            createPuffParticles(p.x, p.y, '#68d391');
+                        }
+                        break;
+                    }
+                }
+
+                if (hit || p.x > canvas.width + 50) {
+                    projectiles.splice(i, 1);
+                }
+            }
+
+            // 更新僵尸
+            for (let i = zombies.length - 1; i >= 0; i--) {
+                const z = zombies[i];
+
+                if (z.slowTimer > 0) z.slowTimer -= dt;
+                if (z.hitFlash > 0) z.hitFlash -= dt;
+
+                const currentSpeed = z.slowTimer > 0 ? z.speed * 0.5 : z.speed;
+
+                // 寻找啃咬目标
+                const c = Math.floor((z.x - GRID_OFFSET_X) / CELL_WIDTH);
+                let targetPlant = null;
+                if (c >= 0 && c < GRID_COLS && grid[z.row][c]) {
+                    const p = grid[z.row][c];
+                    if (Math.abs(z.x - p.x) < 32) {
+                        targetPlant = p;
+                    }
+                }
+
+                if (targetPlant) {
+                    z.isEating = true;
+                    z.eatTimer += dt;
+                    if (z.eatTimer > 400) {
+                        z.eatTimer = 0;
+                        targetPlant.hp -= 20;
+                        playSound('hit');
+                    }
+                } else {
+                    z.isEating = false;
+                    z.x -= currentSpeed * (dt / 16);
+                }
+
+                // 割草机触碰
+                lawnmowers.forEach(m => {
+                    if (m.row === z.row && m.state === 'moving' && Math.abs(z.x - m.x) < 40) {
+                        z.hp = 0;
+                        z.armor = 0;
+                    }
+                });
+
+                // 触碰左侧防线检测
+                if (z.x < GRID_OFFSET_X - 15) {
+                    const mower = lawnmowers.find(m => m.row === z.row);
+                    if (mower && mower.state === 'idle') {
+                        mower.state = 'moving';
+                        playSound('mower');
+                    } else if (!mower || mower.state === 'gone') {
+                        // 僵尸进屋，游戏失败！
+                        gameState = 'gameover';
+                        playSound('lose');
+                        document.getElementById('loseOverlay').style.display = 'flex';
+                        return;
+                    }
+                }
+
+                // 僵尸死亡
+                if (z.hp <= 0) {
+                    createPuffParticles(z.x, z.y, '#718096');
+                    createPuffParticles(z.x, z.y - 20, '#e53e3e');
+                    zombies.splice(i, 1);
+                    waveZombieKilled++;
+
+                    // 进度条微调
+                    const waveBase = (currentWave - 1) / TOTAL_WAVES;
+                    const waveFraction = (waveZombieKilled / waveZombieCountTotal) / TOTAL_WAVES;
+                    document.getElementById('waveFill').style.width = `${Math.min(100, (waveBase + waveFraction) * 100)}%`;
+                }
+            }
+
+            // 更新割草机
+            lawnmowers.forEach(m => {
+                if (m.state === 'moving') {
+                    m.x += m.speed;
+                    if (m.x > canvas.width + 50) {
+                        m.state = 'gone';
+                    }
+                }
+            });
+
+            // 检查波次通关
+            if (waveSpawnQueue.length === 0 && zombies.length === 0) {
+                if (currentWave < TOTAL_WAVES) {
+                    startWave(currentWave + 1);
+                } else {
+                    // 全部通关
+                    gameState = 'won';
+                    playSound('win');
+                    document.getElementById('waveFill').style.width = '100%';
+                    document.getElementById('winOverlay').style.display = 'flex';
+                }
+            }
+
+            // 更新阳光
+            for (let i = suns.length - 1; i >= 0; i--) {
+                const s = suns[i];
+                s.rot += 0.02;
+
+                if (s.collected) {
+                    // 飞向左上角阳光计数器
+                    const targetX = 60;
+                    const targetY = 40;
+                    s.x += (targetX - s.x) * 0.15;
+                    s.y += (targetY - s.y) * 0.15;
+                    if (Math.hypot(s.x - targetX, s.y - targetY) < 15) {
+                        sun += 25;
+                        updateSunDisplay();
+                        suns.splice(i, 1);
+                    }
+                    continue;
+                }
+
+                if (s.y < s.targetY) {
+                    s.y += 1.8;
+                }
+
+                s.life -= dt;
+                if (s.life <= 0) {
+                    suns.splice(i, 1);
+                }
+            }
+
+            // 粒子更新
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.alpha -= p.decay;
+                if (p.alpha <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+
+            // 浮动文字更新
+            for (let i = floatTexts.length - 1; i >= 0; i--) {
+                const ft = floatTexts[i];
+                ft.y += ft.vy;
+                ft.alpha -= 0.02;
+                if (ft.alpha <= 0) {
+                    floatTexts.splice(i, 1);
+                }
+            }
+        }
+
+        /* ================= 画面渲染函数 ================= */
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. 绘制草坪棋盘
+            drawLawn();
+
+            // 2. 绘制网格辅助与悬停预览
+            drawGridHighlight();
+
+            // 3. 绘制割草机
+            drawLawnmowers();
+
+            // 4. 绘制植物
+            drawPlants();
+
+            // 5. 绘制僵尸
+            drawZombies();
+
+            // 6. 绘制子弹
+            drawProjectiles();
+
+            // 7. 绘制阳光
+            drawSuns();
+
+            // 8. 绘制粒子与爆炸
+            drawParticles();
+
+            // 9. 绘制大波提示
+            drawWaveNotice();
+        }
+
+        function drawLawn() {
+            // 背景底色：房檐石板路 + 葱郁草坪
+            ctx.fillStyle = '#4a5568';
+            ctx.fillRect(0, 0, GRID_OFFSET_X, canvas.height); // 左侧走道
+
+            // 右侧僵尸刷新荒地
+            ctx.fillStyle = '#744210';
+            ctx.fillRect(GRID_OFFSET_X + GRID_COLS * CELL_WIDTH, 0, canvas.width, canvas.height);
+
+            // 草坪条纹
+            for (let r = 0; r < GRID_ROWS; r++) {
+                for (let c = 0; c < GRID_COLS; c++) {
+                    const x = GRID_OFFSET_X + c * CELL_WIDTH;
+                    const y = GRID_OFFSET_Y + r * CELL_HEIGHT;
+                    const isEven = (r + c) % 2 === 0;
+                    ctx.fillStyle = isEven ? '#48bb78' : '#38a169';
+                    ctx.fillRect(x, y, CELL_WIDTH, CELL_HEIGHT);
+                }
+            }
+
+            // 边界高光
+            ctx.strokeStyle = '#2f855a';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(GRID_OFFSET_X, GRID_OFFSET_Y, GRID_COLS * CELL_WIDTH, GRID_ROWS * CELL_HEIGHT);
+        }
+
+        function drawGridHighlight() {
+            if (isHoveringGrid && hoverRow >= 0 && hoverCol >= 0) {
+                const x = GRID_OFFSET_X + hoverCol * CELL_WIDTH;
+                const y = GRID_OFFSET_Y + hoverRow * CELL_HEIGHT;
+
+                if (selectedTool === 'shovel') {
+                    // 铲除红框
+                    ctx.fillStyle = 'rgba(229, 62, 62, 0.25)';
+                    ctx.fillRect(x, y, CELL_WIDTH, CELL_HEIGHT);
+                    ctx.strokeStyle = '#e53e3e';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(x, y, CELL_WIDTH, CELL_HEIGHT);
+                } else if (selectedTool) {
+                    // 种植绿框与半透明虚影
+                    const canPlant = !grid[hoverRow][hoverCol];
+                    ctx.fillStyle = canPlant ? 'rgba(72, 187, 120, 0.3)' : 'rgba(229, 62, 62, 0.3)';
+                    ctx.fillRect(x, y, CELL_WIDTH, CELL_HEIGHT);
+                    ctx.strokeStyle = canPlant ? '#48bb78' : '#e53e3e';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(x, y, CELL_WIDTH, CELL_HEIGHT);
+
+                    // 虚影预览
+                    if (canPlant) {
+                        ctx.save();
+                        ctx.globalAlpha = 0.55;
+                        drawPlantAvatar(selectedTool, x + CELL_WIDTH / 2, y + CELL_HEIGHT / 2, 0, 100);
+                        ctx.restore();
+                    }
+                }
+            }
+        }
+
+        function drawLawnmowers() {
+            lawnmowers.forEach(m => {
+                if (m.state === 'gone') return;
+                ctx.save();
+                ctx.translate(m.x, m.y);
+
+                // 车身
+                ctx.fillStyle = '#e53e3e';
+                ctx.beginPath();
+                ctx.roundRect(-24, -18, 48, 36, 8);
+                ctx.fill();
+
+                // 刀片罩
+                ctx.fillStyle = '#a0aec0';
+                ctx.fillRect(6, -14, 18, 28);
+
+                // 黑色车轮
+                ctx.fillStyle = '#1a202c';
+                ctx.beginPath();
+                ctx.arc(-14, -18, 8, 0, Math.PI * 2);
+                ctx.arc(-14, 18, 8, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            });
+        }
+
+        function drawPlants() {
+            for (let r = 0; r < GRID_ROWS; r++) {
+                for (let c = 0; c < GRID_COLS; c++) {
+                    const p = grid[r][c];
+                    if (!p) continue;
+                    drawPlantAvatar(p.type, p.x, p.y, p.frame, p.hp / p.maxHp);
+                }
+            }
+        }
+
+        function drawPlantAvatar(type, x, y, frame, hpRatio) {
+            ctx.save();
+            ctx.translate(x, y);
+
+            if (type === 'sunflower') {
+                // 向日葵花盘轻微摇摆
+                const sway = Math.sin(frame) * 0.08;
+                ctx.rotate(sway);
+
+                // 绿色茎叶
+                ctx.fillStyle = '#38a169';
+                ctx.beginPath();
+                ctx.ellipse(0, 22, 14, 6, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 金黄花瓣
+                ctx.fillStyle = '#ecc94b';
+                for (let i = 0; i < 8; i++) {
+                    const angle = (i * Math.PI) / 4;
+                    ctx.beginPath();
+                    ctx.ellipse(Math.cos(angle) * 20, Math.sin(angle) * 20, 9, 9, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // 棕褐笑脸花盘
+                ctx.fillStyle = '#b7791f';
+                ctx.beginPath();
+                ctx.arc(0, 0, 17, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 眼睛
+                ctx.fillStyle = '#1a202c';
+                ctx.beginPath();
+                ctx.arc(-6, -3, 3, 0, Math.PI * 2);
+                ctx.arc(6, -3, 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 微笑
+                ctx.strokeStyle = '#1a202c';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(0, 3, 7, 0.2, Math.PI - 0.2);
+                ctx.stroke();
+
+            } else if (type === 'peashooter') {
+                // 豌豆射手
+                const bob = Math.sin(frame * 1.5) * 2;
+
+                // 绿叶底座
+                ctx.fillStyle = '#2f855a';
+                ctx.beginPath();
+                ctx.ellipse(-10, 20, 12, 6, -0.2, 0, Math.PI * 2);
+                ctx.ellipse(10, 20, 12, 6, 0.2, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 茎
+                ctx.strokeStyle = '#38a169';
+                ctx.lineWidth = 6;
+                ctx.beginPath();
+                ctx.moveTo(0, 20);
+                ctx.quadraticCurveTo(-8, 5, 0, -2 + bob);
+                ctx.stroke();
+
+                // 头部
+                ctx.fillStyle = '#48bb78';
+                ctx.beginPath();
+                ctx.arc(0, -6 + bob, 18, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 炮管嘴巴
+                ctx.fillStyle = '#38a169';
+                ctx.beginPath();
+                ctx.ellipse(14, -6 + bob, 10, 8, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#1a202c';
+                ctx.beginPath();
+                ctx.ellipse(16, -6 + bob, 6, 6, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 萌萌大眼
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(2, -13 + bob, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#1a202c';
+                ctx.beginPath();
+                ctx.arc(4, -13 + bob, 3, 0, Math.PI * 2);
+                ctx.fill();
+
+            } else if (type === 'snowpea') {
+                // 寒冰射手
+                const bob = Math.sin(frame * 1.5) * 2;
+
+                ctx.fillStyle = '#2b6cb0';
+                ctx.beginPath();
+                ctx.ellipse(-10, 20, 12, 6, -0.2, 0, Math.PI * 2);
+                ctx.ellipse(10, 20, 12, 6, 0.2, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = '#3182ce';
+                ctx.lineWidth = 6;
+                ctx.beginPath();
+                ctx.moveTo(0, 20);
+                ctx.quadraticCurveTo(-8, 5, 0, -2 + bob);
+                ctx.stroke();
+
+                // 冰晶头部
+                ctx.fillStyle = '#63b3ed';
+                ctx.beginPath();
+                ctx.arc(0, -6 + bob, 18, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 嘴巴
+                ctx.fillStyle = '#3182ce';
+                ctx.beginPath();
+                ctx.ellipse(14, -6 + bob, 10, 8, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#1a365d';
+                ctx.beginPath();
+                ctx.ellipse(16, -6 + bob, 6, 6, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 冰晶尖刺后脑勺
+                ctx.fillStyle = '#90cdf4';
+                for (let i = 0; i < 3; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(-14, -12 + i * 8 + bob);
+                    ctx.lineTo(-26, -16 + i * 8 + bob);
+                    ctx.lineTo(-12, -4 + i * 8 + bob);
+                    ctx.fill();
+                }
+
+            } else if (type === 'wallnut') {
+                // 坚果墙：破损表情
+                ctx.fillStyle = '#b7791f';
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 22, 28, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 眼睛
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(-8, -10, 6, 0, Math.PI * 2);
+                ctx.arc(8, -10, 6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#1a202c';
+                ctx.beginPath();
+                ctx.arc(-7, -10, 3, 0, Math.PI * 2);
+                ctx.arc(9, -10, 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 表情随血量改变
+                ctx.strokeStyle = '#1a202c';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                if (hpRatio > 0.6) {
+                    ctx.arc(0, 4, 8, 0.2, Math.PI - 0.2); // 微笑
+                } else if (hpRatio > 0.3) {
+                    ctx.moveTo(-8, 8); // 严肃裂痕
+                    ctx.lineTo(8, 8);
+                } else {
+                    ctx.arc(0, 12, 8, Math.PI + 0.2, -0.2); // 哭泣破损
+                }
+                ctx.stroke();
+
+            } else if (type === 'cherrybomb') {
+                // 樱桃炸弹
+                const pulse = 1 + Math.sin(frame * 6) * 0.15;
+                ctx.scale(pulse, pulse);
+
+                ctx.fillStyle = '#e53e3e';
+                ctx.beginPath();
+                ctx.arc(-14, 6, 16, 0, Math.PI * 2);
+                ctx.arc(14, 6, 16, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 枝条相连
+                ctx.strokeStyle = '#48bb78';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(-14, -6);
+                ctx.quadraticCurveTo(0, -22, 14, -6);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        function drawZombies() {
+            zombies.forEach(z => {
+                ctx.save();
+                ctx.translate(z.x, z.y);
+
+                if (z.hitFlash > 0) {
+                    ctx.filter = 'brightness(2.2)';
+                } else if (z.slowTimer > 0) {
+                    ctx.filter = 'hue-rotate(180deg) saturate(1.8)';
+                }
+
+                // 行走轻微倾斜
+                const wobble = Math.sin(z.x * 0.12) * 0.08;
+                ctx.rotate(wobble);
+
+                // 僵尸西装身体
+                ctx.fillStyle = '#4a5568';
+                ctx.beginPath();
+                ctx.roundRect(-14, -14, 28, 36, 4);
+                ctx.fill();
+
+                // 红色领带
+                ctx.fillStyle = '#e53e3e';
+                ctx.beginPath();
+                ctx.moveTo(-2, -10);
+                ctx.lineTo(2, -10);
+                ctx.lineTo(0, 6);
+                ctx.fill();
+
+                // 双腿
+                ctx.fillStyle = '#2d3748';
+                ctx.fillRect(-10, 22, 8, 18);
+                ctx.fillRect(2, 22, 8, 18);
+
+                // 灰色腐肉手臂（前伸）
+                ctx.fillStyle = '#718096';
+                ctx.beginPath();
+                ctx.roundRect(-24, -4, 20, 8, 4);
+                ctx.fill();
+
+                // 头颅
+                ctx.fillStyle = '#9ae6b4'; // 绿灰色僵尸脸
+                ctx.beginPath();
+                ctx.arc(0, -26, 17, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 白内障凸出眼睛
+                ctx.fillStyle = '#edf2f7';
+                ctx.beginPath();
+                ctx.arc(-6, -28, 6, 0, Math.PI * 2);
+                ctx.arc(6, -28, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#1a202c';
+                ctx.beginPath();
+                ctx.arc(-7, -28, 2, 0, Math.PI * 2);
+                ctx.arc(6, -28, 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 歪曲大嘴
+                ctx.fillStyle = '#2d3748';
+                ctx.beginPath();
+                ctx.roundRect(-8, -18, 16, 6, 2);
+                ctx.fill();
+
+                // 特殊护甲（路障 / 铁桶）
+                if (z.type === 'conehead' && z.armor > 0) {
+                    ctx.fillStyle = '#ed8936';
+                    ctx.beginPath();
+                    ctx.moveTo(-16, -34);
+                    ctx.lineTo(16, -34);
+                    ctx.lineTo(0, -68);
+                    ctx.closePath();
+                    ctx.fill();
+                    // 白色条纹
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.moveTo(-8, -48);
+                    ctx.lineTo(8, -48);
+                    ctx.stroke();
+                } else if (z.type === 'buckethead' && z.armor > 0) {
+                    ctx.fillStyle = '#a0aec0';
+                    ctx.beginPath();
+                    ctx.roundRect(-16, -56, 32, 24, 4);
+                    ctx.fill();
+                    ctx.strokeStyle = '#4a5568';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(-16, -56, 32, 24);
+                }
+
+                ctx.restore();
+            });
+        }
+
+        function drawProjectiles() {
+            projectiles.forEach(p => {
+                ctx.save();
+                ctx.translate(p.x, p.y);
+
+                if (p.type === 'ice') {
+                    // 冰晶豌豆
+                    ctx.fillStyle = '#63b3ed';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#ebf8ff';
+                    ctx.beginPath();
+                    ctx.arc(-2, -2, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // 普通翠绿豌豆
+                    ctx.fillStyle = '#48bb78';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#c6f6d5';
+                    ctx.beginPath();
+                    ctx.arc(-2, -2, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                ctx.restore();
+            });
+        }
+
+        function drawSuns() {
+            suns.forEach(s => {
+                ctx.save();
+                ctx.translate(s.x, s.y);
+                ctx.rotate(s.rot);
+
+                // 发光外圈
+                ctx.fillStyle = 'rgba(236, 201, 75, 0.4)';
+                ctx.beginPath();
+                ctx.arc(0, 0, s.radius * 1.35, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 金光光芒尖角
+                ctx.fillStyle = '#d69e2e';
+                for (let i = 0; i < 10; i++) {
+                    const angle = (i * Math.PI) / 5;
+                    ctx.beginPath();
+                    ctx.moveTo(Math.cos(angle - 0.2) * 16, Math.sin(angle - 0.2) * 16);
+                    ctx.lineTo(Math.cos(angle) * (s.radius + 6), Math.sin(angle) * (s.radius + 6));
+                    ctx.lineTo(Math.cos(angle + 0.2) * 16, Math.sin(angle + 0.2) * 16);
+                    ctx.fill();
+                }
+
+                // 核心金黄太阳
+                ctx.fillStyle = '#ecc94b';
+                ctx.beginPath();
+                ctx.arc(0, 0, s.radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 内部高光
+                ctx.fillStyle = '#fffaf0';
+                ctx.beginPath();
+                ctx.arc(-5, -5, s.radius * 0.45, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            });
+        }
+
+        function drawParticles() {
+            particles.forEach(p => {
+                ctx.save();
+                ctx.globalAlpha = p.alpha;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            });
+
+            floatTexts.forEach(ft => {
+                ctx.save();
+                ctx.globalAlpha = ft.alpha;
+                ctx.fillStyle = ft.color;
+                ctx.font = 'bold 16px Arial';
+                ctx.fillText(ft.text, ft.x, ft.y);
+                ctx.restore();
+            });
+        }
+
+        function drawWaveNotice() {
+            if (waveNoticeTimer > 0) {
+                ctx.save();
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+                ctx.fillRect(0, canvas.height / 2 - 45, canvas.width, 90);
+                ctx.fillStyle = '#e53e3e';
+                ctx.font = 'bold 36px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(waveNoticeText, canvas.width / 2, canvas.height / 2 + 12);
+                ctx.restore();
+            }
+        }
+
+        /* ================= 交互事件监听 ================= */
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+
+            mouseX = (e.clientX - rect.left) * scaleX;
+            mouseY = (e.clientY - rect.top) * scaleY;
+
+            if (mouseX >= GRID_OFFSET_X && mouseX < GRID_OFFSET_X + GRID_COLS * CELL_WIDTH &&
+                mouseY >= GRID_OFFSET_Y && mouseY < GRID_OFFSET_Y + GRID_ROWS * CELL_HEIGHT) {
+                isHoveringGrid = true;
+                hoverCol = Math.floor((mouseX - GRID_OFFSET_X) / CELL_WIDTH);
+                hoverRow = Math.floor((mouseY - GRID_OFFSET_Y) / CELL_HEIGHT);
+            } else {
+                isHoveringGrid = false;
+                hoverCol = -1;
+                hoverRow = -1;
+            }
+        });
+
+        canvas.addEventListener('click', (e) => {
+            if (gameState !== 'playing') return;
+
+            // 1. 优先检测点击收集阳光
+            let sunClicked = false;
+            for (let i = suns.length - 1; i >= 0; i--) {
+                const s = suns[i];
+                if (!s.collected && Math.hypot(mouseX - s.x, mouseY - s.y) < s.radius + 15) {
+                    s.collected = true;
+                    playSound('sun');
+                    sunClicked = true;
+                    break;
+                }
+            }
+            if (sunClicked) return;
+
+            // 2. 草坪网格操作
+            if (isHoveringGrid && hoverRow >= 0 && hoverCol >= 0) {
+                if (selectedTool === 'shovel') {
+                    // 铲除植物
+                    if (grid[hoverRow][hoverCol]) {
+                        grid[hoverRow][hoverCol] = null;
+                        playSound('hit');
+                        selectedTool = null;
+                        updateCardUI();
+                    }
+                } else if (selectedTool) {
+                    // 种植植物
+                    if (!grid[hoverRow][hoverCol]) {
+                        plantAt(hoverRow, hoverCol, selectedTool);
+                        selectedTool = null;
+                        updateCardUI();
+                    }
+                }
+            }
+        });
+
+        // 键盘快捷键
+        window.addEventListener('keydown', (e) => {
+            if (gameState !== 'playing') return;
+
+            if (e.key === '1') selectCard('sunflower');
+            else if (e.key === '2') selectCard('peashooter');
+            else if (e.key === '3') selectCard('snowpea');
+            else if (e.key === '4') selectCard('wallnut');
+            else if (e.key === '5') selectCard('cherrybomb');
+            else if (e.key === 's' || e.key === 'S') selectShovel();
+            else if (e.key === 'Escape') {
+                selectedTool = null;
+                updateCardUI();
+            }
+        });
+
+        // 默认初始化草坪
+        initGrid();
+        initLawnmowers();
+        render();
+    </script>
+</body>
+</html>

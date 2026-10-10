@@ -211,6 +211,34 @@
             transition: transform 0.4s;
         }
 
+        .pvz-image {
+            background: linear-gradient(45deg, #15803d, #ca8a04);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .pvz-image::before {
+            content: '🌻';
+            font-size: 5rem;
+            opacity: 0.8;
+            transition: transform 0.4s;
+        }
+
+        .cs-image {
+            background: linear-gradient(45deg, #1e293b, #d97706);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .cs-image::before {
+            content: '🎯';
+            font-size: 5rem;
+            opacity: 0.8;
+            transition: transform 0.4s;
+        }
+
         .video-search-image {
             background: linear-gradient(45deg, #8b5cf6, #ec4899);
             display: flex;
@@ -333,6 +361,26 @@
                 <h2 class="card-title">极速狂飙</h2>
                 <p class="card-desc">驾驶超级跑车在公路上驰骋。躲避障碍，不断加速，体验肾上腺素飙升的极限快感！</p>
                 <div class="play-btn">进入游戏</div>
+            </div>
+        </a>
+
+        <!-- 植物大战僵尸 -->
+        <a href="pvz.html" class="game-card">
+            <div class="card-image pvz-image"></div>
+            <div class="card-content">
+                <h2 class="card-title">植物大战僵尸</h2>
+                <p class="card-desc">后院保卫战一触即发！收集阳光，种植向日葵、豌豆射手、坚果墙与寒冰射手，抵御波次僵尸军团的疯狂进攻！</p>
+                <div class="play-btn">进入游戏</div>
+            </div>
+        </a>
+
+        <!-- CS 反恐枪战 -->
+        <a href="cs.html" class="game-card">
+            <div class="card-image cs-image"></div>
+            <div class="card-content">
+                <h2 class="card-title">CS: 反恐精英 3D</h2>
+                <p class="card-desc">经典沙漠 Dust2 实战演练！AK-47 狂暴点射、沙鹰重炮压制、战术匕首近战，歼灭全部恐怖分子！</p>
+                <div class="play-btn">进入战斗</div>
             </div>
         </a>
 

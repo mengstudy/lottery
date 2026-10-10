@@ -82,6 +82,18 @@ def tank_battle_game():
     return render_template('tank_battle.html')
 
 
+@app.route('/pvz.html')
+def pvz_game():
+    """植物大战僵尸"""
+    return render_template('pvz.html')
+
+
+@app.route('/cs.html')
+def cs_game():
+    """CS枪战"""
+    return render_template('cs.html')
+
+
 @app.route('/ssq')
 def ssq_index():
     """双色球首页 - 最新数据看板"""
