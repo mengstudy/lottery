@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">彩票大师</string>
+    <string name="tab_ssq">双色球</string>
+    <string name="tab_dlt">大乐透</string>
+    <string name="tab_kl8">快乐8</string>
+    <string name="tab_tools">分析工具</string>
+</resources>

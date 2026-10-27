@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#E02424</color>
+    <color name="primary_variant">#991B1B</color>
+    <color name="secondary">#1D4ED8</color>
+    <color name="background">#F8FAFC</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="red_ball_start">#FF4D4F</color>
+    <color name="red_ball_end">#CF1322</color>
+    <color name="blue_ball_start">#4096FF</color>
+    <color name="blue_ball_end">#0958D9</color>
+    <color name="kl8_ball_start">#FA8C16</color>
+    <color name="kl8_ball_end">#D4380D</color>
+</resources>
