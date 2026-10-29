@@ -17,10 +17,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -37,7 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lottery.analyzer.data.model.LotteryType
-import com.lottery.analyzer.ui.theme.RedDark
+import com.lottery.analyzer.ui.theme.PurplePrimary
 import com.lottery.analyzer.ui.theme.RedPrimary
 import com.lottery.analyzer.ui.theme.TextPrimary
 import com.lottery.analyzer.ui.theme.TextSecondary
@@ -51,6 +55,8 @@ fun HeartBallSelectorCard(
     onSetBalls: (Set<Int>) -> Unit,
     onClear: () -> Unit,
     onSaveAsPrediction: (() -> Unit)? = null,
+    onAiFusion: (() -> Unit)? = null,
+    onAiDiagnose: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var manualInput by remember { mutableStateOf("") }
@@ -186,6 +192,41 @@ fun HeartBallSelectorCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("机选一组", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            // 心水专属 AI 操作按钮
+            if (selectedBalls.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (onAiFusion != null) {
+                        Button(
+                            onClick = onAiFusion,
+                            colors = ButtonDefaults.buttonColors(containerColor = PurplePrimary),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("AI融合推演", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    if (onAiDiagnose != null) {
+                        Button(
+                            onClick = onAiDiagnose,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(imageVector = Icons.Default.HealthAndSafety, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("AI方案诊断", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
                 }
             }
 

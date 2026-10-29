@@ -4,6 +4,7 @@ import android.util.Log
 import com.lottery.analyzer.data.db.LotteryDao
 import com.lottery.analyzer.data.model.LotteryRecord
 import com.lottery.analyzer.data.model.LotteryType
+import com.lottery.analyzer.util.AppLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -26,6 +27,7 @@ class LotterySyncService(private val dao: LotteryDao) {
      * 联网同步最新开奖数据
      */
     suspend fun syncLatest(type: LotteryType): Result<Int> = withContext(Dispatchers.IO) {
+        AppLogger.i(TAG, "发起彩种同步: ${type.title} (${type.code})")
         try {
             // 这里提供公开开放数据源同步示例，支持解析最新开奖并持久化到本地 SQLite
             val apiUrl = when (type) {
@@ -53,9 +55,10 @@ class LotterySyncService(private val dao: LotteryDao) {
                     }
                 }
             }
+            AppLogger.i(TAG, "同步成功: ${type.title}, 新增/更新记录数: $count")
             Result.success(count)
         } catch (e: Exception) {
-            Log.w(TAG, "同步失败: ${e.message}")
+            AppLogger.w(TAG, "同步失败: ${type.title}, 异常: ${e.message}", e)
             Result.failure(e)
         }
     }

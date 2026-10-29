@@ -3,6 +3,12 @@ package com.lottery.analyzer.ui.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.lottery.analyzer.data.ai.AiLotteryService
+import com.lottery.analyzer.data.db.AiConfigPreferences
+import com.lottery.analyzer.data.model.AiAnalysisMode
+import com.lottery.analyzer.data.model.AiConfig
+import com.lottery.analyzer.data.model.AiProvider
+import com.lottery.analyzer.data.model.AiRecommendationResult
 import com.lottery.analyzer.data.model.FrequencyAnalysisResult
 import com.lottery.analyzer.data.model.HeartBallLevelDistribution
 import com.lottery.analyzer.data.model.IssueAnalysis
@@ -36,17 +42,30 @@ data class LotteryUiState(
     // 预测与选号策略记录状态
     val nextIssueTarget: String = "",
     val predictionRecords: List<PredictionVerificationResult> = emptyList(),
-    val predictionFeedback: String? = null
+    val predictionFeedback: String? = null,
+    // AI 大模型状态
+    val aiConfig: AiConfig = AiConfig(),
+    val isAiLoading: Boolean = false,
+    val aiResult: AiRecommendationResult? = null,
+    val aiError: String? = null,
+    val aiTestMessage: String? = null,
+    val showAiSettingsDialog: Boolean = false,
+    val showLogDialog: Boolean = false
 )
 
 class LotteryViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = LotteryRepository(application)
+    private val aiConfigPreferences = AiConfigPreferences(application)
+    private val aiService = AiLotteryService()
 
     private val _uiState = MutableStateFlow(LotteryUiState())
     val uiState: StateFlow<LotteryUiState> = _uiState.asStateFlow()
 
     init {
+        _uiState.value = _uiState.value.copy(
+            aiConfig = aiConfigPreferences.getAiConfig()
+        )
         switchLotteryType(LotteryType.SSQ)
     }
 
@@ -68,7 +87,9 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
                 currentType = type,
                 isLoading = true,
                 errorMessage = null,
-                myHeartBalls = emptySet() // 切换彩种重置自选
+                myHeartBalls = emptySet(), // 切换彩种重置自选
+                aiResult = null,
+                aiError = null
             )
             try {
                 val records = repository.getRecordsDesc(type)
@@ -99,7 +120,7 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * 切换查看期号
+     * 选择指定期号查看分析看板
      */
     fun selectIssue(issue: String) {
         val type = _uiState.value.currentType
@@ -149,7 +170,7 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * 点选或取消心水球
+     * 切换心水红球选择状态
      */
     fun toggleHeartBall(num: Int) {
         val current = _uiState.value.myHeartBalls.toMutableSet()
@@ -163,7 +184,7 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * 批量设置心水球
+     * 批量设置心水红球
      */
     fun setHeartBalls(balls: Set<Int>) {
         _uiState.value = _uiState.value.copy(myHeartBalls = balls)
@@ -171,14 +192,14 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * 清空心水球
+     * 清空心水红球
      */
     fun clearHeartBalls() {
         _uiState.value = _uiState.value.copy(myHeartBalls = emptySet(), heartBallDistributions = emptyList())
     }
 
     /**
-     * 更新他人收集号码并解析频次
+     * 更新他人购买号码文本并进行频次解析
      */
     fun updateCollectedBallsText(text: String) {
         val maxNumber = _uiState.value.currentType.maxRedNumber
@@ -215,7 +236,7 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * 清空他人收集号码
+     * 清空他人购买号码
      */
     fun clearCollectedBalls() {
         _uiState.value = _uiState.value.copy(
@@ -225,7 +246,7 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * 重新计算心水球在下期预测遗漏分组中的穿透分布
+     * 重新计算心水红球在下一期遗漏层级上的分布
      */
     private fun recalcHeartDistributions() {
         val analysis = _uiState.value.analysis ?: return
@@ -246,7 +267,7 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * 加载并核验当前彩种的预测记录
+     * 加载当前彩种已保存的预测记录并完成自动比对验证
      */
     fun loadPredictions() {
         viewModelScope.launch {
@@ -341,7 +362,7 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
                     syncMessage = if (updatedCount > 0) "已成功同步 $updatedCount 条最新开奖记录" else "本地已是最新数据"
                 )
                 recalcHeartDistributions()
-                loadPredictions() // 自动重算比对！
+                loadPredictions() // 自动重算比对
             }.onFailure { err ->
                 _uiState.value = _uiState.value.copy(
                     isSyncing = false,
@@ -357,5 +378,150 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
      */
     suspend fun getNumberTrend(number: Int, isBlue: Boolean = false): List<Pair<String, Int>> {
         return repository.getNumberTrend(_uiState.value.currentType, number, isBlue)
+    }
+
+    // ==================== AI 大模型功能控制 ====================
+
+    /**
+     * 显示/关闭 AI 配置弹窗
+     */
+    fun setAiSettingsDialogVisible(visible: Boolean) {
+        _uiState.value = _uiState.value.copy(
+            showAiSettingsDialog = visible,
+            aiTestMessage = null
+        )
+    }
+
+    /**
+     * 显示/关闭 日志查看弹窗
+     */
+    fun setLogDialogVisible(visible: Boolean) {
+        _uiState.value = _uiState.value.copy(showLogDialog = visible)
+    }
+
+    /**
+     * 更新 AI 配置
+     */
+    fun updateAiConfig(config: AiConfig) {
+        aiConfigPreferences.saveAiConfig(config)
+        _uiState.value = _uiState.value.copy(aiConfig = config)
+    }
+
+    /**
+     * 切换 AI 平台预设
+     */
+    fun selectAiProviderPreset(provider: AiProvider) {
+        val newConfig = aiConfigPreferences.selectProviderPreset(provider)
+        _uiState.value = _uiState.value.copy(aiConfig = newConfig)
+    }
+
+    /**
+     * 测试 AI API 连通性
+     */
+    fun testAiConnection(config: AiConfig = _uiState.value.aiConfig) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isAiLoading = true,
+                aiTestMessage = null,
+                aiError = null
+            )
+            val result = aiService.testConnection(config)
+            result.onSuccess { reply ->
+                _uiState.value = _uiState.value.copy(
+                    isAiLoading = false,
+                    aiTestMessage = "✅ 连接成功！模型响应: $reply"
+                )
+            }.onFailure { err ->
+                _uiState.value = _uiState.value.copy(
+                    isAiLoading = false,
+                    aiTestMessage = "❌ 连接失败: ${err.message}"
+                )
+            }
+        }
+    }
+
+    /**
+     * 发起 AI 选号推演或诊断
+     */
+    fun runAiAnalysis(mode: AiAnalysisMode, betCount: Int = 3) {
+        val analysis = _uiState.value.analysis
+        if (analysis == null) {
+            _uiState.value = _uiState.value.copy(aiError = "尚未加载到当前彩种分析数据")
+            return
+        }
+        val type = _uiState.value.currentType
+        val targetIssue = _uiState.value.nextIssueTarget
+        val config = _uiState.value.aiConfig
+
+        if (config.apiKey.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                showAiSettingsDialog = true,
+                aiError = "请先配置并保存 AI API Key"
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isAiLoading = true,
+                aiError = null,
+                aiResult = null
+            )
+            val result = aiService.generateRecommendation(
+                config = config,
+                lotteryType = type,
+                analysis = analysis,
+                targetNextIssue = targetIssue,
+                mode = mode,
+                userSelection = _uiState.value.myHeartBalls,
+                topOtherBalls = _uiState.value.frequencyResult.sortedByFreq,
+                betCount = betCount
+            )
+            result.onSuccess { recommendation ->
+                _uiState.value = _uiState.value.copy(
+                    isAiLoading = false,
+                    aiResult = recommendation
+                )
+            }.onFailure { err ->
+                _uiState.value = _uiState.value.copy(
+                    isAiLoading = false,
+                    aiError = err.message ?: "AI 生成失败，请检查配置与网络"
+                )
+            }
+        }
+    }
+
+    /**
+     * 将 AI 推荐的指定注数号码保存为下期预测记录
+     */
+    fun saveAiBetToPrediction(betIndex: Int) {
+        val result = _uiState.value.aiResult ?: return
+        if (betIndex in result.recommendedBets.indices) {
+            val (reds, blues) = result.recommendedBets[betIndex]
+            val strategy = "AI大模型[${_uiState.value.aiConfig.provider.title}]-${result.mode.title}#${betIndex + 1}"
+            savePredictionRecord(
+                redBalls = reds,
+                blueBalls = blues,
+                strategy = strategy
+            )
+        }
+    }
+
+    /**
+     * 将 AI 推荐的红球一键设置为心水红球
+     */
+    fun applyAiBetToHeartBalls(betIndex: Int) {
+        val result = _uiState.value.aiResult ?: return
+        if (betIndex in result.recommendedBets.indices) {
+            val (reds, _) = result.recommendedBets[betIndex]
+            setHeartBalls(reds.toSet())
+        }
+    }
+
+    /**
+     * 清除当前 AI 结果
+     */
+    fun clearAiResult() {
+        _uiState.value = _uiState.value.copy(aiResult = null, aiError = null)
     }
 }

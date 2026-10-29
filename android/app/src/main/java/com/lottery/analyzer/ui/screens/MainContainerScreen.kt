@@ -17,7 +17,9 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -47,6 +49,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lottery.analyzer.data.model.LotteryType
+import com.lottery.analyzer.ui.components.AiSettingsDialog
+import com.lottery.analyzer.ui.components.LogViewerDialog
 import com.lottery.analyzer.ui.theme.BluePrimary
 import com.lottery.analyzer.ui.theme.OrangePrimary
 import com.lottery.analyzer.ui.theme.RedDark
@@ -148,6 +152,24 @@ fun MainContainerScreen(viewModel: LotteryViewModel) {
                 },
                 actions = {
                     IconButton(
+                        onClick = { viewModel.setLogDialogVisible(true) }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Terminal,
+                            contentDescription = "运行日志",
+                            tint = Color.White
+                        )
+                    }
+                    IconButton(
+                        onClick = { viewModel.setAiSettingsDialogVisible(true) }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SmartToy,
+                            contentDescription = "AI平台配置",
+                            tint = Color.White
+                        )
+                    }
+                    IconButton(
                         onClick = { viewModel.syncLatestData() },
                         enabled = !uiState.isSyncing
                     ) {
@@ -225,6 +247,26 @@ fun MainContainerScreen(viewModel: LotteryViewModel) {
                 3 -> ToolsScreen(viewModel = viewModel, uiState = uiState)
             }
         }
+    }
+
+    // 全局 AI 大模型配置弹窗
+    if (uiState.showAiSettingsDialog) {
+        AiSettingsDialog(
+            config = uiState.aiConfig,
+            isLoading = uiState.isAiLoading,
+            testMessage = uiState.aiTestMessage,
+            onDismiss = { viewModel.setAiSettingsDialogVisible(false) },
+            onSaveConfig = { viewModel.updateAiConfig(it) },
+            onTestConnection = { viewModel.testAiConnection(it) },
+            onViewLogs = { viewModel.setLogDialogVisible(true) }
+        )
+    }
+
+    // 全局运行日志查看弹窗
+    if (uiState.showLogDialog) {
+        LogViewerDialog(
+            onDismiss = { viewModel.setLogDialogVisible(false) }
+        )
     }
 }
 

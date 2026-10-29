@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lottery.analyzer.data.model.LotteryType
+import com.lottery.analyzer.ui.components.AiLotteryWorkstationCard
 import com.lottery.analyzer.ui.components.BallStyle
 import com.lottery.analyzer.ui.components.LotteryBall
 import com.lottery.analyzer.ui.components.LotteryTypeSelectorBar
@@ -310,7 +311,26 @@ fun ToolsScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 3. 预测选号记录与开奖自动比对卡片 (含删除和清空)
+            // 3. 🤖 AI 大模型智能推演工作台
+            AiLotteryWorkstationCard(
+                lotteryType = uiState.currentType,
+                targetIssue = uiState.nextIssueTarget,
+                aiConfig = uiState.aiConfig,
+                isLoading = uiState.isAiLoading,
+                aiResult = uiState.aiResult,
+                aiError = uiState.aiError,
+                heartBallCount = uiState.myHeartBalls.size,
+                onOpenSettings = { viewModel.setAiSettingsDialogVisible(true) },
+                onRunAnalysis = { mode, count -> viewModel.runAiAnalysis(mode, count) },
+                onSaveBetToPrediction = { index -> viewModel.saveAiBetToPrediction(index) },
+                onApplyBetToHeart = { index -> viewModel.applyAiBetToHeartBalls(index) },
+                onClearResult = { viewModel.clearAiResult() },
+                onViewLogs = { viewModel.setLogDialogVisible(true) }
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // 4. 预测选号记录与开奖自动比对卡片 (含删除和清空)
             PredictionRecordsCard(
                 lotteryType = uiState.currentType,
                 records = uiState.predictionRecords,
@@ -320,7 +340,7 @@ fun ToolsScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 4. 号码遗漏走势图卡片
+            // 5. 号码遗漏走势图卡片
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),

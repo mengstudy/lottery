@@ -1,7 +1,6 @@
 package com.lottery.analyzer.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,8 +33,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lottery.analyzer.data.model.AiAnalysisMode
 import com.lottery.analyzer.data.model.HeartBallLevelDistribution
 import com.lottery.analyzer.data.model.LotteryType
+import com.lottery.analyzer.ui.components.AiLotteryWorkstationCard
 import com.lottery.analyzer.ui.components.FrequencyCompareCard
 import com.lottery.analyzer.ui.components.HeartBallSelectorCard
 import com.lottery.analyzer.ui.components.LotteryTypeSelectorBar
@@ -80,7 +81,7 @@ fun PredictCompareScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 2. 心水红球自选面板 (支持一键保存为下期预测)
+            // 2. 心水红球自选面板 (支持一键保存为下期预测与一键 AI 推演/诊断)
             HeartBallSelectorCard(
                 lotteryType = uiState.currentType,
                 selectedBalls = uiState.myHeartBalls,
@@ -99,6 +100,12 @@ fun PredictCompareScreen(
                         blueBalls = blueList,
                         strategy = "心水自选(层级透视)"
                     )
+                },
+                onAiFusion = {
+                    viewModel.runAiAnalysis(AiAnalysisMode.HEART_FUSION)
+                },
+                onAiDiagnose = {
+                    viewModel.runAiAnalysis(AiAnalysisMode.DIAGNOSE_SELECTION)
                 }
             )
 
@@ -114,7 +121,26 @@ fun PredictCompareScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 4. 心水红球在各遗漏层级的穿透分布卡片
+            // 4. 🤖 AI 大模型推演工作台卡片 (结合历史指标、0~9+各层遗漏与心水融合推演)
+            AiLotteryWorkstationCard(
+                lotteryType = uiState.currentType,
+                targetIssue = uiState.nextIssueTarget,
+                aiConfig = uiState.aiConfig,
+                isLoading = uiState.isAiLoading,
+                aiResult = uiState.aiResult,
+                aiError = uiState.aiError,
+                heartBallCount = uiState.myHeartBalls.size,
+                onOpenSettings = { viewModel.setAiSettingsDialogVisible(true) },
+                onRunAnalysis = { mode, count -> viewModel.runAiAnalysis(mode, count) },
+                onSaveBetToPrediction = { index -> viewModel.saveAiBetToPrediction(index) },
+                onApplyBetToHeart = { index -> viewModel.applyAiBetToHeartBalls(index) },
+                onClearResult = { viewModel.clearAiResult() },
+                onViewLogs = { viewModel.setLogDialogVisible(true) }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 5. 心水红球在各遗漏层级的穿透分布卡片
             if (uiState.myHeartBalls.isNotEmpty() && analysis != null) {
                 HeartBallStatsCard(
                     distributions = uiState.heartBallDistributions,
@@ -123,7 +149,7 @@ fun PredictCompareScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            // 5. 核心联动比对卡片：下期遗漏分组预测 (心水标红 + 频次角标)
+            // 6. 核心联动比对卡片：下期遗漏分组预测 (心水标红 + 频次角标)
             if (uiState.isLoading) {
                 Box(
                     modifier = Modifier
@@ -147,7 +173,7 @@ fun PredictCompareScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            // 6. 预测选号记录与开奖自动比对卡片 (含删除和清空)
+            // 7. 预测选号记录与开奖自动比对卡片 (含删除和清空)
             PredictionRecordsCard(
                 lotteryType = uiState.currentType,
                 records = uiState.predictionRecords,
