@@ -50,6 +50,7 @@ import com.lottery.analyzer.data.model.LotteryType
 import com.lottery.analyzer.ui.components.BallStyle
 import com.lottery.analyzer.ui.components.LotteryBall
 import com.lottery.analyzer.ui.components.LotteryTypeSelectorBar
+import com.lottery.analyzer.ui.components.PredictionRecordsCard
 import com.lottery.analyzer.ui.theme.BluePrimary
 import com.lottery.analyzer.ui.theme.RedDark
 import com.lottery.analyzer.ui.theme.RedPrimary
@@ -85,6 +86,12 @@ fun ToolsScreen(
     // 重新获取走势
     LaunchedEffect(selectedNumber, uiState.currentType) {
         trendData = viewModel.getNumberTrend(selectedNumber)
+    }
+
+    LaunchedEffect(uiState.predictionFeedback) {
+        uiState.predictionFeedback?.let {
+            snackbarHostState.showSnackbar(it)
+        }
     }
 
     // 生成一注的通用函数
@@ -212,7 +219,7 @@ fun ToolsScreen(
                     }
 
                     Text(
-                        text = "依据下期遗漏分组算法，按黄金比例 (热+温+冷) 推荐红球，并自动生成后区蓝球",
+                        text = "依据下期遗漏分组算法，按黄金比例 (热+温+冷) 推荐红球并随机蓝球，支持记录到下期进行开奖比对",
                         fontSize = 11.sp,
                         color = TextSecondary,
                         modifier = Modifier.padding(start = 14.dp, top = 2.dp, bottom = 12.dp)
@@ -250,6 +257,26 @@ fun ToolsScreen(
                         }
                     }
 
+                    // 批量保存全部按钮
+                    if (generatedBets.size > 1) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                generatedBets.forEachIndexed { i, b ->
+                                    viewModel.savePredictionRecord(
+                                        redBalls = b.redBalls,
+                                        blueBalls = b.blueBalls,
+                                        strategy = "黄金比例智能模拟(第${i + 1}注)"
+                                    )
+                                }
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("💾 一键记录全部 ${generatedBets.size} 注为下期预测", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
                     // 展示生成的注数列表
                     if (generatedBets.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(14.dp))
@@ -264,6 +291,13 @@ fun ToolsScreen(
                                     scope.launch {
                                         snackbarHostState.showSnackbar("已将第 ${index + 1} 注红球设为您的心水红球！")
                                     }
+                                },
+                                onSavePrediction = {
+                                    viewModel.savePredictionRecord(
+                                        redBalls = bet.redBalls,
+                                        blueBalls = bet.blueBalls,
+                                        strategy = "遗漏黄金比例智能模拟"
+                                    )
                                 }
                             )
                             if (index < generatedBets.size - 1) {
@@ -276,7 +310,17 @@ fun ToolsScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 3. 号码遗漏走势图卡片
+            // 3. 预测选号记录与开奖自动比对卡片 (含删除和清空)
+            PredictionRecordsCard(
+                lotteryType = uiState.currentType,
+                records = uiState.predictionRecords,
+                onDelete = { viewModel.deletePredictionRecord(it) },
+                onClearAll = { viewModel.clearPredictionRecords() }
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // 4. 号码遗漏走势图卡片
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -368,7 +412,8 @@ private fun SingleBetResultCard(
     index: Int,
     bet: GeneratedLotteryBet,
     lotteryType: LotteryType,
-    onSyncToHeartBalls: () -> Unit
+    onSyncToHeartBalls: () -> Unit,
+    onSavePrediction: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -398,7 +443,7 @@ private fun SingleBetResultCard(
                     fontSize = 10.sp,
                     color = TextSecondary
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = "设为心水",
                     fontSize = 10.sp,
@@ -408,7 +453,19 @@ private fun SingleBetResultCard(
                         .clip(RoundedCornerShape(4.dp))
                         .background(Color(0xFFFEF2F2))
                         .clickable { onSyncToHeartBalls() }
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "记录预测",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF059669),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFFECFDF5))
+                        .clickable { onSavePrediction() }
+                        .padding(horizontal = 5.dp, vertical = 2.dp)
                 )
             }
         }

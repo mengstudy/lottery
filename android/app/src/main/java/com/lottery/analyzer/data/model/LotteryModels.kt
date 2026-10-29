@@ -119,3 +119,31 @@ data class HeartBallLevelDistribution(
     val matchedBalls: List<Int>
 )
 
+/**
+ * 用户保存的预测与选号策略记录实体
+ */
+data class PredictionRecord(
+    val id: Long = 0,
+    val lotteryType: LotteryType,
+    val targetIssue: String,
+    val redBalls: List<Int>,
+    val blueBalls: List<Int> = emptyList(),
+    val strategy: String,
+    val createdAt: String,
+    val note: String = ""
+)
+
+/**
+ * 预测记录与实际开奖的比对核验结果
+ */
+data class PredictionVerificationResult(
+    val record: PredictionRecord,
+    val isDrawn: Boolean,
+    val actualRecord: LotteryRecord? = null,
+    val hitRedBalls: List<Int> = emptyList(),
+    val hitBlueBalls: List<Int> = emptyList(),
+    val resultSummary: String = "",
+    val isWon: Boolean = false
+)
+
+

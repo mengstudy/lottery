@@ -16,14 +16,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,6 +40,7 @@ import com.lottery.analyzer.ui.components.FrequencyCompareCard
 import com.lottery.analyzer.ui.components.HeartBallSelectorCard
 import com.lottery.analyzer.ui.components.LotteryTypeSelectorBar
 import com.lottery.analyzer.ui.components.MissingLevelCard
+import com.lottery.analyzer.ui.components.PredictionRecordsCard
 import com.lottery.analyzer.ui.theme.RedDark
 import com.lottery.analyzer.ui.theme.RedPrimary
 import com.lottery.analyzer.ui.theme.TextPrimary
@@ -52,76 +56,112 @@ fun PredictCompareScreen(
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
+    val snackbarHostState = remember { SnackbarHostState() }
     val analysis = uiState.analysis
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState)
-            .padding(horizontal = 14.dp, vertical = 10.dp)
-    ) {
-        // 1. 彩种选择器
-        LotteryTypeSelectorBar(
-            currentType = uiState.currentType,
-            onSelectType = { viewModel.switchLotteryType(it) }
-        )
+    LaunchedEffect(uiState.predictionFeedback) {
+        uiState.predictionFeedback?.let {
+            snackbarHostState.showSnackbar(it)
+        }
+    }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // 2. 心水红球自选面板
-        HeartBallSelectorCard(
-            lotteryType = uiState.currentType,
-            selectedBalls = uiState.myHeartBalls,
-            onToggleBall = { viewModel.toggleHeartBall(it) },
-            onSetBalls = { viewModel.setHeartBalls(it) },
-            onClear = { viewModel.clearHeartBalls() }
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // 3. 他人购买红球频次收集比对面板
-        FrequencyCompareCard(
-            inputText = uiState.collectedBallsText,
-            onInputChange = { viewModel.updateCollectedBallsText(it) },
-            analysisResult = uiState.frequencyResult,
-            onClear = { viewModel.clearCollectedBalls() }
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // 4. 心水红球在各遗漏层级的穿透分布卡片
-        if (uiState.myHeartBalls.isNotEmpty() && analysis != null) {
-            HeartBallStatsCard(
-                distributions = uiState.heartBallDistributions,
-                totalSelected = uiState.myHeartBalls.size
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            // 1. 彩种选择器
+            LotteryTypeSelectorBar(
+                currentType = uiState.currentType,
+                onSelectType = { viewModel.switchLotteryType(it) }
             )
+
             Spacer(modifier = Modifier.height(12.dp))
-        }
 
-        // 5. 核心联动比对卡片：下期遗漏分组预测 (心水标红 + 频次角标)
-        if (uiState.isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = RedPrimary)
-            }
-        } else if (analysis != null) {
-            MissingLevelCard(
-                title = "⚡ 预测分组与心水比对透视",
-                subtitle = "🔴 金边红球为您的心水号码 | 🟣 紫色角标为他人高频出现号码",
-                levels = analysis.nextSimulatedGroups,
-                isPrediction = true,
-                initialExpanded = true,
-                heartBalls = uiState.myHeartBalls,
-                freqMap = uiState.frequencyResult.frequencyMap,
-                onBallClick = { viewModel.toggleHeartBall(it) }
+            // 2. 心水红球自选面板 (支持一键保存为下期预测)
+            HeartBallSelectorCard(
+                lotteryType = uiState.currentType,
+                selectedBalls = uiState.myHeartBalls,
+                onToggleBall = { viewModel.toggleHeartBall(it) },
+                onSetBalls = { viewModel.setHeartBalls(it) },
+                onClear = { viewModel.clearHeartBalls() },
+                onSaveAsPrediction = {
+                    val redList = uiState.myHeartBalls.toList()
+                    val blueList = when (uiState.currentType) {
+                        LotteryType.SSQ -> listOf((1..16).random())
+                        LotteryType.DLT -> (1..12).shuffled().take(2)
+                        LotteryType.KL8 -> emptyList()
+                    }
+                    viewModel.savePredictionRecord(
+                        redBalls = redList,
+                        blueBalls = blueList,
+                        strategy = "心水自选(层级透视)"
+                    )
+                }
             )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 3. 他人购买红球频次收集比对面板
+            FrequencyCompareCard(
+                inputText = uiState.collectedBallsText,
+                onInputChange = { viewModel.updateCollectedBallsText(it) },
+                analysisResult = uiState.frequencyResult,
+                onClear = { viewModel.clearCollectedBalls() }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 4. 心水红球在各遗漏层级的穿透分布卡片
+            if (uiState.myHeartBalls.isNotEmpty() && analysis != null) {
+                HeartBallStatsCard(
+                    distributions = uiState.heartBallDistributions,
+                    totalSelected = uiState.myHeartBalls.size
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // 5. 核心联动比对卡片：下期遗漏分组预测 (心水标红 + 频次角标)
+            if (uiState.isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = RedPrimary)
+                }
+            } else if (analysis != null) {
+                MissingLevelCard(
+                    title = "⚡ 预测分组与心水比对透视",
+                    subtitle = "🔴 金边红球为您的心水号码 | 🟣 紫色角标为他人高频出现号码",
+                    levels = analysis.nextSimulatedGroups,
+                    isPrediction = true,
+                    initialExpanded = true,
+                    heartBalls = uiState.myHeartBalls,
+                    freqMap = uiState.frequencyResult.frequencyMap,
+                    onBallClick = { viewModel.toggleHeartBall(it) }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // 6. 预测选号记录与开奖自动比对卡片 (含删除和清空)
+            PredictionRecordsCard(
+                lotteryType = uiState.currentType,
+                records = uiState.predictionRecords,
+                onDelete = { viewModel.deletePredictionRecord(it) },
+                onClearAll = { viewModel.clearPredictionRecords() }
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 }
 

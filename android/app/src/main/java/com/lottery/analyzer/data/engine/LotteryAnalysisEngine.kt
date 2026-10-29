@@ -219,4 +219,81 @@ object LotteryAnalysisEngine {
             )
         }
     }
+
+    /**
+     * 比对核验预测记录与实际开奖
+     */
+    fun verifyPrediction(
+        prediction: com.lottery.analyzer.data.model.PredictionRecord,
+        actualDraw: LotteryRecord?
+    ): com.lottery.analyzer.data.model.PredictionVerificationResult {
+        if (actualDraw == null) {
+            return com.lottery.analyzer.data.model.PredictionVerificationResult(
+                record = prediction,
+                isDrawn = false,
+                resultSummary = "⏳ 待开奖 (等待最新开奖数据更新)"
+            )
+        }
+
+        val actualRedSet = actualDraw.redBalls.toSet()
+        val actualBlueSet = actualDraw.blueBalls.toSet()
+
+        val hitReds = prediction.redBalls.filter { it in actualRedSet }.sorted()
+        val hitBlues = prediction.blueBalls.filter { it in actualBlueSet }.sorted()
+
+        val rCount = hitReds.size
+        val bCount = hitBlues.size
+
+        var summary = ""
+        var isWon = false
+
+        when (prediction.lotteryType) {
+            LotteryType.SSQ -> {
+                when {
+                    rCount == 6 && bCount == 1 -> { summary = "🎉 一等奖 (命中6红+1蓝)"; isWon = true }
+                    rCount == 6 && bCount == 0 -> { summary = "🎉 二等奖 (命中6红)"; isWon = true }
+                    rCount == 5 && bCount == 1 -> { summary = "🎉 三等奖 (命中5红+1蓝)"; isWon = true }
+                    (rCount == 5 && bCount == 0) || (rCount == 4 && bCount == 1) -> { summary = "✨ 四等奖 (命中 $rCount+$bCount)"; isWon = true }
+                    (rCount == 4 && bCount == 0) || (rCount == 3 && bCount == 1) -> { summary = "✨ 五等奖 (命中 $rCount+$bCount)"; isWon = true }
+                    bCount == 1 -> { summary = "✨ 六等奖 (命中蓝球)"; isWon = true }
+                    else -> summary = "未中奖 (命中 $rCount+$bCount)"
+                }
+            }
+            LotteryType.DLT -> {
+                when {
+                    rCount == 5 && bCount == 2 -> { summary = "🎉 一等奖 (命中5+2)"; isWon = true }
+                    rCount == 5 && bCount == 1 -> { summary = "🎉 二等奖 (命中5+1)"; isWon = true }
+                    rCount == 5 && bCount == 0 -> { summary = "🎉 三等奖 (命中5+0)"; isWon = true }
+                    rCount == 4 && bCount == 2 -> { summary = "✨ 四等奖 (命中4+2)"; isWon = true }
+                    rCount == 4 && bCount == 1 -> { summary = "✨ 五等奖 (命中4+1)"; isWon = true }
+                    rCount == 3 && bCount == 2 -> { summary = "✨ 六等奖 (命中3+2)"; isWon = true }
+                    rCount == 4 && bCount == 0 -> { summary = "✨ 七等奖 (命中4+0)"; isWon = true }
+                    (rCount == 3 && bCount == 1) || (rCount == 2 && bCount == 2) -> { summary = "✨ 八等奖 (命中 $rCount+$bCount)"; isWon = true }
+                    (rCount == 3 && bCount == 0) || (rCount == 1 && bCount == 2) || (rCount == 2 && bCount == 1) || (rCount == 0 && bCount == 2) -> { summary = "✨ 九等奖 (命中 $rCount+$bCount)"; isWon = true }
+                    else -> summary = "未中奖 (命中 $rCount+$bCount)"
+                }
+            }
+            LotteryType.KL8 -> {
+                // 快乐8按选十规则估算
+                when {
+                    rCount == 10 -> { summary = "🎉 选十中十！"; isWon = true }
+                    rCount == 9 -> { summary = "🎉 选十中九！"; isWon = true }
+                    rCount == 8 -> { summary = "✨ 选十中八！"; isWon = true }
+                    rCount == 7 -> { summary = "✨ 选十中七！"; isWon = true }
+                    rCount == 0 -> { summary = "✨ 选十中零！(全不中中奖)"; isWon = true }
+                    else -> summary = "命中 $rCount 码"
+                }
+            }
+        }
+
+        return com.lottery.analyzer.data.model.PredictionVerificationResult(
+            record = prediction,
+            isDrawn = true,
+            actualRecord = actualDraw,
+            hitRedBalls = hitReds,
+            hitBlueBalls = hitBlues,
+            resultSummary = summary,
+            isWon = isWon
+        )
+    }
 }

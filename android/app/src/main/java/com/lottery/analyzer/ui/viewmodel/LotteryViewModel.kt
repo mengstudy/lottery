@@ -8,11 +8,16 @@ import com.lottery.analyzer.data.model.HeartBallLevelDistribution
 import com.lottery.analyzer.data.model.IssueAnalysis
 import com.lottery.analyzer.data.model.LotteryRecord
 import com.lottery.analyzer.data.model.LotteryType
+import com.lottery.analyzer.data.model.PredictionRecord
+import com.lottery.analyzer.data.model.PredictionVerificationResult
 import com.lottery.analyzer.data.repository.LotteryRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 data class LotteryUiState(
     val currentType: LotteryType = LotteryType.SSQ,
@@ -27,7 +32,11 @@ data class LotteryUiState(
     val myHeartBalls: Set<Int> = emptySet(),
     val collectedBallsText: String = "",
     val frequencyResult: FrequencyAnalysisResult = FrequencyAnalysisResult(0, emptyMap(), emptyList()),
-    val heartBallDistributions: List<HeartBallLevelDistribution> = emptyList()
+    val heartBallDistributions: List<HeartBallLevelDistribution> = emptyList(),
+    // 预测与选号策略记录状态
+    val nextIssueTarget: String = "",
+    val predictionRecords: List<PredictionVerificationResult> = emptyList(),
+    val predictionFeedback: String? = null
 )
 
 class LotteryViewModel(application: Application) : AndroidViewModel(application) {
@@ -39,6 +48,15 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
 
     init {
         switchLotteryType(LotteryType.SSQ)
+    }
+
+    /**
+     * 推算下一期期号（基于当前数据库最新期）
+     */
+    private fun computeNextIssue(latestIssue: String): String {
+        if (latestIssue.isBlank()) return ""
+        val num = latestIssue.toLongOrNull()
+        return if (num != null) (num + 1).toString() else latestIssue
     }
 
     /**
@@ -59,14 +77,18 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
                     repository.getAnalysisForIssue(type, firstIssue)
                 } else null
 
+                val nextIssue = computeNextIssue(firstIssue)
+
                 _uiState.value = _uiState.value.copy(
                     currentType = type,
                     recordsDesc = records,
                     currentIssue = firstIssue,
                     analysis = analysis,
+                    nextIssueTarget = nextIssue,
                     isLoading = false
                 )
                 recalcHeartDistributions()
+                loadPredictions()
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -224,7 +246,77 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * 联网同步最新开奖数据
+     * 加载并核验当前彩种的预测记录
+     */
+    fun loadPredictions() {
+        viewModelScope.launch {
+            try {
+                val list = repository.getVerifiedPredictions(_uiState.value.currentType)
+                _uiState.value = _uiState.value.copy(predictionRecords = list)
+            } catch (e: Exception) {
+                // 忽略或记录
+            }
+        }
+    }
+
+    /**
+     * 保存一条新的预测与选号策略记录（期号默认为预测下一期）
+     */
+    fun savePredictionRecord(
+        redBalls: List<Int>,
+        blueBalls: List<Int> = emptyList(),
+        strategy: String,
+        targetIssue: String = ""
+    ) {
+        val target = if (targetIssue.isNotBlank()) targetIssue else _uiState.value.nextIssueTarget
+        val timeStr = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date())
+
+        val record = PredictionRecord(
+            lotteryType = _uiState.value.currentType,
+            targetIssue = target,
+            redBalls = redBalls.sorted(),
+            blueBalls = blueBalls.sorted(),
+            strategy = strategy,
+            createdAt = timeStr
+        )
+
+        viewModelScope.launch {
+            repository.savePrediction(record)
+            loadPredictions()
+            _uiState.value = _uiState.value.copy(
+                predictionFeedback = "已成功记录第 $target 期预测选号！"
+            )
+        }
+    }
+
+    /**
+     * 删除单条预测记录
+     */
+    fun deletePredictionRecord(id: Long) {
+        viewModelScope.launch {
+            repository.deletePrediction(id)
+            loadPredictions()
+            _uiState.value = _uiState.value.copy(
+                predictionFeedback = "已删除预测记录"
+            )
+        }
+    }
+
+    /**
+     * 清空当前彩种的所有预测记录
+     */
+    fun clearPredictionRecords() {
+        viewModelScope.launch {
+            repository.clearPredictions(_uiState.value.currentType)
+            loadPredictions()
+            _uiState.value = _uiState.value.copy(
+                predictionFeedback = "已清空预测历史记录"
+            )
+        }
+    }
+
+    /**
+     * 联网同步最新开奖数据（同步完成后自动重算预测比对）
      */
     fun syncLatestData() {
         val type = _uiState.value.currentType
@@ -238,19 +330,24 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
                     repository.getAnalysisForIssue(type, firstIssue)
                 } else null
 
+                val nextIssue = computeNextIssue(firstIssue)
+
                 _uiState.value = _uiState.value.copy(
                     recordsDesc = records,
                     currentIssue = firstIssue,
                     analysis = analysis,
+                    nextIssueTarget = nextIssue,
                     isSyncing = false,
                     syncMessage = if (updatedCount > 0) "已成功同步 $updatedCount 条最新开奖记录" else "本地已是最新数据"
                 )
                 recalcHeartDistributions()
+                loadPredictions() // 自动重算比对！
             }.onFailure { err ->
                 _uiState.value = _uiState.value.copy(
                     isSyncing = false,
                     syncMessage = "同步完成 (当前已展示本地最新记录)"
                 )
+                loadPredictions()
             }
         }
     }

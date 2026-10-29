@@ -50,6 +50,7 @@ fun HeartBallSelectorCard(
     onToggleBall: (Int) -> Unit,
     onSetBalls: (Set<Int>) -> Unit,
     onClear: () -> Unit,
+    onSaveAsPrediction: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var manualInput by remember { mutableStateOf("") }
@@ -185,6 +186,18 @@ fun HeartBallSelectorCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("机选一组", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            if (selectedBalls.isNotEmpty() && onSaveAsPrediction != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = onSaveAsPrediction,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("💾 记录这组心水为下期预测 (含策略记录)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
             }
         }

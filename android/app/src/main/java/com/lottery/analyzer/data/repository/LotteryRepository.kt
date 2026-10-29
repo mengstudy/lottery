@@ -2,11 +2,14 @@ package com.lottery.analyzer.data.repository
 
 import android.content.Context
 import com.lottery.analyzer.data.db.LotteryDao
+import com.lottery.analyzer.data.db.PredictionDao
 import com.lottery.analyzer.data.engine.LotteryAnalysisEngine
 import com.lottery.analyzer.data.model.IssueAnalysis
 import com.lottery.analyzer.data.model.LotteryRecord
 import com.lottery.analyzer.data.model.LotteryType
 import com.lottery.analyzer.data.model.MissingStat
+import com.lottery.analyzer.data.model.PredictionRecord
+import com.lottery.analyzer.data.model.PredictionVerificationResult
 import com.lottery.analyzer.data.sync.LotterySyncService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -14,6 +17,7 @@ import kotlinx.coroutines.withContext
 class LotteryRepository(context: Context) {
 
     private val dao = LotteryDao(context)
+    private val predictionDao = PredictionDao(context)
     private val syncService = LotterySyncService(dao)
 
     // 内存缓存：彩种 -> 升序开奖记录
@@ -93,4 +97,38 @@ class LotteryRepository(context: Context) {
         }
         return result
     }
+
+    /**
+     * 保存单条预测记录
+     */
+    suspend fun savePrediction(record: PredictionRecord): Long = withContext(Dispatchers.IO) {
+        predictionDao.insert(record)
+    }
+
+    /**
+     * 删除单条预测记录
+     */
+    suspend fun deletePrediction(id: Long): Boolean = withContext(Dispatchers.IO) {
+        predictionDao.delete(id)
+    }
+
+    /**
+     * 清空指定彩种的预测记录
+     */
+    suspend fun clearPredictions(type: LotteryType?): Boolean = withContext(Dispatchers.IO) {
+        predictionDao.clear(type)
+    }
+
+    /**
+     * 查询预测记录并与当前最新开奖数据库进行比对核验
+     */
+    suspend fun getVerifiedPredictions(type: LotteryType?): List<PredictionVerificationResult> =
+        withContext(Dispatchers.IO) {
+            val rawList = predictionDao.getAll(type)
+            rawList.map { pred ->
+                // 查询该彩种下 targetIssue 是否已经开奖
+                val actual = dao.getRecordByIssue(pred.lotteryType, pred.targetIssue)
+                LotteryAnalysisEngine.verifyPrediction(pred, actual)
+            }
+        }
 }
