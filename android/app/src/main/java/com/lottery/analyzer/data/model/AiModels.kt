@@ -62,7 +62,7 @@ enum class AiAnalysisMode(val title: String, val desc: String) {
     ),
     HEART_FUSION(
         title = "心水与他人频次融合推演",
-        desc = "将您的心水红球作为偏好核心，结合他人高频热号与遗漏分布融合生成方案"
+        desc = "以心水为核心，融入他人热号并严格防撞号（与他人重复度限制 1~4 码）"
     ),
     DIAGNOSE_SELECTION(
         title = "自选方案 AI 诊断与评估",

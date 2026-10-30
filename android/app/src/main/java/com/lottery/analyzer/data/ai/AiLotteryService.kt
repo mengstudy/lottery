@@ -142,6 +142,7 @@ class AiLotteryService {
         mode: AiAnalysisMode,
         userSelection: Set<Int>,
         topOtherBalls: List<Pair<Int, Int>> = emptyList(),
+        otherBets: List<List<Int>> = emptyList(),
         betCount: Int = 3
     ): Result<AiRecommendationResult> = withContext(Dispatchers.IO) {
         val startTime = System.currentTimeMillis()
@@ -164,6 +165,7 @@ class AiLotteryService {
                 mode = mode,
                 userSelection = userSelection,
                 topOtherBalls = topOtherBalls,
+                otherBets = otherBets,
                 betCount = betCount
             )
             AppLogger.d(TAG, "已构建提示词，长度: ${prompt.length} 字符")
@@ -174,12 +176,13 @@ class AiLotteryService {
                 【执行要求】：
                 1. 声明彩票开奖属于随机事件，推演分析仅基于统计学形态与离散数学偏好，请理性购彩。
                 2. 论述逻辑请务必【简明扼要，直奔主题】（建议控制在 200 字以内），重点说明奇偶比、和值及 0~9+ 遗漏层级的动态平衡。
-                3. 随后严格输出标准结构的推荐号码，确保格式严格对齐如下：
+                3. 【心水融合防撞号铁律】：若执行“心水与他人频次融合”模式，所推荐的每注号码必须严格避开他人已购号码（1行1注），与他人任意单注的重复号码个数必须严格控制在 1 ~ 4 个之间（即每注与他人单注的重复度为 1-4 码，最多允许重复 4 个，严禁超出 4 个），保持选号方案的差异性与独立性！
+                4. 随后严格输出标准结构的推荐号码，确保格式严格对齐如下：
                    【推荐第1注】红球: 02 08 15 21 26 30 + 蓝球: 06
                    【推荐第2注】红球: 05 12 18 23 27 33 + 蓝球: 14
                    若是快乐8（无蓝球）：
                    【推荐第1注】红球: 03 08 15 22 29 35 48 57 66 79
-                4. 最后附带一句话【策略总结】概括本次选号的核心偏好（如：偏热码回补、奇偶3:3中轴形态等）。
+                5. 最后附带一句话【策略总结】概括本次选号的核心偏好（如：心水为胆+防撞号微重合2码+温冷回补等）。
             """.trimIndent()
 
             val requestBodyMap = mapOf(
@@ -229,6 +232,23 @@ class AiLotteryService {
                 // 从生成文本中抽取推荐号码
                 val extractedBets = parseRecommendedBets(content, lotteryType)
                 val strategySummary = parseStrategySummary(content)
+
+                // 统计防撞号重合度
+                if (mode == AiAnalysisMode.HEART_FUSION) {
+                    if (otherBets.isNotEmpty()) {
+                        extractedBets.forEachIndexed { idx, bet ->
+                            val maxOverlap = otherBets.maxOfOrNull { oBet -> bet.first.count { it in oBet } } ?: 0
+                            AppLogger.i(TAG, "第 ${idx + 1} 注与他人各单注最大重叠度: ${maxOverlap}码 (防撞号规则约束: 1-4码)")
+                        }
+                    } else if (topOtherBalls.isNotEmpty()) {
+                        val otherBallSet = topOtherBalls.map { it.first }.toSet()
+                        extractedBets.forEachIndexed { idx, bet ->
+                            val overlapCount = bet.first.count { it in otherBallSet }
+                            AppLogger.i(TAG, "第 ${idx + 1} 注与他人号码池重合度: ${overlapCount}码 (防撞号规则限制: 1-4码)")
+                        }
+                    }
+                }
+
                 AppLogger.i(TAG, "推演成功完成! 耗时: ${elapsed}ms, 抽取出 ${extractedBets.size} 注推荐, 策略: $strategySummary")
 
                 Result.success(
@@ -263,6 +283,7 @@ class AiLotteryService {
         mode: AiAnalysisMode,
         userSelection: Set<Int>,
         topOtherBalls: List<Pair<Int, Int>>,
+        otherBets: List<List<Int>> = emptyList(),
         betCount: Int
     ): String {
         val sb = StringBuilder()
@@ -298,10 +319,23 @@ class AiLotteryService {
             sb.appendLine("  " + userSelection.sorted().joinToString(" ") { String.format("%02d", it) } + " (共${userSelection.size}个)")
         }
 
-        if (topOtherBalls.isNotEmpty()) {
-            sb.appendLine("\n【工具箱他人关注购买频次 Top 10】:")
+        if (otherBets.isNotEmpty()) {
+            sb.appendLine("\n【工具箱他人收集号码池 (共${otherBets.size}注，1行1注)】:")
+            otherBets.forEachIndexed { idx, bet ->
+                val lineStr = bet.joinToString(" ") { String.format("%02d", it) }
+                sb.appendLine("  他人第${idx + 1}注: $lineStr")
+            }
+            if (topOtherBalls.isNotEmpty()) {
+                val rankList = topOtherBalls.take(10).joinToString(", ") { "${String.format("%02d", it.first)}(${it.second}次)" }
+                sb.appendLine("  他人高频热度榜 Top 10: $rankList")
+            }
+        } else if (topOtherBalls.isNotEmpty()) {
+            val otherBallsList = topOtherBalls.map { it.first }
             val rankList = topOtherBalls.take(10).joinToString(", ") { "${String.format("%02d", it.first)}(${it.second}次)" }
-            sb.appendLine("  $rankList")
+            val allOtherPoolStr = otherBallsList.sorted().joinToString(" ") { String.format("%02d", it) }
+            sb.appendLine("\n【工具箱他人收集号码池 (频次排行榜)】:")
+            sb.appendLine("  高频热度排行 Top 10: $rankList")
+            sb.appendLine("  他人号码全集池 (${otherBallsList.size}码): $allOtherPoolStr")
         }
 
         sb.appendLine("\n【本次任务模式】: ${mode.title}")
@@ -310,7 +344,19 @@ class AiLotteryService {
                 sb.appendLine("请综合历史形态走势、冷温热平衡与 0~9+ 遗漏层级分布，精简分析后为下期生成 $betCount 注推荐号码。")
             }
             AiAnalysisMode.HEART_FUSION -> {
-                sb.appendLine("请重点以用户选择的心水红球作为核心或胆码，结合他人高频球号及遗漏轮动补充其余红蓝球，精简分析后生成 $betCount 注方案。")
+                sb.appendLine("请执行【心水与他人频次融合推演】，严格遵循以下规则生成 $betCount 注方案：")
+                sb.appendLine("1. 【心水胆码核心】：以用户自选的心水红球作为核心骨架与优先保留号码。")
+                if (otherBets.isNotEmpty()) {
+                    sb.appendLine("2. 【严格防撞号与重复度约束 (1-4码)】：")
+                    sb.appendLine("   - 重点避开上面列出的他人每一注号码（1行1注），严禁整注雷同或高度撞车！")
+                    sb.appendLine("   - 所推荐的任意一注号码，与上述他人已购的【任意单注】之间的重复号码个数，必须严格控制在 1 ~ 4 个之间（即每注与他人的重复度为 1-4 码，最多不超过 4 码）！")
+                    sb.appendLine("3. 【其余号码补充】：除 1~4 码适度借鉴他人号码以及用户心水球外，其余空缺号码必须从他人未涉足的优质 0~9+ 遗漏层级（如活跃温号、深冷回补号）中精选补齐，确保组合兼顾热度与独特性！")
+                } else if (topOtherBalls.isNotEmpty()) {
+                    sb.appendLine("2. 【严格防撞号约束 (1-4码)】：所推荐的每注号码与他人号码的重叠数必须严格控制在 1 ~ 4 码之间，严禁超过 4 码！")
+                    sb.appendLine("3. 其余号码从他人未选的优质 0~9+ 遗漏层级中补充。")
+                } else {
+                    sb.appendLine("2. 结合下期 0~9+ 遗漏层级与冷热号轮动，补齐其余红蓝球。")
+                }
             }
             AiAnalysisMode.DIAGNOSE_SELECTION -> {
                 sb.appendLine("请对用户当前自选的心水号码进行全方位健康度诊断（分析和值、奇偶比、连号及遗漏层级结构是否合理），随后给出 1~2 注微调优化方案。")

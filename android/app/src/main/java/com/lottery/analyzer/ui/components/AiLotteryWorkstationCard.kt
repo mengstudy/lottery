@@ -59,6 +59,7 @@ import com.lottery.analyzer.data.model.AiConfig
 import com.lottery.analyzer.data.model.AiRecommendationResult
 import com.lottery.analyzer.data.model.LotteryType
 import com.lottery.analyzer.ui.theme.BorderLight
+import com.lottery.analyzer.ui.theme.GreenPrimary
 import com.lottery.analyzer.ui.theme.OrangeLight
 import com.lottery.analyzer.ui.theme.OrangePrimary
 import com.lottery.analyzer.ui.theme.PurpleLight
@@ -82,6 +83,8 @@ fun AiLotteryWorkstationCard(
     aiResult: AiRecommendationResult?,
     aiError: String?,
     heartBallCount: Int,
+    otherBallSet: Set<Int> = emptySet(),
+    otherBets: List<List<Int>> = emptyList(),
     onOpenSettings: () -> Unit,
     onRunAnalysis: (mode: AiAnalysisMode, count: Int) -> Unit,
     onSaveBetToPrediction: (index: Int) -> Unit,
@@ -516,12 +519,36 @@ fun AiLotteryWorkstationCard(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text(
-                                            text = "第 ${index + 1} 注",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = PurplePrimary
-                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text(
+                                                text = "第 ${index + 1} 注",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = PurplePrimary
+                                            )
+                                            if (aiResult.mode == AiAnalysisMode.HEART_FUSION) {
+                                                if (otherBets.isNotEmpty()) {
+                                                    val maxOverlap = otherBets.maxOfOrNull { oBet -> redBalls.count { it in oBet } } ?: 0
+                                                    Text(
+                                                        text = "他人单注重合:${maxOverlap}码",
+                                                        fontSize = 10.sp,
+                                                        color = if (maxOverlap in 1..4) GreenPrimary else OrangePrimary,
+                                                        fontWeight = FontWeight.Medium
+                                                    )
+                                                } else if (otherBallSet.isNotEmpty()) {
+                                                    val overlap = redBalls.count { it in otherBallSet }
+                                                    Text(
+                                                        text = "他人重合:${overlap}码",
+                                                        fontSize = 10.sp,
+                                                        color = if (overlap in 1..4) GreenPrimary else OrangePrimary,
+                                                        fontWeight = FontWeight.Medium
+                                                    )
+                                                }
+                                            }
+                                        }
 
                                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                             // 设为心水

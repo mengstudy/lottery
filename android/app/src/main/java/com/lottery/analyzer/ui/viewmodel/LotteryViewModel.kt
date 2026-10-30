@@ -199,27 +199,49 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * 更新他人购买号码文本并进行频次解析
+     * 更新他人购买号码文本并进行频次解析与注数提取 (支持1行1注)
      */
     fun updateCollectedBallsText(text: String) {
         val maxNumber = _uiState.value.currentType.maxRedNumber
         val freqMap = mutableMapOf<Int, Int>()
+        val parsedBets = mutableListOf<List<Int>>()
         var validGroups = 0
 
         val lines = text.split("\n")
         for (line in lines) {
-            val clean = line.replace("[^0-9]".toRegex(), "")
-            if (clean.length >= 2) {
-                validGroups++
-                val seenInLine = mutableSetOf<Int>()
+            val trimmedLine = line.trim()
+            if (trimmedLine.isBlank()) continue
+
+            // 1. 优先尝试按空格/逗号等分隔符提取独立数字
+            val extractedByDelim = Regex("\\b\\d{1,2}\\b")
+                .findAll(trimmedLine)
+                .mapNotNull { it.value.toIntOrNull() }
+                .filter { it in 1..maxNumber }
+                .distinct()
+                .toList()
+
+            val rowBalls = if (extractedByDelim.size >= 2) {
+                extractedByDelim
+            } else {
+                // 2. 兜底尝试每 2 位切割连续无空格数字 (如 020815212630)
+                val clean = trimmedLine.replace("[^0-9]".toRegex(), "")
+                val subList = mutableListOf<Int>()
                 var i = 0
                 while (i + 1 < clean.length) {
                     val num = clean.substring(i, i + 2).toIntOrNull()
-                    if (num != null && num in 1..maxNumber && num !in seenInLine) {
-                        seenInLine.add(num)
-                        freqMap[num] = (freqMap[num] ?: 0) + 1
+                    if (num != null && num in 1..maxNumber && num !in subList) {
+                        subList.add(num)
                     }
                     i += 2
+                }
+                subList
+            }
+
+            if (rowBalls.isNotEmpty()) {
+                validGroups++
+                parsedBets.add(rowBalls.sorted())
+                for (b in rowBalls) {
+                    freqMap[b] = (freqMap[b] ?: 0) + 1
                 }
             }
         }
@@ -230,7 +252,8 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
             frequencyResult = FrequencyAnalysisResult(
                 validGroupsCount = validGroups,
                 frequencyMap = freqMap,
-                sortedByFreq = sorted
+                sortedByFreq = sorted,
+                parsedBets = parsedBets
             )
         )
     }
@@ -475,6 +498,7 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
                 mode = mode,
                 userSelection = _uiState.value.myHeartBalls,
                 topOtherBalls = _uiState.value.frequencyResult.sortedByFreq,
+                otherBets = _uiState.value.frequencyResult.parsedBets,
                 betCount = betCount
             )
             result.onSuccess { recommendation ->

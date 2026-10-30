@@ -108,7 +108,8 @@ data class IssueAnalysis(
 data class FrequencyAnalysisResult(
     val validGroupsCount: Int,           // 解析出的有效组数
     val frequencyMap: Map<Int, Int>,      // 号码 -> 出现次数
-    val sortedByFreq: List<Pair<Int, Int>> // 按频次降序
+    val sortedByFreq: List<Pair<Int, Int>>, // 按频次降序
+    val parsedBets: List<List<Int>> = emptyList() // 每行解析出的具体注数号码列表 (1行1注)
 )
 
 /**

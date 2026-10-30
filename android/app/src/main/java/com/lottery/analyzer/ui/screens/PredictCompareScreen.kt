@@ -130,6 +130,8 @@ fun PredictCompareScreen(
                 aiResult = uiState.aiResult,
                 aiError = uiState.aiError,
                 heartBallCount = uiState.myHeartBalls.size,
+                otherBallSet = uiState.frequencyResult.frequencyMap.keys,
+                otherBets = uiState.frequencyResult.parsedBets,
                 onOpenSettings = { viewModel.setAiSettingsDialogVisible(true) },
                 onRunAnalysis = { mode, count -> viewModel.runAiAnalysis(mode, count) },
                 onSaveBetToPrediction = { index -> viewModel.saveAiBetToPrediction(index) },
