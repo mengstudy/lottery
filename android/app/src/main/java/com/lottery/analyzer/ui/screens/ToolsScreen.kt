@@ -52,6 +52,7 @@ import com.lottery.analyzer.ui.components.BallStyle
 import com.lottery.analyzer.ui.components.LotteryBall
 import com.lottery.analyzer.ui.components.LotteryTypeSelectorBar
 import com.lottery.analyzer.ui.components.PredictionRecordsCard
+import com.lottery.analyzer.ui.components.ShrinkFilterCard
 import com.lottery.analyzer.ui.theme.BluePrimary
 import com.lottery.analyzer.ui.theme.RedDark
 import com.lottery.analyzer.ui.theme.RedPrimary
@@ -83,6 +84,8 @@ fun ToolsScreen(
 
     // 智能选号生成的多注列表
     var generatedBets by remember { mutableStateOf<List<GeneratedLotteryBet>>(emptyList()) }
+    // 工具箱子功能选项卡 (0: 选号推演, 1: 旋转矩阵与复式缩水, 2: 全景网格走势图)
+    var currentToolTab by remember { mutableIntStateOf(0) }
 
     // 重新获取走势
     LaunchedEffect(selectedNumber, uiState.currentType) {
@@ -157,12 +160,45 @@ fun ToolsScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(14.dp)
-        ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // 顶部三段式功能切换导航栏
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White)
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val toolTabs = listOf("🎯 选号推演", "⚙️ 旋转矩阵与缩水", "📈 全景网格走势")
+                toolTabs.forEachIndexed { index, title ->
+                    val selected = currentToolTab == index
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (selected) RedPrimary else Color(0xFFF1F5F9))
+                            .clickable { currentToolTab = index }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = title,
+                            fontSize = 12.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (selected) Color.White else TextPrimary
+                        )
+                    }
+                }
+            }
+
+            when (currentToolTab) {
+                0 -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(scrollState)
+                            .padding(14.dp)
+                    ) {
             // 1. 彩种选择器
             LotteryTypeSelectorBar(
                 currentType = uiState.currentType,
@@ -416,6 +452,52 @@ fun ToolsScreen(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+                    }
+                }
+                1 -> {
+                    // 旋转矩阵与复式缩水
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(14.dp)
+                    ) {
+                        LotteryTypeSelectorBar(
+                            currentType = uiState.currentType,
+                            onSelectType = { viewModel.switchLotteryType(it) }
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        ShrinkFilterCard(
+                            lotteryType = uiState.currentType,
+                            selectedBalls = uiState.shrinkSelectedBalls,
+                            heartBalls = uiState.myHeartBalls,
+                            config = uiState.shrinkConfig,
+                            isShrinking = uiState.isShrinking,
+                            shrinkResult = uiState.shrinkResult,
+                            onToggleBall = { viewModel.toggleShrinkBall(it) },
+                            onSetBalls = { viewModel.setShrinkBalls(it) },
+                            onClearBalls = { viewModel.clearShrinkBalls() },
+                            onImportHeartBalls = { viewModel.importHeartToShrink() },
+                            onUpdateConfig = { viewModel.updateShrinkConfig(it) },
+                            onExecuteShrink = { viewModel.runShrinkCalculation() },
+                            onSaveBetToPrediction = { viewModel.saveShrinkBetToPrediction(it) },
+                            onApplyBetToHeart = { viewModel.setHeartBalls(it.toSet()) }
+                        )
+
+                        Spacer(modifier = Modifier.height(24.dp))
+                    }
+                }
+                2 -> {
+                    // 交互式全景网格走势图
+                    TrendChartScreen(
+                        viewModel = viewModel,
+                        uiState = uiState,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
         }
 
         SnackbarHost(

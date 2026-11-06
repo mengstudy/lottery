@@ -16,6 +16,10 @@ import com.lottery.analyzer.data.model.LotteryRecord
 import com.lottery.analyzer.data.model.LotteryType
 import com.lottery.analyzer.data.model.PredictionRecord
 import com.lottery.analyzer.data.model.PredictionVerificationResult
+import com.lottery.analyzer.data.model.ShrinkFilterConfig
+import com.lottery.analyzer.data.model.ShrinkResult
+import com.lottery.analyzer.data.model.TrendMatrixData
+import com.lottery.analyzer.data.model.WheelGuaranteeMode
 import com.lottery.analyzer.data.repository.LotteryRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -50,7 +54,17 @@ data class LotteryUiState(
     val aiError: String? = null,
     val aiTestMessage: String? = null,
     val showAiSettingsDialog: Boolean = false,
-    val showLogDialog: Boolean = false
+    val showLogDialog: Boolean = false,
+    // 缩水与旋转矩阵状态
+    val shrinkSelectedBalls: Set<Int> = emptySet(),
+    val shrinkConfig: ShrinkFilterConfig = ShrinkFilterConfig(),
+    val shrinkResult: ShrinkResult? = null,
+    val isShrinking: Boolean = false,
+    // 全景网格走势图状态
+    val trendMatrixLimit: Int = 30,
+    val trendDescOrder: Boolean = true,
+    val trendMatrixData: TrendMatrixData? = null,
+    val isTrendLoading: Boolean = false
 )
 
 class LotteryViewModel(application: Application) : AndroidViewModel(application) {
@@ -110,6 +124,11 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
                 )
                 recalcHeartDistributions()
                 loadPredictions()
+
+                // 若初次启动检测到本地记录为空，自动拉取网络最新数据
+                if (records.isEmpty()) {
+                    syncLatestData()
+                }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -547,5 +566,95 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
      */
     fun clearAiResult() {
         _uiState.value = _uiState.value.copy(aiResult = null, aiError = null)
+    }
+
+    // ==================== 复式缩水与旋转矩阵控制 ====================
+
+    fun toggleShrinkBall(ball: Int) {
+        val current = _uiState.value.shrinkSelectedBalls.toMutableSet()
+        if (ball in current) current.remove(ball) else current.add(ball)
+        _uiState.value = _uiState.value.copy(shrinkSelectedBalls = current)
+    }
+
+    fun setShrinkBalls(balls: Set<Int>) {
+        _uiState.value = _uiState.value.copy(shrinkSelectedBalls = balls)
+    }
+
+    fun clearShrinkBalls() {
+        _uiState.value = _uiState.value.copy(
+            shrinkSelectedBalls = emptySet(),
+            shrinkResult = null
+        )
+    }
+
+    fun importHeartToShrink() {
+        val hearts = _uiState.value.myHeartBalls
+        _uiState.value = _uiState.value.copy(shrinkSelectedBalls = hearts)
+    }
+
+    fun updateShrinkConfig(config: ShrinkFilterConfig) {
+        _uiState.value = _uiState.value.copy(shrinkConfig = config)
+    }
+
+    fun runShrinkCalculation() {
+        val selected = _uiState.value.shrinkSelectedBalls.toList()
+        val type = _uiState.value.currentType
+        val config = _uiState.value.shrinkConfig
+
+        if (selected.size < type.redCount) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "选号池号码不足：" + type.title + "至少需要选择 " + type.redCount + " 个红球"
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isShrinking = true, errorMessage = null)
+            val result = repository.executeShrink(type, selected, config)
+            _uiState.value = _uiState.value.copy(
+                isShrinking = false,
+                shrinkResult = result
+            )
+        }
+    }
+
+    fun saveShrinkBetToPrediction(reds: List<Int>) {
+        val type = _uiState.value.currentType
+        val blueList = when (type) {
+            LotteryType.SSQ -> listOf((1..16).random())
+            LotteryType.DLT -> (1..12).shuffled().take(2).sorted()
+            LotteryType.KL8 -> emptyList()
+        }
+        val strategy = "复式缩水[" + _uiState.value.shrinkConfig.wheelMode.title + "]"
+        savePredictionRecord(redBalls = reds, blueBalls = blueList, strategy = strategy)
+    }
+
+    // ==================== 全景网格走势图控制 ====================
+
+    fun loadTrendMatrixData() {
+        val type = _uiState.value.currentType
+        val limit = _uiState.value.trendMatrixLimit
+        val desc = _uiState.value.trendDescOrder
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isTrendLoading = true)
+            val data = repository.getTrendMatrixData(type, limit, desc)
+            _uiState.value = _uiState.value.copy(
+                isTrendLoading = false,
+                trendMatrixData = data
+            )
+        }
+    }
+
+    fun setTrendLimit(limit: Int) {
+        if (_uiState.value.trendMatrixLimit == limit) return
+        _uiState.value = _uiState.value.copy(trendMatrixLimit = limit)
+        loadTrendMatrixData()
+    }
+
+    fun toggleTrendOrder() {
+        val newDesc = !_uiState.value.trendDescOrder
+        _uiState.value = _uiState.value.copy(trendDescOrder = newDesc)
+        loadTrendMatrixData()
     }
 }

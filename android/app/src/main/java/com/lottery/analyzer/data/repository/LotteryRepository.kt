@@ -10,6 +10,11 @@ import com.lottery.analyzer.data.model.LotteryType
 import com.lottery.analyzer.data.model.MissingStat
 import com.lottery.analyzer.data.model.PredictionRecord
 import com.lottery.analyzer.data.model.PredictionVerificationResult
+import com.lottery.analyzer.data.engine.LotteryShrinkEngine
+import com.lottery.analyzer.data.engine.TrendMatrixEngine
+import com.lottery.analyzer.data.model.ShrinkFilterConfig
+import com.lottery.analyzer.data.model.ShrinkResult
+import com.lottery.analyzer.data.model.TrendMatrixData
 import com.lottery.analyzer.data.sync.LotterySyncService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -131,4 +136,44 @@ class LotteryRepository(context: Context) {
                 LotteryAnalysisEngine.verifyPrediction(pred, actual)
             }
         }
+
+    /**
+     * 执行复式缩水过滤与旋转矩阵计算
+     */
+    suspend fun executeShrink(
+        type: LotteryType,
+        selectedBalls: List<Int>,
+        config: ShrinkFilterConfig
+    ): ShrinkResult = withContext(Dispatchers.Default) {
+        val ascList = loadLotteryData(type)
+        val lastReds = ascList.lastOrNull()?.redBalls?.toSet() ?: emptySet()
+        val historyRedSets = ascList.map { it.redBalls.toSet() }.toSet()
+
+        LotteryShrinkEngine.executeShrink(
+            selectedBalls = selectedBalls,
+            type = type,
+            config = config,
+            lastDrawReds = lastReds,
+            historyRedSets = historyRedSets
+        )
+    }
+
+    /**
+     * 获取全景网格走势图矩阵数据
+     */
+    suspend fun getTrendMatrixData(
+        type: LotteryType,
+        limit: Int = 30,
+        descOrder: Boolean = true
+    ): TrendMatrixData = withContext(Dispatchers.Default) {
+        val ascList = loadLotteryData(type)
+        val missingMap = missingStatsCache[type] ?: emptyMap()
+        TrendMatrixEngine.buildTrendMatrix(
+            ascRecords = ascList,
+            missingMap = missingMap,
+            type = type,
+            limit = limit,
+            descOrder = descOrder
+        )
+    }
 }
