@@ -134,11 +134,34 @@ fun HistoryScreen(
                     .weight(1f),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "未找到匹配的历史记录",
-                    color = TextSecondary,
-                    fontSize = 14.sp
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Text(
+                        text = if (uiState.recordsDesc.isEmpty()) "本地暂无 ${uiState.currentType.title} 开奖数据" else "未找到匹配的历史记录",
+                        color = TextSecondary,
+                        fontSize = 14.sp
+                    )
+
+                    if (uiState.recordsDesc.isEmpty()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            androidx.compose.material3.Button(
+                                onClick = { viewModel.syncLatestData() },
+                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = RedPrimary)
+                            ) {
+                                Text("⚡ 快速同步最新", fontSize = 12.sp)
+                            }
+
+                            androidx.compose.material3.OutlinedButton(
+                                onClick = { viewModel.syncAllHistoryData() }
+                            ) {
+                                Text("🌐 全量拉取历史大底", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
             }
         } else {
             LazyColumn(

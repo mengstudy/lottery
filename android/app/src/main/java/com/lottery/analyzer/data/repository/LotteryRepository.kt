@@ -93,10 +93,24 @@ class LotteryRepository(context: Context) {
     }
 
     /**
-     * 联网同步最新开奖数据并刷新内存缓存
+     * 1. 联网同步最新开奖数据并刷新内存缓存
      */
     suspend fun syncLatestData(type: LotteryType): Result<Int> {
         val result = syncService.syncLatest(type)
+        if (result.isSuccess && (result.getOrNull() ?: 0) > 0) {
+            loadLotteryData(type, forceReload = true)
+        }
+        return result
+    }
+
+    /**
+     * 2. 联网全量同步所有历史数据并刷新内存缓存
+     */
+    suspend fun syncAllHistoryData(
+        type: LotteryType,
+        onProgress: ((page: Int, totalRecords: Int) -> Unit)? = null
+    ): Result<Int> {
+        val result = syncService.syncAllHistory(type, onProgress)
         if (result.isSuccess && (result.getOrNull() ?: 0) > 0) {
             loadLotteryData(type, forceReload = true)
         }

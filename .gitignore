@@ -36,7 +36,6 @@ data/lottery.db
 *.db
 *.sqlite
 *.sqlite3
-!android/app/src/main/assets/databases/*.db
 
 # Logs
 *.log

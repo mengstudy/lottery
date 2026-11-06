@@ -36,6 +36,8 @@ data class LotteryUiState(
     val analysis: IssueAnalysis? = null,
     val isLoading: Boolean = false,
     val isSyncing: Boolean = false,
+    val isSyncingAll: Boolean = false,
+    val syncAllProgress: String? = null,
     val errorMessage: String? = null,
     val syncMessage: String? = null,
     // 心水红球与他人频次比对状态
@@ -411,6 +413,53 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
                     syncMessage = "同步完成 (当前已展示本地最新记录)"
                 )
                 loadPredictions()
+            }
+        }
+    }
+
+    /**
+     * 联网全量同步所有历史开奖数据 (抓取近 2000~3000 期全量历史大底)
+     */
+    fun syncAllHistoryData() {
+        val type = _uiState.value.currentType
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isSyncingAll = true,
+                syncAllProgress = "正在连接官方数据源...",
+                syncMessage = null
+            )
+            val result = repository.syncAllHistoryData(type) { page, totalRecords ->
+                _uiState.value = _uiState.value.copy(
+                    syncAllProgress = "正在拉取第 " + page + " 页，累计 " + totalRecords + " 期..."
+                )
+            }
+            result.onSuccess { updatedCount ->
+                val records = repository.getRecordsDesc(type)
+                val firstIssue = records.firstOrNull()?.issue ?: ""
+                val analysis = if (firstIssue.isNotEmpty()) {
+                    repository.getAnalysisForIssue(type, firstIssue)
+                } else null
+
+                val nextIssue = computeNextIssue(firstIssue)
+
+                _uiState.value = _uiState.value.copy(
+                    recordsDesc = records,
+                    currentIssue = firstIssue,
+                    analysis = analysis,
+                    nextIssueTarget = nextIssue,
+                    isSyncingAll = false,
+                    syncAllProgress = null,
+                    syncMessage = "全量更新完成！当前数据库共有 " + records.size + " 期历史数据"
+                )
+                recalcHeartDistributions()
+                loadPredictions()
+                loadTrendMatrixData()
+            }.onFailure { err ->
+                _uiState.value = _uiState.value.copy(
+                    isSyncingAll = false,
+                    syncAllProgress = null,
+                    syncMessage = "全量同步结束: " + err.message
+                )
             }
         }
     }

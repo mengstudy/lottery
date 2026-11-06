@@ -50,7 +50,44 @@ class LotteryDao(private val context: Context) {
      */
     fun insertOrUpdateRecord(type: LotteryType, record: LotteryRecord): Boolean {
         val db = DatabaseHelper.getDatabase(context, type.dbName)
-        val cv = ContentValues().apply {
+        val cv = buildContentValues(type, record)
+        val rows = db.update("lottery_results", cv, "issue = ?", arrayOf(record.issue))
+        return if (rows <= 0) {
+            db.insert("lottery_results", null, cv) > 0
+        } else {
+            true
+        }
+    }
+
+    /**
+     * 高效批量事务插入或更新开奖记录（用于全量历史数据同步，秒级入库）
+     */
+    fun batchInsertOrUpdateRecords(type: LotteryType, records: List<LotteryRecord>): Int {
+        if (records.isEmpty()) return 0
+        val db = DatabaseHelper.getDatabase(context, type.dbName)
+        var count = 0
+        db.beginTransaction()
+        try {
+            for (record in records) {
+                val cv = buildContentValues(type, record)
+                val rows = db.update("lottery_results", cv, "issue = ?", arrayOf(record.issue))
+                if (rows <= 0) {
+                    if (db.insert("lottery_results", null, cv) > 0) {
+                        count++
+                    }
+                } else {
+                    count++
+                }
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        return count
+    }
+
+    private fun buildContentValues(type: LotteryType, record: LotteryRecord): ContentValues {
+        return ContentValues().apply {
             put("issue", record.issue)
             put("draw_date", record.drawDate)
             put("region", record.region)
@@ -74,13 +111,6 @@ class LotteryDao(private val context: Context) {
                     }
                 }
             }
-        }
-
-        val rows = db.update("lottery_results", cv, "issue = ?", arrayOf(record.issue))
-        return if (rows <= 0) {
-            db.insert("lottery_results", null, cv) > 0
-        } else {
-            true
         }
     }
 

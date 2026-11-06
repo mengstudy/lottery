@@ -19,6 +19,9 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material3.Surface
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -169,21 +172,50 @@ fun MainContainerScreen(viewModel: LotteryViewModel) {
                             tint = Color.White
                         )
                     }
-                    IconButton(
-                        onClick = { viewModel.syncLatestData() },
-                        enabled = !uiState.isSyncing
-                    ) {
-                        if (uiState.isSyncing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = Color.White
+                    var showSyncMenu by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(
+                            onClick = { showSyncMenu = true },
+                            enabled = !uiState.isSyncing && !uiState.isSyncingAll
+                        ) {
+                            if (uiState.isSyncing || uiState.isSyncingAll) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Sync,
+                                    contentDescription = "同步数据",
+                                    tint = Color.White
+                                )
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = showSyncMenu,
+                            onDismissRequest = { showSyncMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("⚡ 同步最新开奖 (最近 30 期)") },
+                                onClick = {
+                                    showSyncMenu = false
+                                    viewModel.syncLatestData()
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.CloudSync, contentDescription = null, tint = RedPrimary)
+                                }
                             )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Sync,
-                                contentDescription = "同步最新",
-                                tint = Color.White
+                            DropdownMenuItem(
+                                text = { Text("🌐 更新全部历史数据 (全量大底)") },
+                                onClick = {
+                                    showSyncMenu = false
+                                    viewModel.syncAllHistoryData()
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.CloudDownload, contentDescription = null, tint = BluePrimary)
+                                }
                             )
                         }
                     }
