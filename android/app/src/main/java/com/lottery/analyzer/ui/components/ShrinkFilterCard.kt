@@ -34,6 +34,8 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Warning
+import java.util.Locale
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -102,6 +104,8 @@ fun ShrinkFilterCard(
 ) {
     val context = LocalContext.current
     var isFilterExpanded by remember { mutableStateOf(false) }
+    val targetMinBalls = if (lotteryType == LotteryType.KL8) 10 else lotteryType.redCount
+    val maxAllowedBalls = if (lotteryType == LotteryType.KL8) 14 else 16
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -155,10 +159,10 @@ fun ShrinkFilterCard(
                 }
 
                 Text(
-                    text = "选号底池: ${selectedBalls.size} 码",
+                    text = "选号底池: ${selectedBalls.size} 码 (建议 $targetMinBalls~$maxAllowedBalls 码)",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (selectedBalls.size >= lotteryType.redCount) Color(0xFF0284C7) else RedPrimary
+                    color = if (selectedBalls.size in targetMinBalls..maxAllowedBalls) Color(0xFF0284C7) else RedPrimary
                 )
             }
 
@@ -182,7 +186,13 @@ fun ShrinkFilterCard(
                                 color = if (isHeart) Color(0xFFFFD700) else if (isSelected) Color(0xFF0284C7) else Color(0xFFCBD5E1),
                                 shape = CircleShape
                             )
-                            .clickable { onToggleBall(num) },
+                            .clickable {
+                                if (num !in selectedBalls && selectedBalls.size >= maxAllowedBalls) {
+                                    Toast.makeText(context, "${lotteryType.title}底池最多选 $maxAllowedBalls 码，以防内存溢出", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    onToggleBall(num)
+                                }
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -477,7 +487,7 @@ fun ShrinkFilterCard(
             // 5. 开始缩水按钮
             Button(
                 onClick = onExecuteShrink,
-                enabled = !isShrinking && selectedBalls.size >= lotteryType.redCount,
+                enabled = !isShrinking && selectedBalls.size >= targetMinBalls && selectedBalls.size <= maxAllowedBalls,
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier
@@ -506,6 +516,29 @@ fun ShrinkFilterCard(
                         .padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    // 告警提示 (若破保或无结果)
+                    if (shrinkResult.warningMessage != null) {
+                        androidx.compose.material3.Surface(
+                            color = Color(0xFFFEF3C7),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFD97706), modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = shrinkResult.warningMessage ?: "",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF92400E),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+
                     // 战报指标统计栏
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -533,7 +566,7 @@ fun ShrinkFilterCard(
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "缩水率 ${String.format("%.1f", shrinkResult.shrinkRatio)}%",
+                                text = "缩水率 ${String.format(Locale.US, "%.1f", shrinkResult.shrinkRatio)}%",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White

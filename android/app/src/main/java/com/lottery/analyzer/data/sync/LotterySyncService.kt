@@ -93,11 +93,8 @@ class LotterySyncService(private val dao: LotteryDao) {
             Result.success(totalUpdated)
         } catch (e: Exception) {
             AppLogger.w(TAG, "全量历史同步异常中断: ${type.title}, 当前完成数: $totalUpdated, 异常: ${e.message}", e)
-            if (totalUpdated > 0) {
-                Result.success(totalUpdated) // 即使部分出错也返回已拉取成功的记录数
-            } else {
-                Result.failure(e)
-            }
+            val err = Exception(if (totalUpdated > 0) "全量同步未完成，已拉取 $totalUpdated 期后中断: ${e.message}" else (e.message ?: "网络请求失败"))
+            Result.failure(err)
         }
     }
 
@@ -165,7 +162,8 @@ class LotterySyncService(private val dao: LotteryDao) {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "解析开奖数据异常: ${e.message}")
+            Log.e(TAG, "解析开奖数据异常: ${e.message}", e)
+            throw IllegalStateException("解析开奖数据失败: ${e.message}", e)
         }
         return list
     }

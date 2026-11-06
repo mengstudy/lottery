@@ -142,6 +142,9 @@ object TrendMatrixEngine {
 
             if (i == ascRecords.size - 1) {
                 currentMissing = if (isHit) 0 else miss + 1
+                if (currentMissing > maxMissing) {
+                    maxMissing = currentMissing
+                }
             }
         }
 
@@ -151,11 +154,13 @@ object TrendMatrixEngine {
             totalPeriods.toFloat()
         }
 
+        val safeAvgMissing = kotlin.math.round(avgMissing * 10f) / 10f
+
         return NumberTrendSummary(
             number = number,
             isBlue = isBlue,
             hitCount = hitCount,
-            avgMissing = String.format("%.1f", avgMissing).toFloat(),
+            avgMissing = safeAvgMissing,
             maxMissing = maxMissing,
             maxContinuous = maxContinuous,
             currentMissing = currentMissing

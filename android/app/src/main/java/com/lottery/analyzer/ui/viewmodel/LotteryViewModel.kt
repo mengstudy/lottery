@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -78,6 +79,12 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
     private val _uiState = MutableStateFlow(LotteryUiState())
     val uiState: StateFlow<LotteryUiState> = _uiState.asStateFlow()
 
+    private var switchJob: Job? = null
+    private var syncJob: Job? = null
+    private var shrinkJob: Job? = null
+    private var aiJob: Job? = null
+    private var trendJob: Job? = null
+
     init {
         _uiState.value = _uiState.value.copy(
             aiConfig = aiConfigPreferences.getAiConfig()
@@ -98,17 +105,35 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
      * 切换彩种
      */
     fun switchLotteryType(type: LotteryType) {
-        viewModelScope.launch {
+        switchJob?.cancel()
+        syncJob?.cancel()
+        shrinkJob?.cancel()
+        aiJob?.cancel()
+        trendJob?.cancel()
+        switchJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 currentType = type,
                 isLoading = true,
                 errorMessage = null,
-                myHeartBalls = emptySet(), // 切换彩种重置自选
+                myHeartBalls = emptySet(),
+                shrinkSelectedBalls = emptySet(),
+                shrinkResult = null,
+                isShrinking = false,
                 aiResult = null,
-                aiError = null
+                aiError = null,
+                isAiLoading = false,
+                isSyncing = false,
+                isSyncingAll = false,
+                syncAllProgress = null,
+                syncMessage = null,
+                trendMatrixData = null,
+                isTrendLoading = false
             )
             try {
                 val records = repository.getRecordsDesc(type)
+                // 彩种异步一致性守卫：若彩种已被再次切换，终止过时赋值
+                if (_uiState.value.currentType != type) return@launch
+
                 val firstIssue = records.firstOrNull()?.issue ?: ""
                 val analysis = if (firstIssue.isNotEmpty()) {
                     repository.getAnalysisForIssue(type, firstIssue)
@@ -132,6 +157,7 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
                     syncLatestData()
                 }
             } catch (e: Exception) {
+                if (_uiState.value.currentType != type) return@launch
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     errorMessage = "加载数据失败: ${e.message}"
@@ -384,15 +410,19 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
      * 联网同步最新开奖数据（同步完成后自动重算预测比对）
      */
     fun syncLatestData() {
-        val type = _uiState.value.currentType
-        viewModelScope.launch {
+        val targetType = _uiState.value.currentType
+        syncJob?.cancel()
+        syncJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSyncing = true, syncMessage = null)
-            val result = repository.syncLatestData(type)
+            val result = repository.syncLatestData(targetType)
+            if (_uiState.value.currentType != targetType) return@launch
+
             result.onSuccess { updatedCount ->
-                val records = repository.getRecordsDesc(type)
+                val records = repository.getRecordsDesc(targetType)
+                if (_uiState.value.currentType != targetType) return@launch
                 val firstIssue = records.firstOrNull()?.issue ?: ""
                 val analysis = if (firstIssue.isNotEmpty()) {
-                    repository.getAnalysisForIssue(type, firstIssue)
+                    repository.getAnalysisForIssue(targetType, firstIssue)
                 } else null
 
                 val nextIssue = computeNextIssue(firstIssue)
@@ -406,38 +436,44 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
                     syncMessage = if (updatedCount > 0) "已成功同步 $updatedCount 条最新开奖记录" else "本地已是最新数据"
                 )
                 recalcHeartDistributions()
-                loadPredictions() // 自动重算比对
+                loadPredictions()
             }.onFailure { err ->
+                if (_uiState.value.currentType != targetType) return@launch
                 _uiState.value = _uiState.value.copy(
                     isSyncing = false,
-                    syncMessage = "同步完成 (当前已展示本地最新记录)"
+                    syncMessage = "同步失败: ${err.message ?: "网络连接异常"}"
                 )
-                loadPredictions()
             }
         }
     }
 
     /**
-     * 联网全量同步所有历史开奖数据 (抓取近 2000~3000 期全量历史大底)
+     * 联网全量同步所有历史开奖数据 (抓取近 2000~3500 期全量历史大底)
      */
     fun syncAllHistoryData() {
-        val type = _uiState.value.currentType
-        viewModelScope.launch {
+        val targetType = _uiState.value.currentType
+        syncJob?.cancel()
+        syncJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isSyncingAll = true,
                 syncAllProgress = "正在连接官方数据源...",
                 syncMessage = null
             )
-            val result = repository.syncAllHistoryData(type) { page, totalRecords ->
-                _uiState.value = _uiState.value.copy(
-                    syncAllProgress = "正在拉取第 " + page + " 页，累计 " + totalRecords + " 期..."
-                )
+            val result = repository.syncAllHistoryData(targetType) { page, totalRecords ->
+                if (_uiState.value.currentType == targetType) {
+                    _uiState.value = _uiState.value.copy(
+                        syncAllProgress = "正在拉取第 " + page + " 页，累计 " + totalRecords + " 期..."
+                    )
+                }
             }
+            if (_uiState.value.currentType != targetType) return@launch
+
             result.onSuccess { updatedCount ->
-                val records = repository.getRecordsDesc(type)
+                val records = repository.getRecordsDesc(targetType)
+                if (_uiState.value.currentType != targetType) return@launch
                 val firstIssue = records.firstOrNull()?.issue ?: ""
                 val analysis = if (firstIssue.isNotEmpty()) {
-                    repository.getAnalysisForIssue(type, firstIssue)
+                    repository.getAnalysisForIssue(targetType, firstIssue)
                 } else null
 
                 val nextIssue = computeNextIssue(firstIssue)
@@ -455,11 +491,26 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
                 loadPredictions()
                 loadTrendMatrixData()
             }.onFailure { err ->
+                if (_uiState.value.currentType != targetType) return@launch
+                val records = repository.getRecordsDesc(targetType)
+                val firstIssue = records.firstOrNull()?.issue ?: ""
+                val analysis = if (firstIssue.isNotEmpty()) {
+                    repository.getAnalysisForIssue(targetType, firstIssue)
+                } else null
+                val nextIssue = computeNextIssue(firstIssue)
+
                 _uiState.value = _uiState.value.copy(
+                    recordsDesc = records,
+                    currentIssue = firstIssue,
+                    analysis = analysis,
+                    nextIssueTarget = nextIssue,
                     isSyncingAll = false,
                     syncAllProgress = null,
-                    syncMessage = "全量同步结束: " + err.message
+                    syncMessage = "全量同步中断: ${err.message ?: "网络连接异常"}"
                 )
+                recalcHeartDistributions()
+                loadPredictions()
+                loadTrendMatrixData()
             }
         }
     }
@@ -552,7 +603,9 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
             return
         }
 
-        viewModelScope.launch {
+        val targetType = type
+        aiJob?.cancel()
+        aiJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isAiLoading = true,
                 aiError = null,
@@ -560,7 +613,7 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
             )
             val result = aiService.generateRecommendation(
                 config = config,
-                lotteryType = type,
+                lotteryType = targetType,
                 analysis = analysis,
                 targetNextIssue = targetIssue,
                 mode = mode,
@@ -569,12 +622,16 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
                 otherBets = _uiState.value.frequencyResult.parsedBets,
                 betCount = betCount
             )
+            if (_uiState.value.currentType != targetType) return@launch
+
             result.onSuccess { recommendation ->
+                if (_uiState.value.currentType != targetType) return@launch
                 _uiState.value = _uiState.value.copy(
                     isAiLoading = false,
                     aiResult = recommendation
                 )
             }.onFailure { err ->
+                if (_uiState.value.currentType != targetType) return@launch
                 _uiState.value = _uiState.value.copy(
                     isAiLoading = false,
                     aiError = err.message ?: "AI 生成失败，请检查配置与网络"
@@ -588,13 +645,16 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
      */
     fun saveAiBetToPrediction(betIndex: Int) {
         val result = _uiState.value.aiResult ?: return
+        if (result.lotteryType != _uiState.value.currentType) return
         if (betIndex in result.recommendedBets.indices) {
             val (reds, blues) = result.recommendedBets[betIndex]
             val strategy = "AI大模型[${_uiState.value.aiConfig.provider.title}]-${result.mode.title}#${betIndex + 1}"
+            val target = result.targetIssue.ifBlank { _uiState.value.nextIssueTarget }
             savePredictionRecord(
                 redBalls = reds,
                 blueBalls = blues,
-                strategy = strategy
+                strategy = strategy,
+                targetIssue = target
             )
         }
     }
@@ -604,6 +664,7 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
      */
     fun applyAiBetToHeartBalls(betIndex: Int) {
         val result = _uiState.value.aiResult ?: return
+        if (result.lotteryType != _uiState.value.currentType) return
         if (betIndex in result.recommendedBets.indices) {
             val (reds, _) = result.recommendedBets[betIndex]
             setHeartBalls(reds.toSet())
@@ -650,20 +711,38 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
         val type = _uiState.value.currentType
         val config = _uiState.value.shrinkConfig
 
-        if (selected.size < type.redCount) {
+        val minCount = if (type == LotteryType.KL8) 10 else type.redCount
+        val maxCount = if (type == LotteryType.KL8) 14 else 16
+
+        if (selected.size < minCount) {
             _uiState.value = _uiState.value.copy(
-                errorMessage = "选号池号码不足：" + type.title + "至少需要选择 " + type.redCount + " 个红球"
+                errorMessage = "选号池号码不足：" + type.title + "至少需要选择 " + minCount + " 个红球"
+            )
+            return
+        }
+        if (selected.size > maxCount) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "选号池超出上限：" + type.title + "最多支持选择 " + maxCount + " 个红球，以防内存溢出"
             )
             return
         }
 
-        viewModelScope.launch {
+        val targetType = type
+        shrinkJob?.cancel()
+        shrinkJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isShrinking = true, errorMessage = null)
-            val result = repository.executeShrink(type, selected, config)
-            _uiState.value = _uiState.value.copy(
-                isShrinking = false,
-                shrinkResult = result
-            )
+            try {
+                val result = repository.executeShrink(targetType, selected, config)
+                if (_uiState.value.currentType != targetType) return@launch
+
+                _uiState.value = _uiState.value.copy(
+                    shrinkResult = result
+                )
+            } finally {
+                if (_uiState.value.currentType == targetType) {
+                    _uiState.value = _uiState.value.copy(isShrinking = false)
+                }
+            }
         }
     }
 
@@ -685,9 +764,11 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
         val limit = _uiState.value.trendMatrixLimit
         val desc = _uiState.value.trendDescOrder
 
-        viewModelScope.launch {
+        trendJob?.cancel()
+        trendJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isTrendLoading = true)
             val data = repository.getTrendMatrixData(type, limit, desc)
+            if (_uiState.value.currentType != type) return@launch
             _uiState.value = _uiState.value.copy(
                 isTrendLoading = false,
                 trendMatrixData = data

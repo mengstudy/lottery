@@ -69,5 +69,8 @@ data class ShrinkResult(
     val shrinkRatio: Float,       // 缩水率 (0~100%)
     val originalCost: Int,        // 原复式金额 (元)
     val filteredCost: Int,        // 缩水后金额 (元)
-    val executionTimeMs: Long     // 计算耗时 (毫秒)
+    val executionTimeMs: Long,    // 计算耗时 (毫秒)
+    val isStrictGuaranteed: Boolean = true, // 是否达成数学意义上的严格保奖
+    val coverageRatio: Float = 100f,        // 实际保奖覆盖率 (0~100%)
+    val warningMessage: String? = null      // 告警提示 (如已破保警告或规模提示)
 )

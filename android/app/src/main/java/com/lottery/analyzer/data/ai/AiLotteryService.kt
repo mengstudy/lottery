@@ -233,31 +233,35 @@ class AiLotteryService {
                 val extractedBets = parseRecommendedBets(content, lotteryType)
                 val strategySummary = parseStrategySummary(content)
 
-                // 统计防撞号重合度
-                if (mode == AiAnalysisMode.HEART_FUSION) {
-                    if (otherBets.isNotEmpty()) {
-                        extractedBets.forEachIndexed { idx, bet ->
-                            val maxOverlap = otherBets.maxOfOrNull { oBet -> bet.first.count { it in oBet } } ?: 0
-                            AppLogger.i(TAG, "第 ${idx + 1} 注与他人各单注最大重叠度: ${maxOverlap}码 (防撞号规则约束: 1-4码)")
+                // 统计并硬拦截防撞号违规注（他人号码融合模式：每注必须与他人所有单注均保持 1-4 码重叠度硬约束）
+                val validBets = if (mode == AiAnalysisMode.HEART_FUSION && otherBets.isNotEmpty()) {
+                    extractedBets.filterIndexed { idx, bet ->
+                        val overlaps = otherBets.map { oBet -> bet.first.count { it in oBet } }
+                        val isCompliant = overlaps.all { it in 1..4 }
+                        val minO = overlaps.minOrNull() ?: 0
+                        val maxO = overlaps.maxOrNull() ?: 0
+                        if (!isCompliant) {
+                            AppLogger.w(TAG, "第 ${idx + 1} 注防撞拦截剔除: 与他人各注交集区间为 [${minO}..${maxO}]码 (未能全部满足1-4码合规要求)")
+                        } else {
+                            AppLogger.i(TAG, "第 ${idx + 1} 注防撞合规: 与他人各注交集区间为 [${minO}..${maxO}]码 (所有单注均在1-4码区间)")
                         }
-                    } else if (topOtherBalls.isNotEmpty()) {
-                        val otherBallSet = topOtherBalls.map { it.first }.toSet()
-                        extractedBets.forEachIndexed { idx, bet ->
-                            val overlapCount = bet.first.count { it in otherBallSet }
-                            AppLogger.i(TAG, "第 ${idx + 1} 注与他人号码池重合度: ${overlapCount}码 (防撞号规则限制: 1-4码)")
-                        }
+                        isCompliant
                     }
+                } else {
+                    extractedBets
                 }
 
-                AppLogger.i(TAG, "推演成功完成! 耗时: ${elapsed}ms, 抽取出 ${extractedBets.size} 注推荐, 策略: $strategySummary")
+                AppLogger.i(TAG, "推演成功完成! 耗时: ${elapsed}ms, 校验后保留 ${validBets.size} 注推荐, 策略: $strategySummary")
 
                 Result.success(
                     AiRecommendationResult(
                         mode = mode,
+                        targetIssue = targetNextIssue,
                         rawResponse = content,
                         analysisText = content,
-                        recommendedBets = extractedBets,
-                        strategySummary = strategySummary
+                        recommendedBets = validBets,
+                        strategySummary = strategySummary,
+                        lotteryType = lotteryType
                     )
                 )
             }
@@ -373,6 +377,8 @@ class AiLotteryService {
     private fun parseRecommendedBets(text: String, lotteryType: LotteryType): List<Pair<List<Int>, List<Int>>> {
         val result = mutableListOf<Pair<List<Int>, List<Int>>>()
         val lines = text.lines()
+        val expectedRed = if (lotteryType == LotteryType.KL8) 10 else lotteryType.redCount
+        val expectedBlue = lotteryType.blueCount
 
         val structuredRegex = Pattern.compile(
             """【推荐第\s*\d+\s*注】.*?红球[:：]\s*([\d\s,，]+?)(?:\s*\+\s*蓝球[:：]\s*([\d\s,，]+))?${'$'}""",
@@ -385,13 +391,14 @@ class AiLotteryService {
                 val redPart = matcher.group(1).orEmpty()
                 val bluePart = matcher.group(2).orEmpty()
 
-                val redBalls = extractNumbers(redPart, 1, lotteryType.maxRedNumber)
+                val redBalls = extractNumbers(redPart, 1, lotteryType.maxRedNumber).distinct().sorted()
                 val blueBalls = if (lotteryType.maxBlueNumber > 0) {
-                    extractNumbers(bluePart, 1, lotteryType.maxBlueNumber)
+                    extractNumbers(bluePart, 1, lotteryType.maxBlueNumber).distinct().sorted()
                 } else emptyList()
 
-                if (redBalls.isNotEmpty()) {
-                    result.add(Pair(redBalls.sorted(), blueBalls.sorted()))
+                // 核心合法性校验：严格核实红蓝球个数精准无误，号码不重复
+                if (redBalls.size == expectedRed && blueBalls.size == expectedBlue) {
+                    result.add(Pair(redBalls, blueBalls))
                 }
             }
         }
@@ -401,18 +408,18 @@ class AiLotteryService {
             for (line in lines) {
                 if (line.contains("+")) {
                     val parts = line.split("+")
-                    val reds = extractNumbers(parts[0], 1, lotteryType.maxRedNumber)
+                    val reds = extractNumbers(parts[0], 1, lotteryType.maxRedNumber).distinct().sorted()
                     val blues = if (parts.size > 1 && lotteryType.maxBlueNumber > 0) {
-                        extractNumbers(parts[1], 1, lotteryType.maxBlueNumber)
+                        extractNumbers(parts[1], 1, lotteryType.maxBlueNumber).distinct().sorted()
                     } else emptyList()
 
-                    if (reds.size >= (if (lotteryType == LotteryType.KL8) 10 else 5)) {
-                        result.add(Pair(reds.sorted(), blues.sorted()))
+                    if (reds.size == expectedRed && blues.size == expectedBlue) {
+                        result.add(Pair(reds, blues))
                     }
                 } else if (lotteryType == LotteryType.KL8) {
-                    val reds = extractNumbers(line, 1, lotteryType.maxRedNumber)
+                    val reds = extractNumbers(line, 1, lotteryType.maxRedNumber).distinct().sorted()
                     if (reds.size == 10) {
-                        result.add(Pair(reds.sorted(), emptyList()))
+                        result.add(Pair(reds, emptyList()))
                     }
                 }
             }

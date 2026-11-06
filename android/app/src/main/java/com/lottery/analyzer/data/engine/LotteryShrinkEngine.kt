@@ -4,42 +4,24 @@ import com.lottery.analyzer.data.model.LotteryType
 import com.lottery.analyzer.data.model.ShrinkFilterConfig
 import com.lottery.analyzer.data.model.ShrinkResult
 import com.lottery.analyzer.data.model.WheelGuaranteeMode
+import java.util.Locale
 
 /**
- * 专业复式缩水过滤与旋转矩阵 (Covering Wheel) 算法引擎
+ * 旋转矩阵计算内部结果
+ */
+private data class WheelCoverageResult(
+    val bets: List<List<Int>>,
+    val isComplete: Boolean,
+    val coverageRatio: Float
+)
+
+/**
+ * 复式缩水与旋转矩阵保奖计算引擎
  */
 object LotteryShrinkEngine {
 
     /**
-     * 生成基础组合 C(n, k)
-     */
-    fun generateCombinations(elements: List<Int>, k: Int): List<List<Int>> {
-        val results = mutableListOf<List<Int>>()
-        val sorted = elements.sorted()
-
-        fun backtrack(start: Int, current: MutableList<Int>) {
-            if (current.size == k) {
-                results.add(ArrayList(current))
-                return
-            }
-            for (i in start until sorted.size) {
-                current.add(sorted[i])
-                backtrack(i + 1, current)
-                current.removeAt(current.size - 1)
-            }
-        }
-
-        backtrack(0, mutableListOf())
-        return results
-    }
-
-    /**
-     * 核心缩水计算方法
-     * @param selectedBalls 用户自选的红球池 (如 7~16 码)
-     * @param type 彩种类型
-     * @param config 过滤与保奖配置
-     * @param lastDrawReds 上期开奖红球 (用于重号计算)
-     * @param historyRedSets 历史上所有开奖红球集合 (用于排重历史一等奖)
+     * 执行全量复式展开、条件过滤与旋转矩阵保奖缩水
      */
     fun executeShrink(
         selectedBalls: List<Int>,
@@ -50,8 +32,11 @@ object LotteryShrinkEngine {
     ): ShrinkResult {
         val startTime = System.currentTimeMillis()
         val distinctPool = selectedBalls.distinct().sorted()
-        val k = type.redCount // 双色球6, 大乐透5, 快乐8取10
 
+        // 快乐8按主流选十玩法取 10 码，双色球取 6 码，大乐透取 5 码
+        val k = if (type == LotteryType.KL8) 10 else type.redCount
+
+        // 1. 底池最少选号数校验
         if (distinctPool.size < k) {
             return ShrinkResult(
                 selectedBalls = distinctPool,
@@ -61,41 +46,95 @@ object LotteryShrinkEngine {
                 shrinkRatio = 0f,
                 originalCost = 0,
                 filteredCost = 0,
-                executionTimeMs = System.currentTimeMillis() - startTime
+                executionTimeMs = System.currentTimeMillis() - startTime,
+                isStrictGuaranteed = false,
+                coverageRatio = 0f,
+                warningMessage = "选号池号码不足：${type.title}至少需要选择 $k 个红球"
             )
         }
 
-        // 1. 生成所有初始全复式注数组合
+        // 2. 底池规模上限限制 (防 OOM 内存溢出安全熔断)
+        val maxPoolSize = when (type) {
+            LotteryType.SSQ -> 16 // C(16, 6) = 8,008
+            LotteryType.DLT -> 16 // C(16, 5) = 4,368
+            LotteryType.KL8 -> 14 // C(14, 10) = 1,001 (安全控制贪心保奖计算在秒级内完成)
+        }
+        if (distinctPool.size > maxPoolSize) {
+            return ShrinkResult(
+                selectedBalls = distinctPool,
+                originalTotalBets = 0,
+                filteredBets = emptyList(),
+                filteredCount = 0,
+                shrinkRatio = 0f,
+                originalCost = 0,
+                filteredCost = 0,
+                executionTimeMs = System.currentTimeMillis() - startTime,
+                isStrictGuaranteed = false,
+                coverageRatio = 0f,
+                warningMessage = "选号池超出安全上限：${type.title}最多支持选 $maxPoolSize 码，以防止组合数过大造成内存耗尽！"
+            )
+        }
+
+        // 3. 生成全复式注数组合
         val allCombinations = generateCombinations(distinctPool, k)
         val originalTotal = allCombinations.size
 
-        // 2. 多维度指标条件过滤
+        // 4. 多维度形态条件过滤
         val conditionFiltered = allCombinations.filter { bet ->
             passesConditions(bet, config, lastDrawReds, historyRedSets)
         }
 
-        // 3. 旋转矩阵保奖缩水 (Wheeling System)
+        // 核心修复：若条件过滤结果为空，直接返回无符合条件方案，严禁私自退回到未过滤集合！
+        if (conditionFiltered.isEmpty()) {
+            return ShrinkResult(
+                selectedBalls = distinctPool,
+                originalTotalBets = originalTotal,
+                filteredBets = emptyList(),
+                filteredCount = 0,
+                shrinkRatio = 100f,
+                originalCost = originalTotal * 2,
+                filteredCost = 0,
+                executionTimeMs = System.currentTimeMillis() - startTime,
+                isStrictGuaranteed = false,
+                coverageRatio = 0f,
+                warningMessage = "所选过滤条件过于苛刻，无任何组合满足条件"
+            )
+        }
+
+        // 5. 旋转矩阵保奖缩水 (Wheeling System)
+        var isStrictGuaranteed = true
+        var coverageRatio = 100f
+        var warningMsg: String? = null
+
         val finalBets = when (config.wheelMode) {
             WheelGuaranteeMode.NONE -> conditionFiltered
             WheelGuaranteeMode.WHEEL_MATCH_MINUS_1 -> {
-                // 中 k 保 k-1 (如双色球中6保5，大乐透中5保4)
                 val guaranteeM = maxOf(1, k - 1)
-                applyGreedyCoveringWheel(
-                    candidateBets = if (conditionFiltered.isNotEmpty()) conditionFiltered else allCombinations,
+                val wheelResult = applyGreedyCoveringWheel(
+                    candidateBets = conditionFiltered,
                     pool = distinctPool,
-                    k = k,
                     guaranteeM = guaranteeM
                 )
+                isStrictGuaranteed = wheelResult.isComplete
+                coverageRatio = wheelResult.coverageRatio
+                if (!wheelResult.isComplete) {
+                    warningMsg = "⚠️ 因过滤条件剔除了部分组合，旋转矩阵已破保 (实际保奖覆盖率: ${String.format(Locale.US, "%.1f", coverageRatio)}%)"
+                }
+                wheelResult.bets
             }
             WheelGuaranteeMode.WHEEL_MATCH_MINUS_2 -> {
-                // 中 k 保 k-2 (如双色球中6保4，大乐透中5保3)
                 val guaranteeM = maxOf(1, k - 2)
-                applyGreedyCoveringWheel(
-                    candidateBets = if (conditionFiltered.isNotEmpty()) conditionFiltered else allCombinations,
+                val wheelResult = applyGreedyCoveringWheel(
+                    candidateBets = conditionFiltered,
                     pool = distinctPool,
-                    k = k,
                     guaranteeM = guaranteeM
                 )
+                isStrictGuaranteed = wheelResult.isComplete
+                coverageRatio = wheelResult.coverageRatio
+                if (!wheelResult.isComplete) {
+                    warningMsg = "⚠️ 因过滤条件剔除了部分组合，旋转矩阵已破保 (实际保奖覆盖率: ${String.format(Locale.US, "%.1f", coverageRatio)}%)"
+                }
+                wheelResult.bets
             }
         }
 
@@ -112,7 +151,10 @@ object LotteryShrinkEngine {
             shrinkRatio = shrinkRatio,
             originalCost = originalTotal * 2,
             filteredCost = filteredCount * 2,
-            executionTimeMs = System.currentTimeMillis() - startTime
+            executionTimeMs = System.currentTimeMillis() - startTime,
+            isStrictGuaranteed = isStrictGuaranteed,
+            coverageRatio = coverageRatio,
+            warningMessage = warningMsg
         )
     }
 
@@ -137,37 +179,38 @@ object LotteryShrinkEngine {
             if (oddCount !in config.allowedOddCounts) return false
         }
 
-        // 3. 跨度过滤
-        if (config.enableSpanFilter) {
-            val span = if (bet.isNotEmpty()) bet.last() - bet.first() else 0
-            if (span < config.spanMin || span > config.spanMax) return false
-        }
-
-        // 4. 连号过滤
+        // 3. 连号对数过滤
         if (config.enableConsecutiveFilter) {
-            var consecutiveCount = 0
+            var consecutivePairs = 0
             for (i in 0 until bet.size - 1) {
                 if (bet[i + 1] - bet[i] == 1) {
-                    consecutiveCount++
+                    consecutivePairs++
                 }
             }
-            if (consecutiveCount !in config.allowedConsecutiveCounts) return false
+            if (consecutivePairs !in config.allowedConsecutiveCounts) return false
         }
 
-        // 5. 同尾号过滤
+        // 4. 同尾号组数过滤
         if (config.enableSameTailFilter) {
-            val hasSameTail = bet.groupBy { it % 10 }.any { it.value.size >= 2 }
+            val tailMap = bet.groupBy { it % 10 }
+            val hasSameTail = tailMap.values.any { it.size >= 2 }
             if (config.requireSameTail && !hasSameTail) return false
             if (!config.requireSameTail && hasSameTail) return false
         }
 
-        // 6. 上期重号过滤
+        // 5. 跨度过滤
+        if (config.enableSpanFilter && bet.size >= 2) {
+            val span = bet.last() - bet.first()
+            if (span < config.spanMin || span > config.spanMax) return false
+        }
+
+        // 6. 上期重号个数过滤
         if (config.enableRepeatFilter && lastDrawReds.isNotEmpty()) {
             val repeatCount = bet.count { it in lastDrawReds }
             if (repeatCount !in config.allowedRepeatCounts) return false
         }
 
-        // 7. 历史一等奖号码排除
+        // 7. 排除历史一等奖开出组合
         if (config.enableExcludeHistory && historyRedSets.isNotEmpty()) {
             if (bet.toSet() in historyRedSets) return false
         }
@@ -176,27 +219,47 @@ object LotteryShrinkEngine {
     }
 
     /**
-     * 快速贪心旋转矩阵子集覆盖算法 (Greedy Set Cover Covering Design)
-     * 目标：从候选注中选出最小集合，覆盖所有大小为 m 的子集组合。
-     * 数学保证：只要开奖红球命中用户大底，选出的注数中必有至少一注与开奖球重合数 >= guaranteeM。
+     * 递归组合生成
+     */
+    fun generateCombinations(pool: List<Int>, k: Int): List<List<Int>> {
+        val result = mutableListOf<List<Int>>()
+        val current = mutableListOf<Int>()
+
+        fun backtrack(start: Int) {
+            if (current.size == k) {
+                result.add(ArrayList(current))
+                return
+            }
+            for (i in start until pool.size) {
+                current.add(pool[i])
+                backtrack(i + 1)
+                current.removeAt(current.size - 1)
+            }
+        }
+
+        backtrack(0)
+        return result
+    }
+
+    /**
+     * 基于贪心子集覆盖算法 (Greedy Set Cover) 的旋转矩阵保奖计算
+     * 并精确返回是否完全达成保奖及实际覆盖率
      */
     private fun applyGreedyCoveringWheel(
         candidateBets: List<List<Int>>,
         pool: List<Int>,
-        k: Int,
         guaranteeM: Int
-    ): List<List<Int>> {
-        if (candidateBets.isEmpty()) return emptyList()
-        if (candidateBets.size <= 2) return candidateBets
+    ): WheelCoverageResult {
+        if (candidateBets.isEmpty()) return WheelCoverageResult(emptyList(), false, 0f)
 
-        // 1. 生成大底中所有大小为 guaranteeM 的子集集合
+        // 1. 生成大底中所有大小为 guaranteeM 的目标子集
         val allSubsetsM = generateCombinations(pool, guaranteeM)
-        if (allSubsetsM.isEmpty()) return candidateBets
+        if (allSubsetsM.isEmpty()) return WheelCoverageResult(candidateBets, true, 100f)
 
-        // 编号子集以提高哈希与按位计算效率
-        val uncoveredSubsets = (0 until allSubsetsM.size).toMutableSet()
+        val totalSubsets = allSubsetsM.size
+        val uncoveredSubsets = (0 until totalSubsets).toMutableSet()
 
-        // 2. 预计算每个候选注所覆盖的 m-元子集索引
+        // 2. 预计算每个候选注所能覆盖的子集索引
         val subsetToIndex = allSubsetsM.mapIndexed { index, list -> list to index }.toMap()
         val betCoverageMap = ArrayList<Set<Int>>(candidateBets.size)
 
@@ -216,7 +279,6 @@ object LotteryShrinkEngine {
 
             for (betIdx in availableBetIndices) {
                 val coverage = betCoverageMap[betIdx]
-                // 计算该注能新覆盖的子集数量 (交集大小)
                 var gain = 0
                 for (subIdx in coverage) {
                     if (subIdx in uncoveredSubsets) {
@@ -230,16 +292,23 @@ object LotteryShrinkEngine {
             }
 
             if (bestBetIndex == -1 || maxGain == 0) {
-                // 剩余子集无法被当前可用候选注覆盖，退出
+                // 剩余子集无法被当前候选集合覆盖（发生破保）
                 break
             }
 
             selectedBets.add(candidateBets[bestBetIndex])
             availableBetIndices.remove(bestBetIndex)
-            // 移除已覆盖的子集
             uncoveredSubsets.removeAll(betCoverageMap[bestBetIndex])
         }
 
-        return selectedBets
+        val coveredCount = totalSubsets - uncoveredSubsets.size
+        val coverageRatio = if (totalSubsets > 0) (coveredCount.toFloat() / totalSubsets) * 100f else 100f
+        val isComplete = uncoveredSubsets.isEmpty()
+
+        return WheelCoverageResult(
+            bets = selectedBets,
+            isComplete = isComplete,
+            coverageRatio = coverageRatio
+        )
     }
 }

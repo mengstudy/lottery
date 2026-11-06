@@ -75,8 +75,10 @@ enum class AiAnalysisMode(val title: String, val desc: String) {
  */
 data class AiRecommendationResult(
     val mode: AiAnalysisMode,
+    val targetIssue: String = "",
     val rawResponse: String,
     val analysisText: String,
     val recommendedBets: List<Pair<List<Int>, List<Int>>>, // (红球, 蓝球)
-    val strategySummary: String
+    val strategySummary: String,
+    val lotteryType: LotteryType = LotteryType.SSQ
 )
