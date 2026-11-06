@@ -43,6 +43,27 @@ enum class LotteryType(
 }
 
 /**
+ * 快乐8官方支持的10种单注玩法类型 (选一 至 选十)
+ */
+enum class Kl8PlayType(
+    val title: String,
+    val pickCount: Int,
+    val desc: String
+) {
+    XUAN_TEN("选十", 10, "单注选10码，封顶500万，中0也中奖"),
+    XUAN_NINE("选九", 9, "单注选9码，最高30万，中0也中奖"),
+    XUAN_EIGHT("选八", 8, "单注选8码，最高5万，中0也中奖"),
+    XUAN_SEVEN("选七", 7, "单注选7码，最高8500元，中0也中奖"),
+    XUAN_SIX("选六", 6, "单注选6码，最高2880元，中3~6码有奖"),
+    XUAN_FIVE("选五", 5, "单注选5码，中5得1000元，高返奖首选"),
+    XUAN_FOUR("选四", 4, "单注选4码，中2~4码有奖"),
+    XUAN_THREE("选三", 3, "单注选3码，中2~3码有奖"),
+    XUAN_TWO("选二", 2, "单注选2码，中2得19元"),
+    XUAN_ONE("选一", 1, "单注选1码，中1得4.6元")
+}
+
+
+/**
  * 通用开奖记录实体
  */
 data class LotteryRecord(

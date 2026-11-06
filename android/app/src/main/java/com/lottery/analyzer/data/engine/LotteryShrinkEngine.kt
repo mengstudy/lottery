@@ -33,8 +33,9 @@ object LotteryShrinkEngine {
         val startTime = System.currentTimeMillis()
         val distinctPool = selectedBalls.distinct().sorted()
 
-        // 快乐8按主流选十玩法取 10 码，双色球取 6 码，大乐透取 5 码
-        val k = if (type == LotteryType.KL8) 10 else type.redCount
+        // 快乐8根据玩法配置动态取码(选一至选十)，双色球取 6 码，大乐透取 5 码
+        val k = if (type == LotteryType.KL8) config.kl8PlayType.pickCount else type.redCount
+        val titleText = if (type == LotteryType.KL8) "快乐8[${config.kl8PlayType.title}]" else type.title
 
         // 1. 底池最少选号数校验
         if (distinctPool.size < k) {
@@ -49,7 +50,7 @@ object LotteryShrinkEngine {
                 executionTimeMs = System.currentTimeMillis() - startTime,
                 isStrictGuaranteed = false,
                 coverageRatio = 0f,
-                warningMessage = "选号池号码不足：${type.title}至少需要选择 $k 个红球"
+                warningMessage = "选号池号码不足：$titleText 至少需要选择 $k 个红球"
             )
         }
 
@@ -71,7 +72,7 @@ object LotteryShrinkEngine {
                 executionTimeMs = System.currentTimeMillis() - startTime,
                 isStrictGuaranteed = false,
                 coverageRatio = 0f,
-                warningMessage = "选号池超出安全上限：${type.title}最多支持选 $maxPoolSize 码，以防止组合数过大造成内存耗尽！"
+                warningMessage = "选号池超出安全上限：$titleText 最多支持选 $maxPoolSize 码，以防止组合数过大造成内存耗尽！"
             )
         }
 

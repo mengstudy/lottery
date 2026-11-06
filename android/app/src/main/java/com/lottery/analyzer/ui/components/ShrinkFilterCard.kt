@@ -62,6 +62,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lottery.analyzer.data.model.Kl8PlayType
 import com.lottery.analyzer.data.model.LotteryType
 import com.lottery.analyzer.data.model.ShrinkFilterConfig
 import com.lottery.analyzer.data.model.ShrinkResult
@@ -104,7 +105,7 @@ fun ShrinkFilterCard(
 ) {
     val context = LocalContext.current
     var isFilterExpanded by remember { mutableStateOf(false) }
-    val targetMinBalls = if (lotteryType == LotteryType.KL8) 10 else lotteryType.redCount
+    val targetMinBalls = if (lotteryType == LotteryType.KL8) config.kl8PlayType.pickCount else lotteryType.redCount
     val maxAllowedBalls = if (lotteryType == LotteryType.KL8) 14 else 16
 
     Card(
@@ -249,6 +250,56 @@ fun ShrinkFilterCard(
             }
 
             Divider(color = BorderLight, thickness = 0.8.dp)
+
+            // 快乐8目标玩法切换 (单注所选红球数量)
+            if (lotteryType == LotteryType.KL8) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "快乐8目标玩法 (每注选号数)：",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "${config.kl8PlayType.title} (单注选${config.kl8PlayType.pickCount}码)",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF0284C7)
+                        )
+                    }
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Kl8PlayType.values().filter { it.pickCount >= 2 }.forEach { play ->
+                            val isSelected = play == config.kl8PlayType
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isSelected) Color(0xFF0284C7) else Color(0xFFF1F5F9))
+                                    .clickable {
+                                        onUpdateConfig(config.copy(kl8PlayType = play))
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = play.title,
+                                    fontSize = 11.sp,
+                                    color = if (isSelected) Color.White else TextPrimary,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+                Divider(color = BorderLight, thickness = 0.6.dp)
+            }
 
             // 3. 旋转矩阵保奖模式选择
             Text(

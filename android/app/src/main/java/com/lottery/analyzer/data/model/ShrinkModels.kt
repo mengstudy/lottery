@@ -55,7 +55,10 @@ data class ShrinkFilterConfig(
     val enableExcludeHistory: Boolean = true,
 
     // 8. 旋转矩阵保奖模式
-    val wheelMode: WheelGuaranteeMode = WheelGuaranteeMode.NONE
+    val wheelMode: WheelGuaranteeMode = WheelGuaranteeMode.NONE,
+
+    // 9. 快乐8所选玩法 (选一 至 选十，默认选十)
+    val kl8PlayType: Kl8PlayType = Kl8PlayType.XUAN_TEN
 )
 
 /**

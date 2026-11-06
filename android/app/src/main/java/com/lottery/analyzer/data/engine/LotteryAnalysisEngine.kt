@@ -274,14 +274,81 @@ object LotteryAnalysisEngine {
                 }
             }
             LotteryType.KL8 -> {
-                // 快乐8按选十规则估算
-                when {
-                    rCount == 10 -> { summary = "🎉 选十中十！"; isWon = true }
-                    rCount == 9 -> { summary = "🎉 选十中九！"; isWon = true }
-                    rCount == 8 -> { summary = "✨ 选十中八！"; isWon = true }
-                    rCount == 7 -> { summary = "✨ 选十中七！"; isWon = true }
-                    rCount == 0 -> { summary = "✨ 选十中零！(全不中中奖)"; isWon = true }
-                    else -> summary = "命中 $rCount 码"
+                // 快乐8根据单注红球选球数自动识别玩法 (选一至选十) 进行精准核验
+                val pickedCount = prediction.redBalls.size
+                when (pickedCount) {
+                    10 -> when (rCount) {
+                        10 -> { summary = "🎉 选十中十！(浮动最高500万)"; isWon = true }
+                        9 -> { summary = "🎉 选十中九！(单注8000元)"; isWon = true }
+                        8 -> { summary = "✨ 选十中八！(单注720元)"; isWon = true }
+                        7 -> { summary = "✨ 选十中七！(单注80元)"; isWon = true }
+                        6 -> { summary = "✨ 选十中六！(单注5元)"; isWon = true }
+                        5 -> { summary = "✨ 选十中五！(单注3元)"; isWon = true }
+                        0 -> { summary = "✨ 选十中零！(全不中2元)"; isWon = true }
+                        else -> summary = "选十未中奖 (命中 $rCount 码)"
+                    }
+                    9 -> when (rCount) {
+                        9 -> { summary = "🎉 选九中九！(单注30万元)"; isWon = true }
+                        8 -> { summary = "🎉 选九中八！(单注2000元)"; isWon = true }
+                        7 -> { summary = "✨ 选九中七！(单注225元)"; isWon = true }
+                        6 -> { summary = "✨ 选九中六！(单注22元)"; isWon = true }
+                        5 -> { summary = "✨ 选九中五！(单注5元)"; isWon = true }
+                        4 -> { summary = "✨ 选九中四！(单注3元)"; isWon = true }
+                        0 -> { summary = "✨ 选九中零！(全不中2元)"; isWon = true }
+                        else -> summary = "选九未中奖 (命中 $rCount 码)"
+                    }
+                    8 -> when (rCount) {
+                        8 -> { summary = "🎉 选八中八！(单注5万元)"; isWon = true }
+                        7 -> { summary = "✨ 选八中七！(单注800元)"; isWon = true }
+                        6 -> { summary = "✨ 选八中六！(单注80元)"; isWon = true }
+                        5 -> { summary = "✨ 选八中五！(单注10元)"; isWon = true }
+                        4 -> { summary = "✨ 选八中四！(单注3元)"; isWon = true }
+                        0 -> { summary = "✨ 选八中零！(全不中2元)"; isWon = true }
+                        else -> summary = "选八未中奖 (命中 $rCount 码)"
+                    }
+                    7 -> when (rCount) {
+                        7 -> { summary = "🎉 选七中七！(单注8500元)"; isWon = true }
+                        6 -> { summary = "✨ 选七中六！(单注300元)"; isWon = true }
+                        5 -> { summary = "✨ 选七中五！(单注30元)"; isWon = true }
+                        4 -> { summary = "✨ 选七中四！(单注4元)"; isWon = true }
+                        0 -> { summary = "✨ 选七中零！(全不中2元)"; isWon = true }
+                        else -> summary = "选七未中奖 (命中 $rCount 码)"
+                    }
+                    6 -> when (rCount) {
+                        6 -> { summary = "🎉 选六中六！(单注2880元)"; isWon = true }
+                        5 -> { summary = "✨ 选六中五！(单注30元)"; isWon = true }
+                        4 -> { summary = "✨ 选六中四！(单注10元)"; isWon = true }
+                        3 -> { summary = "✨ 选六中三！(单注3元)"; isWon = true }
+                        else -> summary = "选六未中奖 (命中 $rCount 码)"
+                    }
+                    5 -> when (rCount) {
+                        5 -> { summary = "🎉 选五中五！(单注1000元)"; isWon = true }
+                        4 -> { summary = "✨ 选五中四！(单注20元)"; isWon = true }
+                        3 -> { summary = "✨ 选五中三！(单注3元)"; isWon = true }
+                        else -> summary = "选五未中奖 (命中 $rCount 码)"
+                    }
+                    4 -> when (rCount) {
+                        4 -> { summary = "🎉 选四中四！(单注93元)"; isWon = true }
+                        3 -> { summary = "✨ 选四中三！(单注5元)"; isWon = true }
+                        2 -> { summary = "✨ 选四中二！(单注3元)"; isWon = true }
+                        else -> summary = "选四未中奖 (命中 $rCount 码)"
+                    }
+                    3 -> when (rCount) {
+                        3 -> { summary = "🎉 选三中三！(单注52元)"; isWon = true }
+                        2 -> { summary = "✨ 选三中二！(单注3元)"; isWon = true }
+                        else -> summary = "选三未中奖 (命中 $rCount 码)"
+                    }
+                    2 -> when (rCount) {
+                        2 -> { summary = "🎉 选二中二！(单注19元)"; isWon = true }
+                        else -> summary = "选二未中奖 (命中 $rCount 码)"
+                    }
+                    1 -> when (rCount) {
+                        1 -> { summary = "🎉 选一中一！(单注4.6元)"; isWon = true }
+                        else -> summary = "选一未中奖 (命中 0 码)"
+                    }
+                    else -> {
+                        summary = "命中 $rCount 码"
+                    }
                 }
             }
         }

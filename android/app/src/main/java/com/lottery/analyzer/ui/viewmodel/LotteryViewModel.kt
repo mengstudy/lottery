@@ -13,6 +13,7 @@ import com.lottery.analyzer.data.model.FrequencyAnalysisResult
 import com.lottery.analyzer.data.model.HeartBallLevelDistribution
 import com.lottery.analyzer.data.model.IssueAnalysis
 import com.lottery.analyzer.data.model.LotteryRecord
+import com.lottery.analyzer.data.model.Kl8PlayType
 import com.lottery.analyzer.data.model.LotteryType
 import com.lottery.analyzer.data.model.PredictionRecord
 import com.lottery.analyzer.data.model.PredictionVerificationResult
@@ -59,6 +60,7 @@ data class LotteryUiState(
     val showAiSettingsDialog: Boolean = false,
     val showLogDialog: Boolean = false,
     // 缩水与旋转矩阵状态
+    val kl8PlayType: Kl8PlayType = Kl8PlayType.XUAN_TEN,
     val shrinkSelectedBalls: Set<Int> = emptySet(),
     val shrinkConfig: ShrinkFilterConfig = ShrinkFilterConfig(),
     val shrinkResult: ShrinkResult? = null,
@@ -585,6 +587,16 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
     /**
      * 发起 AI 选号推演或诊断
      */
+    /**
+     * 设置快乐8所选玩法 (选一 至 选十)
+     */
+    fun setKl8PlayType(playType: Kl8PlayType) {
+        _uiState.value = _uiState.value.copy(
+            kl8PlayType = playType,
+            shrinkConfig = _uiState.value.shrinkConfig.copy(kl8PlayType = playType)
+        )
+    }
+
     fun runAiAnalysis(mode: AiAnalysisMode, betCount: Int = 3) {
         val analysis = _uiState.value.analysis
         if (analysis == null) {
@@ -620,7 +632,8 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
                 userSelection = _uiState.value.myHeartBalls,
                 topOtherBalls = _uiState.value.frequencyResult.sortedByFreq,
                 otherBets = _uiState.value.frequencyResult.parsedBets,
-                betCount = betCount
+                betCount = betCount,
+                kl8PlayType = _uiState.value.kl8PlayType
             )
             if (_uiState.value.currentType != targetType) return@launch
 
@@ -648,7 +661,8 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
         if (result.lotteryType != _uiState.value.currentType) return
         if (betIndex in result.recommendedBets.indices) {
             val (reds, blues) = result.recommendedBets[betIndex]
-            val strategy = "AI大模型[${_uiState.value.aiConfig.provider.title}]-${result.mode.title}#${betIndex + 1}"
+            val playSuffix = if (result.lotteryType == LotteryType.KL8 && result.kl8PlayType != null) "-${result.kl8PlayType.title}" else ""
+            val strategy = "AI大模型[${_uiState.value.aiConfig.provider.title}]-${result.mode.title}${playSuffix}#${betIndex + 1}"
             val target = result.targetIssue.ifBlank { _uiState.value.nextIssueTarget }
             savePredictionRecord(
                 redBalls = reds,
@@ -711,18 +725,19 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
         val type = _uiState.value.currentType
         val config = _uiState.value.shrinkConfig
 
-        val minCount = if (type == LotteryType.KL8) 10 else type.redCount
+        val minCount = if (type == LotteryType.KL8) config.kl8PlayType.pickCount else type.redCount
+        val titleText = if (type == LotteryType.KL8) "快乐8[${config.kl8PlayType.title}]" else type.title
         val maxCount = if (type == LotteryType.KL8) 14 else 16
 
         if (selected.size < minCount) {
             _uiState.value = _uiState.value.copy(
-                errorMessage = "选号池号码不足：" + type.title + "至少需要选择 " + minCount + " 个红球"
+                errorMessage = "选号池号码不足：" + titleText + "至少需要选择 " + minCount + " 个红球"
             )
             return
         }
         if (selected.size > maxCount) {
             _uiState.value = _uiState.value.copy(
-                errorMessage = "选号池超出上限：" + type.title + "最多支持选择 " + maxCount + " 个红球，以防内存溢出"
+                errorMessage = "选号池超出上限：" + titleText + "最多支持选择 " + maxCount + " 个红球，以防内存溢出"
             )
             return
         }
@@ -753,7 +768,8 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
             LotteryType.DLT -> (1..12).shuffled().take(2).sorted()
             LotteryType.KL8 -> emptyList()
         }
-        val strategy = "复式缩水[" + _uiState.value.shrinkConfig.wheelMode.title + "]"
+        val playSuffix = if (type == LotteryType.KL8) "[${_uiState.value.shrinkConfig.kl8PlayType.title}]" else ""
+        val strategy = "复式缩水$playSuffix[" + _uiState.value.shrinkConfig.wheelMode.title + "]"
         savePredictionRecord(redBalls = reds, blueBalls = blueList, strategy = strategy)
     }
 

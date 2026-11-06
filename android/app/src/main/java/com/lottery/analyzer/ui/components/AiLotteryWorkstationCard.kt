@@ -35,6 +35,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Divider
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -57,6 +58,7 @@ import androidx.compose.ui.unit.sp
 import com.lottery.analyzer.data.model.AiAnalysisMode
 import com.lottery.analyzer.data.model.AiConfig
 import com.lottery.analyzer.data.model.AiRecommendationResult
+import com.lottery.analyzer.data.model.Kl8PlayType
 import com.lottery.analyzer.data.model.LotteryType
 import com.lottery.analyzer.ui.theme.BorderLight
 import com.lottery.analyzer.ui.theme.GreenPrimary
@@ -85,6 +87,8 @@ fun AiLotteryWorkstationCard(
     heartBallCount: Int,
     otherBallSet: Set<Int> = emptySet(),
     otherBets: List<List<Int>> = emptyList(),
+    kl8PlayType: Kl8PlayType = Kl8PlayType.XUAN_TEN,
+    onKl8PlayTypeChange: ((Kl8PlayType) -> Unit)? = null,
     onOpenSettings: () -> Unit,
     onRunAnalysis: (mode: AiAnalysisMode, count: Int) -> Unit,
     onSaveBetToPrediction: (index: Int) -> Unit,
@@ -206,6 +210,76 @@ fun AiLotteryWorkstationCard(
                         )
                     }
                 }
+            }
+
+            // 快乐8官方10种玩法选择切换
+            if (lotteryType == LotteryType.KL8) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "快乐8玩法选择 (官方10种玩法)：",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "${kl8PlayType.title} (${kl8PlayType.pickCount}码)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = OrangePrimary
+                        )
+                    }
+
+                    // 10种玩法单选 Chip (选十 至 选一)
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Kl8PlayType.values().forEach { play ->
+                            val isSelected = play == kl8PlayType
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) OrangePrimary else Color(0xFFF1F5F9))
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (isSelected) OrangePrimary else Color(0xFFE2E8F0),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable { onKl8PlayTypeChange?.invoke(play) }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = play.title,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) Color.White else TextPrimary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 特色玩法奖级说明
+                    Text(
+                        text = "💡 ${kl8PlayType.title}：${kl8PlayType.desc}",
+                        fontSize = 11.sp,
+                        color = Color(0xFFD97706),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFFFFFBEB))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+
+                Divider(color = BorderLight, thickness = 0.6.dp)
             }
 
             // 2. 推演模式选择

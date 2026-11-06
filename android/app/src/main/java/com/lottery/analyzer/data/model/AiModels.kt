@@ -80,5 +80,6 @@ data class AiRecommendationResult(
     val analysisText: String,
     val recommendedBets: List<Pair<List<Int>, List<Int>>>, // (红球, 蓝球)
     val strategySummary: String,
-    val lotteryType: LotteryType = LotteryType.SSQ
+    val lotteryType: LotteryType = LotteryType.SSQ,
+    val kl8PlayType: Kl8PlayType? = null
 )
