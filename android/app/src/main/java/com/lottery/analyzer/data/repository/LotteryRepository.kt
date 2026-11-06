@@ -17,6 +17,7 @@ import com.lottery.analyzer.data.model.ShrinkResult
 import com.lottery.analyzer.data.model.TrendMatrixData
 import com.lottery.analyzer.data.sync.LotterySyncService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
 class LotteryRepository(context: Context) {
@@ -96,11 +97,14 @@ class LotteryRepository(context: Context) {
      * 1. 联网同步最新开奖数据并刷新内存缓存
      */
     suspend fun syncLatestData(type: LotteryType): Result<Int> {
-        val result = syncService.syncLatest(type)
-        if (result.isSuccess && (result.getOrNull() ?: 0) > 0) {
-            loadLotteryData(type, forceReload = true)
+        try {
+            return syncService.syncLatest(type)
+        } finally {
+            // 无论正常返回、网络异常还是协程被取消(如切彩种)，均在 NonCancellable 上下文中强制刷新内存缓存
+            withContext(NonCancellable) {
+                loadLotteryData(type, forceReload = true)
+            }
         }
-        return result
     }
 
     /**
@@ -110,11 +114,14 @@ class LotteryRepository(context: Context) {
         type: LotteryType,
         onProgress: ((page: Int, totalRecords: Int) -> Unit)? = null
     ): Result<Int> {
-        val result = syncService.syncAllHistory(type, onProgress)
-        if (result.isSuccess && (result.getOrNull() ?: 0) > 0) {
-            loadLotteryData(type, forceReload = true)
+        try {
+            return syncService.syncAllHistory(type, onProgress)
+        } finally {
+            // 核心修复：无论正常完成、异常中断还是被主动取消，均在 NonCancellable 上下文中强制刷新内存缓存，使已入库数据立即可见
+            withContext(NonCancellable) {
+                loadLotteryData(type, forceReload = true)
+            }
         }
-        return result
     }
 
     /**

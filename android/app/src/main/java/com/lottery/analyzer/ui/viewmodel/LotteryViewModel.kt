@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -86,6 +87,8 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
     private var shrinkJob: Job? = null
     private var aiJob: Job? = null
     private var trendJob: Job? = null
+    private var issueJob: Job? = null
+    private var predictionJob: Job? = null
 
     init {
         _uiState.value = _uiState.value.copy(
@@ -112,12 +115,15 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
         shrinkJob?.cancel()
         aiJob?.cancel()
         trendJob?.cancel()
+        issueJob?.cancel()
+        predictionJob?.cancel()
         switchJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 currentType = type,
                 isLoading = true,
                 errorMessage = null,
                 myHeartBalls = emptySet(),
+                predictionRecords = emptyList(),
                 shrinkSelectedBalls = emptySet(),
                 shrinkResult = null,
                 isShrinking = false,
@@ -158,6 +164,8 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
                 if (records.isEmpty()) {
                     syncLatestData()
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 if (_uiState.value.currentType != type) return@launch
                 _uiState.value = _uiState.value.copy(
@@ -173,17 +181,23 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
      */
     fun selectIssue(issue: String) {
         val type = _uiState.value.currentType
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
+        issueJob?.cancel()
+        issueJob = viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
             try {
                 val analysis = repository.getAnalysisForIssue(type, issue)
+                if (_uiState.value.currentType != type) return@launch
                 _uiState.value = _uiState.value.copy(
                     currentIssue = issue,
                     analysis = analysis,
-                    isLoading = false
+                    isLoading = false,
+                    errorMessage = null
                 )
                 recalcHeartDistributions()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
+                if (_uiState.value.currentType != type) return@launch
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     errorMessage = "分析期号失败: ${e.message}"
@@ -342,9 +356,12 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
      * 加载当前彩种已保存的预测记录并完成自动比对验证
      */
     fun loadPredictions() {
-        viewModelScope.launch {
+        val targetType = _uiState.value.currentType
+        predictionJob?.cancel()
+        predictionJob = viewModelScope.launch {
             try {
-                val list = repository.getVerifiedPredictions(_uiState.value.currentType)
+                val list = repository.getVerifiedPredictions(targetType)
+                if (_uiState.value.currentType != targetType) return@launch
                 _uiState.value = _uiState.value.copy(predictionRecords = list)
             } catch (e: Exception) {
                 // 忽略或记录
