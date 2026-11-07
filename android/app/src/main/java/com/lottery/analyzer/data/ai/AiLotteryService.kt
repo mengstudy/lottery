@@ -143,7 +143,9 @@ class AiLotteryService {
         mode: AiAnalysisMode,
         userSelection: Set<Int>,
         topOtherBalls: List<Pair<Int, Int>> = emptyList(),
+        topOtherBlues: List<Pair<Int, Int>> = emptyList(),
         otherBets: List<List<Int>> = emptyList(),
+        otherCompleteBets: List<Pair<List<Int>, List<Int>>> = emptyList(),
         betCount: Int = 3,
         kl8PlayType: Kl8PlayType = Kl8PlayType.XUAN_TEN
     ): Result<AiRecommendationResult> = withContext(Dispatchers.IO) {
@@ -167,7 +169,9 @@ class AiLotteryService {
                 mode = mode,
                 userSelection = userSelection,
                 topOtherBalls = topOtherBalls,
+                topOtherBlues = topOtherBlues,
                 otherBets = otherBets,
+                otherCompleteBets = otherCompleteBets,
                 betCount = betCount,
                 kl8PlayType = kl8PlayType
             )
@@ -243,10 +247,12 @@ class AiLotteryService {
                     4
                 }
 
+                // 过滤出有效红球注 (排除红球为空的行，双重防护防止纯蓝球行导致全部被过滤)
+                val validOtherRedBets = otherBets.filter { it.isNotEmpty() }
                 // 统计并硬拦截防撞号违规注
-                val validBets = if (mode == AiAnalysisMode.HEART_FUSION && otherBets.isNotEmpty()) {
+                val validBets = if (mode == AiAnalysisMode.HEART_FUSION && validOtherRedBets.isNotEmpty()) {
                     extractedBets.filterIndexed { idx, bet ->
-                        val overlaps = otherBets.map { oBet -> bet.first.count { it in oBet } }
+                        val overlaps = validOtherRedBets.map { oBet -> bet.first.count { it in oBet } }
                         val isCompliant = overlaps.all { it in 1..maxAllowedOverlap }
                         val minO = overlaps.minOrNull() ?: 0
                         val maxO = overlaps.maxOrNull() ?: 0
@@ -298,7 +304,9 @@ class AiLotteryService {
         mode: AiAnalysisMode,
         userSelection: Set<Int>,
         topOtherBalls: List<Pair<Int, Int>>,
+        topOtherBlues: List<Pair<Int, Int>> = emptyList(),
         otherBets: List<List<Int>> = emptyList(),
+        otherCompleteBets: List<Pair<List<Int>, List<Int>>> = emptyList(),
         betCount: Int,
         kl8PlayType: Kl8PlayType = Kl8PlayType.XUAN_TEN
     ): String {
@@ -339,23 +347,41 @@ class AiLotteryService {
             sb.appendLine("  " + userSelection.sorted().joinToString(" ") { String.format("%02d", it) } + " (共${userSelection.size}个)")
         }
 
-        if (otherBets.isNotEmpty()) {
-            sb.appendLine("\n【工具箱他人收集号码池 (共${otherBets.size}注，1行1注)】:")
-            otherBets.forEachIndexed { idx, bet ->
-                val lineStr = bet.joinToString(" ") { String.format("%02d", it) }
-                sb.appendLine("  他人第${idx + 1}注: $lineStr")
+        val hasCompleteBets = otherCompleteBets.isNotEmpty()
+        if (hasCompleteBets || otherBets.isNotEmpty()) {
+            val totalBetsCount = if (hasCompleteBets) otherCompleteBets.size else otherBets.size
+            sb.appendLine("\n【工具箱他人收集号码池 (共${totalBetsCount}注，1行1注)】:")
+            if (hasCompleteBets) {
+                otherCompleteBets.forEachIndexed { idx, (reds, blues) ->
+                    val redStr = reds.joinToString(" ") { String.format("%02d", it) }
+                    val blueStr = if (blues.isNotEmpty()) " + 蓝球: " + blues.joinToString(" ") { String.format("%02d", it) } else ""
+                    sb.appendLine("  他人第${idx + 1}注: 红球: $redStr$blueStr")
+                }
+            } else {
+                otherBets.forEachIndexed { idx, bet ->
+                    val lineStr = bet.joinToString(" ") { String.format("%02d", it) }
+                    sb.appendLine("  他人第${idx + 1}注: $lineStr")
+                }
             }
             if (topOtherBalls.isNotEmpty()) {
                 val rankList = topOtherBalls.take(10).joinToString(", ") { "${String.format("%02d", it.first)}(${it.second}次)" }
-                sb.appendLine("  他人高频热度榜 Top 10: $rankList")
+                sb.appendLine("  他人红球高频热度榜 Top 10: $rankList")
+            }
+            if (topOtherBlues.isNotEmpty()) {
+                val blueRankList = topOtherBlues.take(6).joinToString(", ") { "${String.format("%02d", it.first)}(${it.second}次)" }
+                sb.appendLine("  他人蓝球高频热度榜: $blueRankList")
             }
         } else if (topOtherBalls.isNotEmpty()) {
             val otherBallsList = topOtherBalls.map { it.first }
             val rankList = topOtherBalls.take(10).joinToString(", ") { "${String.format("%02d", it.first)}(${it.second}次)" }
             val allOtherPoolStr = otherBallsList.sorted().joinToString(" ") { String.format("%02d", it) }
             sb.appendLine("\n【工具箱他人收集号码池 (频次排行榜)】:")
-            sb.appendLine("  高频热度排行 Top 10: $rankList")
-            sb.appendLine("  他人号码全集池 (${otherBallsList.size}码): $allOtherPoolStr")
+            sb.appendLine("  高频红球排行 Top 10: $rankList")
+            sb.appendLine("  他人红球全集池 (${otherBallsList.size}码): $allOtherPoolStr")
+            if (topOtherBlues.isNotEmpty()) {
+                val blueRankList = topOtherBlues.take(6).joinToString(", ") { "${String.format("%02d", it.first)}(${it.second}次)" }
+                sb.appendLine("  高频蓝球排行: $blueRankList")
+            }
         }
 
         sb.appendLine("\n【本次任务模式】: ${mode.title}")
@@ -376,6 +402,9 @@ class AiLotteryService {
                     sb.appendLine("3. 其余号码从他人未选的优质 0~9+ 遗漏层级中补充。")
                 } else {
                     sb.appendLine("2. 结合下期 0~9+ 遗漏层级与冷热号轮动，补齐其余红蓝球。")
+                }
+                if (lotteryType.maxBlueNumber > 0 && topOtherBlues.isNotEmpty()) {
+                    sb.appendLine("4. 【他人蓝球参考指导】：参考他人收集的蓝球热度榜，分析他人扎堆热选与被忽视的冷门蓝球，结合蓝球历史走势推演最具博弈性价比的蓝球推荐方案！")
                 }
             }
             AiAnalysisMode.DIAGNOSE_SELECTION -> {

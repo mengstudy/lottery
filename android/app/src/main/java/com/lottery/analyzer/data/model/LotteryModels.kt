@@ -128,9 +128,12 @@ data class IssueAnalysis(
  */
 data class FrequencyAnalysisResult(
     val validGroupsCount: Int,           // 解析出的有效组数
-    val frequencyMap: Map<Int, Int>,      // 号码 -> 出现次数
-    val sortedByFreq: List<Pair<Int, Int>>, // 按频次降序
-    val parsedBets: List<List<Int>> = emptyList() // 每行解析出的具体注数号码列表 (1行1注)
+    val frequencyMap: Map<Int, Int>,      // 红球号码 -> 出现次数
+    val sortedByFreq: List<Pair<Int, Int>>, // 红球按频次降序
+    val parsedBets: List<List<Int>> = emptyList(), // 每行解析出的具体注数红球列表 (兼容旧逻辑)
+    val blueFrequencyMap: Map<Int, Int> = emptyMap(), // 蓝球号码 -> 出现次数
+    val sortedBluesByFreq: List<Pair<Int, Int>> = emptyList(), // 蓝球按频次降序
+    val parsedCompleteBets: List<Pair<List<Int>, List<Int>>> = emptyList() // 每行解析出的完整(红球, 蓝球)列表
 )
 
 /**

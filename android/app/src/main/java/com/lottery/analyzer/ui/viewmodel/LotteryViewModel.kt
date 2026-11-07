@@ -124,6 +124,16 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
                 errorMessage = null,
                 myHeartBalls = emptySet(),
                 predictionRecords = emptyList(),
+                collectedBallsText = "",
+                frequencyResult = FrequencyAnalysisResult(
+                    validGroupsCount = 0,
+                    frequencyMap = emptyMap(),
+                    sortedByFreq = emptyList(),
+                    parsedBets = emptyList(),
+                    blueFrequencyMap = emptyMap(),
+                    sortedBluesByFreq = emptyList(),
+                    parsedCompleteBets = emptyList()
+                ),
                 shrinkSelectedBalls = emptySet(),
                 shrinkResult = null,
                 isShrinking = false,
@@ -265,58 +275,115 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
      * 更新他人购买号码文本并进行频次解析与注数提取 (支持1行1注)
      */
     fun updateCollectedBallsText(text: String) {
-        val maxNumber = _uiState.value.currentType.maxRedNumber
+        val currentType = _uiState.value.currentType
+        val maxRed = currentType.maxRedNumber
+        val maxBlue = currentType.maxBlueNumber
+
         val freqMap = mutableMapOf<Int, Int>()
+        val blueFreqMap = mutableMapOf<Int, Int>()
         val parsedBets = mutableListOf<List<Int>>()
+        val parsedCompleteBets = mutableListOf<Pair<List<Int>, List<Int>>>()
         var validGroups = 0
+
+        fun parseSegment(segment: String, maxVal: Int): List<Int> {
+            val trimmed = segment.trim()
+            if (trimmed.isBlank() || maxVal <= 0) return emptyList()
+
+            // 核心健壮解析：先按所有非数字字符(空格/逗号/标点)切分为独立Token，再逐个Token提取
+            val tokens = trimmed.split(Regex("[^0-9]+")).filter { it.isNotBlank() }
+            val result = mutableListOf<Int>()
+
+            for (token in tokens) {
+                if (token.length <= 2) {
+                    // 独立1~2位数字 (如 "05", "6")
+                    val num = token.toIntOrNull()
+                    if (num != null && num in 1..maxVal && num !in result) {
+                        result.add(num)
+                    }
+                } else {
+                    // 连续无空格多位数字 (如 "01020304" 或 "0510")，按每2位切割
+                    var i = 0
+                    while (i + 1 < token.length) {
+                        val num = token.substring(i, i + 2).toIntOrNull()
+                        if (num != null && num in 1..maxVal && num !in result) {
+                            result.add(num)
+                        }
+                        i += 2
+                    }
+                    if (i < token.length) {
+                        val single = token.substring(i).toIntOrNull()
+                        if (single != null && single in 1..maxVal && single !in result) {
+                            result.add(single)
+                        }
+                    }
+                }
+            }
+            return result.sorted()
+        }
 
         val lines = text.split("\n")
         for (line in lines) {
             val trimmedLine = line.trim()
             if (trimmedLine.isBlank()) continue
 
-            // 1. 优先尝试按空格/逗号等分隔符提取独立数字
-            val extractedByDelim = Regex("\\b\\d{1,2}\\b")
-                .findAll(trimmedLine)
-                .mapNotNull { it.value.toIntOrNull() }
-                .filter { it in 1..maxNumber }
-                .distinct()
-                .toList()
+            // 预清洗：剥离括号标签、注号序号、红球/前区/蓝球/后区等标签文字，防止注号(如"第1注")被误识为红球
+            var cleanLine = trimmedLine
+                .replace(Regex("""[【\[\(（][^】\]\)）]*第?\s*\d+\s*注?[^】\]\)）]*[】\]\)）]"""), " ")
+                .replace(Regex("""【[^】]*】|\[[^\]]*\]"""), " ")
+                .trim()
 
-            val rowBalls = if (extractedByDelim.size >= 2) {
-                extractedByDelim
+            cleanLine = cleanLine
+                .replaceFirst(Regex("""^(?:他人)?第?\s*\d+\s*注[:：\s]*"""), "")
+                .replaceFirst(Regex("""^注\s*\d+[:：\s]*"""), "")
+                .replaceFirst(Regex("""^\d+[\.\、\)]\s*"""), "")
+                .replace(Regex("""(?:红球|前区|红)[:：]?"""), " ")
+
+            if (cleanLine.contains("+")) {
+                cleanLine = cleanLine.replace(Regex("""(?:蓝球|后区|蓝)[:：]?"""), " ")
+            } else if (cleanLine.contains("蓝球") || cleanLine.contains("后区")) {
+                cleanLine = cleanLine.replace(Regex("""(?:蓝球|后区)[:：]?"""), " + ")
+            }
+            cleanLine = cleanLine.trim()
+
+            val (redPart, bluePart) = if (cleanLine.contains("+") && maxBlue > 0) {
+                val parts = cleanLine.split("+", limit = 2)
+                parts[0] to parts[1]
             } else {
-                // 2. 兜底尝试每 2 位切割连续无空格数字 (如 020815212630)
-                val clean = trimmedLine.replace("[^0-9]".toRegex(), "")
-                val subList = mutableListOf<Int>()
-                var i = 0
-                while (i + 1 < clean.length) {
-                    val num = clean.substring(i, i + 2).toIntOrNull()
-                    if (num != null && num in 1..maxNumber && num !in subList) {
-                        subList.add(num)
-                    }
-                    i += 2
-                }
-                subList
+                cleanLine to ""
             }
 
-            if (rowBalls.isNotEmpty()) {
+            val rowReds = parseSegment(redPart, maxRed)
+            val rowBlues = if (maxBlue > 0 && bluePart.isNotBlank()) parseSegment(bluePart, maxBlue) else emptyList()
+
+            if (rowReds.isNotEmpty() || rowBlues.isNotEmpty()) {
                 validGroups++
-                parsedBets.add(rowBalls.sorted())
-                for (b in rowBalls) {
-                    freqMap[b] = (freqMap[b] ?: 0) + 1
+                // 核心修复：仅当红球非空时才加入红球防撞检验池，防止纯蓝球行(+06)加入空列表导致防撞号全灭
+                if (rowReds.isNotEmpty()) {
+                    parsedBets.add(rowReds)
+                }
+                parsedCompleteBets.add(Pair(rowReds, rowBlues))
+                for (r in rowReds) {
+                    freqMap[r] = (freqMap[r] ?: 0) + 1
+                }
+                for (b in rowBlues) {
+                    blueFreqMap[b] = (blueFreqMap[b] ?: 0) + 1
                 }
             }
         }
 
-        val sorted = freqMap.toList().sortedByDescending { it.second }
+        val sortedReds = freqMap.toList().sortedByDescending { it.second }
+        val sortedBlues = blueFreqMap.toList().sortedByDescending { it.second }
+
         _uiState.value = _uiState.value.copy(
             collectedBallsText = text,
             frequencyResult = FrequencyAnalysisResult(
                 validGroupsCount = validGroups,
                 frequencyMap = freqMap,
-                sortedByFreq = sorted,
-                parsedBets = parsedBets
+                sortedByFreq = sortedReds,
+                parsedBets = parsedBets,
+                blueFrequencyMap = blueFreqMap,
+                sortedBluesByFreq = sortedBlues,
+                parsedCompleteBets = parsedCompleteBets
             )
         )
     }
@@ -327,7 +394,15 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
     fun clearCollectedBalls() {
         _uiState.value = _uiState.value.copy(
             collectedBallsText = "",
-            frequencyResult = FrequencyAnalysisResult(0, emptyMap(), emptyList())
+            frequencyResult = FrequencyAnalysisResult(
+                validGroupsCount = 0,
+                frequencyMap = emptyMap(),
+                sortedByFreq = emptyList(),
+                parsedBets = emptyList(),
+                blueFrequencyMap = emptyMap(),
+                sortedBluesByFreq = emptyList(),
+                parsedCompleteBets = emptyList()
+            )
         )
     }
 
@@ -648,7 +723,9 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
                 mode = mode,
                 userSelection = _uiState.value.myHeartBalls,
                 topOtherBalls = _uiState.value.frequencyResult.sortedByFreq,
+                topOtherBlues = _uiState.value.frequencyResult.sortedBluesByFreq,
                 otherBets = _uiState.value.frequencyResult.parsedBets,
+                otherCompleteBets = _uiState.value.frequencyResult.parsedCompleteBets,
                 betCount = betCount,
                 kl8PlayType = _uiState.value.kl8PlayType
             )

@@ -65,7 +65,7 @@ fun FrequencyCompareCard(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "📋 收集他人红球 (频次比对)",
+                        text = "📋 收集他人号码 (红/蓝球频次比对)",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
@@ -83,7 +83,7 @@ fun FrequencyCompareCard(
             }
 
             Text(
-                text = "粘贴他人购买的号码（每行连续数字按2位分割，支持多行），系统将统计频次并在预测球旁展示角标",
+                text = "粘贴他人购买的号码，支持'+'分隔红蓝球（如 010203041212+05 或带空格），系统将自动统计频次",
                 fontSize = 11.sp,
                 color = TextSecondary,
                 modifier = Modifier.padding(start = 14.dp, top = 2.dp, bottom = 10.dp)
@@ -94,7 +94,7 @@ fun FrequencyCompareCard(
                 onValueChange = onInputChange,
                 placeholder = {
                     Text(
-                        "粘贴或输入多行号码，如:\n01 05 12 18 25 30\n050812192631",
+                        "粘贴或输入多行号码 (+号区分红蓝球)，如:\n010203041212+05\n01020305060708+05101216\n01 05 12 18 25 30 + 06",
                         fontSize = 12.sp,
                         color = Color(0xFF94A3B8)
                     )
@@ -107,7 +107,7 @@ fun FrequencyCompareCard(
             if (analysisResult.sortedByFreq.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = "他人最高频次号码 TOP 10：",
+                    text = "他人最高频次红球 TOP 10：",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = TextPrimary
@@ -144,6 +144,47 @@ fun FrequencyCompareCard(
                     }
                 }
             }
+
+                if (analysisResult.sortedBluesByFreq.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "他人最高频次蓝球：",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF1D4ED8)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        analysisResult.sortedBluesByFreq.take(6).forEach { (num, freq) ->
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFFDBEAFE))
+                                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = String.format("%02d", num),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1E40AF)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "x$freq",
+                                    fontSize = 10.sp,
+                                    color = Color(0xFF2563EB),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
 
             Spacer(modifier = Modifier.height(10.dp))
 
