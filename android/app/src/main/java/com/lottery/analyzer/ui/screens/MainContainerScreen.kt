@@ -42,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lottery.analyzer.data.model.LotteryType
+import com.lottery.analyzer.ui.components.PendingPredictionDialog
 import com.lottery.analyzer.ui.components.AiSettingsDialog
 import com.lottery.analyzer.ui.components.LogViewerDialog
 import com.lottery.analyzer.ui.theme.BluePrimary
@@ -65,7 +67,7 @@ import com.lottery.analyzer.ui.viewmodel.LotteryViewModel
 @Composable
 fun MainContainerScreen(viewModel: LotteryViewModel) {
     val uiState by viewModel.uiState.collectAsState()
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: 看板, 1: 历史, 2: 心水比对, 3: 工具
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) } // 0: 看板, 1: 历史, 2: 心水比对, 3: 工具
     var showTypeMenu by remember { mutableStateOf(false) }
 
     val themeColors = when (uiState.currentType) {
@@ -281,12 +283,16 @@ fun MainContainerScreen(viewModel: LotteryViewModel) {
         }
     }
 
+    if (uiState.pendingPredictions.isNotEmpty()) {
+        PendingPredictionDialog(uiState, viewModel::dismissPendingPredictions, viewModel::confirmPendingPredictions)
+    }
+
     // 全局 AI 大模型配置弹窗
     if (uiState.showAiSettingsDialog) {
         AiSettingsDialog(
             config = uiState.aiConfig,
             isLoading = uiState.isAiLoading,
-            testMessage = uiState.aiTestMessage,
+            testMessage = uiState.aiTestMessage ?: uiState.aiError?.let { "❌ $it" },
             onDismiss = { viewModel.setAiSettingsDialogVisible(false) },
             onSaveConfig = { viewModel.updateAiConfig(it) },
             onTestConnection = { viewModel.testAiConnection(it) },

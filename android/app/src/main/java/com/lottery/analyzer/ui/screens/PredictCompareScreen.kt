@@ -60,8 +60,9 @@ fun PredictCompareScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val analysis = uiState.analysis
 
-    LaunchedEffect(uiState.predictionFeedback) {
+    LaunchedEffect(uiState.predictionFeedbackId) {
         uiState.predictionFeedback?.let {
+            viewModel.consumePredictionFeedback(uiState.predictionFeedbackId)
             snackbarHostState.showSnackbar(it)
         }
     }
@@ -90,15 +91,11 @@ fun PredictCompareScreen(
                 onClear = { viewModel.clearHeartBalls() },
                 onSaveAsPrediction = {
                     val redList = uiState.myHeartBalls.toList()
-                    val blueList = when (uiState.currentType) {
-                        LotteryType.SSQ -> listOf((1..16).random())
-                        LotteryType.DLT -> (1..12).shuffled().take(2)
-                        LotteryType.KL8 -> emptyList()
-                    }
                     viewModel.savePredictionRecord(
                         redBalls = redList,
-                        blueBalls = blueList,
-                        strategy = "心水自选(层级透视)"
+                        blueBalls = emptyList(),
+                        strategy = "心水参考(层级透视)",
+                        kind = com.lottery.analyzer.data.model.PredictionKind.REFERENCE
                     )
                 },
                 onAiFusion = {

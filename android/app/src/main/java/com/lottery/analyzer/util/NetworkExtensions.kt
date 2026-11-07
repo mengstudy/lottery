@@ -14,7 +14,8 @@ import kotlin.coroutines.resumeWithException
  * 一旦外部协程取消，invokeOnCancellation 立即同步触发 call.cancel()，
  * 瞬间切断底层的 Socket 连接，打断正在阻塞中的 body.string() 流读取！
  */
-suspend fun Call.executeAndReadString(): Pair<Int, String> = suspendCancellableCoroutine { continuation ->
+suspend fun Call.executeAndReadString(maxBodyBytes: Long = 4L * 1024 * 1024): Pair<Int, String> = suspendCancellableCoroutine { continuation ->
+    require(maxBodyBytes in 1 until Long.MAX_VALUE)
     continuation.invokeOnCancellation {
         try {
             cancel()
@@ -22,20 +23,21 @@ suspend fun Call.executeAndReadString(): Pair<Int, String> = suspendCancellableC
     }
     enqueue(object : Callback {
         override fun onResponse(call: Call, response: Response) {
-            response.use { resp ->
-                if (continuation.isCancelled) return
-                val code = resp.code
-                try {
-                    val body = resp.body?.string().orEmpty()
-                    if (!continuation.isCancelled) {
-                        continuation.resume(code to body)
+            // Include close() in the protected operation and resume only after ownership ends.
+            val result = try {
+                response.use { resp ->
+                    if (continuation.isCancelled) return
+                    val body = resp.body
+                    if (body != null && (body.contentLength() > maxBodyBytes || body.source().request(maxBodyBytes + 1))) {
+                        throw IOException("Response body exceeds $maxBodyBytes bytes")
                     }
-                } catch (e: IOException) {
-                    if (!continuation.isCancelled) {
-                        continuation.resumeWithException(e)
-                    }
+                    resp.code to body?.string().orEmpty()
                 }
+            } catch (e: Exception) {
+                if (!continuation.isCancelled) continuation.resumeWithException(e)
+                return
             }
+            if (!continuation.isCancelled) continuation.resume(result)
         }
 
         override fun onFailure(call: Call, e: IOException) {

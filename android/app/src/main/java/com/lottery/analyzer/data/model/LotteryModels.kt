@@ -147,6 +147,24 @@ data class HeartBallLevelDistribution(
 /**
  * 用户保存的预测与选号策略记录实体
  */
+enum class PredictionKind(val title: String) {
+    SINGLE("单注"), COMPOUND("复式池"), REFERENCE("参考池"), LEGACY_UNCONFIRMED("旧记录·类型待确认")
+}
+
+enum class BlueSource(val title: String) {
+    PROVIDED("方案号码"), GENERATED_CONFIRMED("机选补全"), NONE("无蓝球"), LEGACY_UNKNOWN("来源待确认")
+}
+
+data class PredictionDraft(
+    val lotteryType: LotteryType,
+    val redBalls: List<Int>,
+    val blueBalls: List<Int>,
+    val strategy: String,
+    val kind: PredictionKind,
+    val kl8PlayType: Kl8PlayType?,
+    val blueSource: BlueSource
+)
+
 data class PredictionRecord(
     val id: Long = 0,
     val lotteryType: LotteryType,
@@ -155,7 +173,11 @@ data class PredictionRecord(
     val blueBalls: List<Int> = emptyList(),
     val strategy: String,
     val createdAt: String,
-    val note: String = ""
+    val note: String = "",
+    val kind: PredictionKind = PredictionKind.LEGACY_UNCONFIRMED,
+    val kl8PlayType: Kl8PlayType? = null,
+    val blueSource: BlueSource = BlueSource.LEGACY_UNKNOWN,
+    val createdAtEpoch: Long = 0
 )
 
 /**
@@ -172,3 +194,5 @@ data class PredictionVerificationResult(
 )
 
 
+
+data class GeneratedLotteryBet(val redBalls: List<Int>, val blueBalls: List<Int>)

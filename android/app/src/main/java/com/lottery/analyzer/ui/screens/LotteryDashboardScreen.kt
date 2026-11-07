@@ -64,8 +64,9 @@ fun LotteryDashboardScreen(
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(uiState.syncMessage) {
+    LaunchedEffect(uiState.syncMessageId) {
         uiState.syncMessage?.let {
+            viewModel.consumeSyncMessage(uiState.syncMessageId)
             snackbarHostState.showSnackbar(it)
         }
     }

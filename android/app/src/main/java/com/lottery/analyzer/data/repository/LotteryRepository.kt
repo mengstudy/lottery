@@ -28,41 +28,26 @@ data class PagedPredictionsResult(
     val records: List<PredictionVerificationResult>
 )
 
-class LotteryRepository(context: Context) {
+class LotteryRepository(context: Context) : LotteryRepositoryContract {
     private val dao = LotteryDao(context)
     private val predictionDao = PredictionDao(context)
     private val syncService = LotterySyncService(dao)
 
-    // 内存缓存：彩种 -> 升序开奖记录
-    private val recordsAscCache = mutableMapOf<LotteryType, List<LotteryRecord>>()
+    private val snapshots = LotterySnapshotCache { type ->
+        val records = withContext(Dispatchers.IO) { dao.getAllRecords(type, asc = true).toList() }
+        val missing = withContext(Dispatchers.Default) {
+            LotteryAnalysisEngine.calculateAllMissingStats(records, type)
+        }
+        LotterySnapshot(records, missing)
+    }
 
-    // 内存缓存：彩种 -> (期号 -> 遗漏统计)
-    private val missingStatsCache = mutableMapOf<LotteryType, Map<String, MissingStat>>()
-
-    /**
-     * 预加载并初始化计算指定彩种的所有数据
-     */
     suspend fun loadLotteryData(type: LotteryType, forceReload: Boolean = false): List<LotteryRecord> =
-        withContext(Dispatchers.IO) {
-            if (!forceReload && recordsAscCache.containsKey(type)) {
-                return@withContext recordsAscCache[type] ?: emptyList()
-}
-
-            val ascList = dao.getAllRecords(type, asc = true)
-
-            recordsAscCache[type] = ascList
-
-            val missingMap = LotteryAnalysisEngine.calculateAllMissingStats(ascList, type)
-
-            missingStatsCache[type] = missingMap
-
-            ascList
-}
+        snapshots.load(type, forceReload).records
 
     /**
      * 获取降序排序的开奖记录列表（适合手机端列表自顶向下显示最新期数）
      */
-    suspend fun getRecordsDesc(type: LotteryType): List<LotteryRecord> = withContext(Dispatchers.IO) {
+    override suspend fun getRecordsDesc(type: LotteryType): List<LotteryRecord> = withContext(Dispatchers.IO) {
         val asc = loadLotteryData(type)
 
         asc.asReversed()
@@ -71,11 +56,12 @@ class LotteryRepository(context: Context) {
     /**
      * 获取指定期号的深度分析数据
      */
-    suspend fun getAnalysisForIssue(type: LotteryType, issue: String): IssueAnalysis? =
+    override suspend fun getAnalysisForIssue(type: LotteryType, issue: String): IssueAnalysis? =
         withContext(Dispatchers.Default) {
-            val ascList = loadLotteryData(type)
+            val snapshot = snapshots.load(type)
+            val ascList = snapshot.records
             val record = ascList.firstOrNull { it.issue == issue } ?: return@withContext null
-            val missingMap = missingStatsCache[type] ?: emptyMap()
+            val missingMap = snapshot.missingStats
             val stat = missingMap[issue]
 
             LotteryAnalysisEngine.analyze(record, stat, type)
@@ -84,14 +70,15 @@ class LotteryRepository(context: Context) {
     /**
      * 获取某个球号的最近历史遗漏走势
      */
-    suspend fun getNumberTrend(
+    override suspend fun getNumberTrend(
         type: LotteryType,
         number: Int,
-        isBlue: Boolean = false,
-        limit: Int = 30
+        isBlue: Boolean,
+        limit: Int
     ): List<Pair<String, Int>> = withContext(Dispatchers.Default) {
-        val ascList = loadLotteryData(type)
-        val missingMap = missingStatsCache[type] ?: emptyMap()
+        val snapshot = snapshots.load(type)
+        val ascList = snapshot.records
+        val missingMap = snapshot.missingStats
         val recentList = ascList.takeLast(limit)
 
         recentList.map { rec ->
@@ -110,7 +97,7 @@ class LotteryRepository(context: Context) {
     /**
      * 1. 联网同步最新开奖数据并刷新内存缓存
      */
-    suspend fun syncLatestData(type: LotteryType): Result<Int> {
+    override suspend fun syncLatestData(type: LotteryType): Result<com.lottery.analyzer.data.sync.SyncReport> {
         try {
             return syncService.syncLatest(type)
 } finally {
@@ -125,10 +112,10 @@ class LotteryRepository(context: Context) {
     /**
      * 2. 联网全量同步所有历史数据并刷新内存缓存
      */
-    suspend fun syncAllHistoryData(
+    override suspend fun syncAllHistoryData(
         type: LotteryType,
-        onProgress: ((page: Int, totalRecords: Int) -> Unit)? = null
-    ): Result<Int> {
+        onProgress: (suspend (page: Int, totalRecords: Int) -> Unit)?
+    ): Result<com.lottery.analyzer.data.sync.SyncReport> {
         try {
             return syncService.syncAllHistory(type, onProgress)
 } finally {
@@ -144,20 +131,24 @@ class LotteryRepository(context: Context) {
      * 保存单条预测记录
      */
     suspend fun savePrediction(record: PredictionRecord): Long = withContext(Dispatchers.IO) {
-        predictionDao.insert(record)
+        predictionDao.insert(record).also { check(it > 0) { "预测记录保存失败" } }
 }
 
     /**
      * 删除单条预测记录
      */
-    suspend fun deletePrediction(id: Long): Boolean = withContext(Dispatchers.IO) {
+    override suspend fun savePredictions(records: List<PredictionRecord>): Int = withContext(Dispatchers.IO) {
+        predictionDao.insertAll(records)
+    }
+
+    override suspend fun deletePrediction(id: Long): Boolean = withContext(Dispatchers.IO) {
         predictionDao.delete(id)
 }
 
     /**
      * 清空指定彩种的预测记录
      */
-    suspend fun clearPredictions(type: LotteryType?): Boolean = withContext(Dispatchers.IO) {
+    override suspend fun clearPredictions(type: LotteryType?): Boolean = withContext(Dispatchers.IO) {
         predictionDao.clear(type)
 }
 
@@ -176,15 +167,16 @@ class LotteryRepository(context: Context) {
     /**
      * 数据层惰性分页查询预测记录并批量核验 (接通数据层分页参数、总数与翻页，彻底解决内存开销与20条截断限制)
      */
-    suspend fun getVerifiedPredictionsPaged(
+    override suspend fun getVerifiedPredictionsPaged(
         type: LotteryType?,
-        page: Int = 0,
-        pageSize: Int = 10
+        page: Int,
+        pageSize: Int
     ): PagedPredictionsResult = withContext(Dispatchers.IO) {
         val totalCount = predictionDao.getCount(type)
         if (totalCount <= 0) {
             return@withContext PagedPredictionsResult(0, 0, emptyList())
         }
+        require(pageSize in 1..100) { "分页大小应为1~100" }
         val maxPage = (totalCount - 1) / pageSize
         val validPage = page.coerceIn(0, maxPage)
         val offset = validPage * pageSize
@@ -220,7 +212,7 @@ class LotteryRepository(context: Context) {
     ): List<PredictionVerificationResult> =
         getVerifiedPredictionsPaged(type, page = page, pageSize = pageSize).records
 
-    suspend fun executeShrink(
+    override suspend fun executeShrink(
         type: LotteryType,
         selectedBalls: List<Int>,
         config: ShrinkFilterConfig
@@ -244,13 +236,14 @@ class LotteryRepository(context: Context) {
     /**
      * 获取全景网格走势图矩阵数据
      */
-    suspend fun getTrendMatrixData(
+    override suspend fun getTrendMatrixData(
         type: LotteryType,
-        limit: Int = 30,
-        descOrder: Boolean = true
+        limit: Int,
+        descOrder: Boolean
     ): TrendMatrixData = withContext(Dispatchers.Default) {
-        val ascList = loadLotteryData(type)
-        val missingMap = missingStatsCache[type] ?: emptyMap()
+        val snapshot = snapshots.load(type)
+        val ascList = snapshot.records
+        val missingMap = snapshot.missingStats
 
         TrendMatrixEngine.buildTrendMatrix(
             ascRecords = ascList,

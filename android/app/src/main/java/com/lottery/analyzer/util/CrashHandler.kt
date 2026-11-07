@@ -38,6 +38,7 @@ class CrashHandler private constructor(private val context: Context) : Thread.Un
                     throwable.printStackTrace(pw)
                 }
             }
+            DiagnosticRetention.prune(crashDir, protectedFile = crashFile)
         } catch (_: Exception) {}
 
         defaultHandler?.uncaughtException(thread, throwable)

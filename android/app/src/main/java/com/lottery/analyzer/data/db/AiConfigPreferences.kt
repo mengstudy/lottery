@@ -1,78 +1,56 @@
 package com.lottery.analyzer.data.db
 
 import android.content.Context
-import android.content.SharedPreferences
 import com.lottery.analyzer.data.model.AiConfig
 import com.lottery.analyzer.data.model.AiProvider
+import com.lottery.analyzer.util.AppLogger
 
-/**
- * AI 参数配置持久化管理类 (基于 SharedPreferences)
- */
-class AiConfigPreferences(context: Context) {
+interface AiSettingsStore {
+    fun getAiConfig(): AiConfig
+    fun saveAiConfig(config: AiConfig)
+    fun selectProviderPreset(provider: AiProvider): AiConfig
+}
 
-    private val prefs: SharedPreferences =
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+class AiConfigPreferences(context: Context) : AiSettingsStore {
+    private val prefs = context.applicationContext.getSharedPreferences("ai_lottery_preferences", Context.MODE_PRIVATE)
+    private val secrets = context.applicationContext.getSharedPreferences("ai_lottery_credentials", Context.MODE_PRIVATE)
+    private val vault = CredentialVault(object : SecretStorage {
+        override fun get(key: String) = secrets.getString(key, null)
+        override fun put(key: String, value: String) { check(secrets.edit().putString(key, value).commit()) { "密钥保存失败" } }
+        override fun remove(key: String) { check(secrets.edit().remove(key).commit()) { "密钥清理失败" } }
+    }, KeystoreSecretCipher())
 
-    companion object {
-        private const val PREF_NAME = "ai_lottery_preferences"
-        private const val KEY_PROVIDER = "ai_provider"
-        private const val KEY_BASE_URL = "ai_base_url"
-        private const val KEY_API_KEY = "ai_api_key"
-        private const val KEY_MODEL_NAME = "ai_model_name"
-        private const val KEY_TEMPERATURE = "ai_temperature"
-    }
-
-    /**
-     * 读取 AI 配置，若无则使用默认 DeepSeek 预设
-     */
-    fun getAiConfig(): AiConfig {
-        val providerStr = prefs.getString(KEY_PROVIDER, AiProvider.DEEPSEEK.name) ?: AiProvider.DEEPSEEK.name
-        val provider = try {
-            AiProvider.valueOf(providerStr)
-        } catch (_: Exception) {
-            AiProvider.DEEPSEEK
+    @Synchronized override fun getAiConfig(): AiConfig {
+        val provider = runCatching { AiProvider.valueOf(prefs.getString("ai_provider", AiProvider.DEEPSEEK.name)!!) }.getOrDefault(AiProvider.DEEPSEEK)
+        val url = prefs.getString("ai_base_url", provider.defaultBaseUrl) ?: provider.defaultBaseUrl
+        val scope = CredentialScope.id(provider.name, url)
+        // Encrypt legacy credentials before deleting their plaintext copy. Never log secret material.
+        if (prefs.contains("ai_api_key")) {
+            val legacy = prefs.getString("ai_api_key", "").orEmpty()
+            if (legacy.isNotBlank()) vault.write(scope, legacy)
+            check(prefs.edit().remove("ai_api_key").commit()) { "旧密钥迁移失败" }
         }
-
-        val baseUrl = prefs.getString(KEY_BASE_URL, provider.defaultBaseUrl) ?: provider.defaultBaseUrl
-        val apiKey = prefs.getString(KEY_API_KEY, "") ?: ""
-        val modelName = prefs.getString(KEY_MODEL_NAME, provider.defaultModel) ?: provider.defaultModel
-        val temperature = prefs.getFloat(KEY_TEMPERATURE, 0.7f)
-
-        return AiConfig(
-            provider = provider,
-            baseUrl = baseUrl,
-            apiKey = apiKey,
-            modelName = modelName,
-            temperature = temperature
-        )
+        val key = vault.read(scope)
+        if (vault.recoveryRequired) AppLogger.w("AiConfigPreferences", "密钥无法解密，已清理损坏密文，请重新配置")
+        return AiConfig(provider, url, key,
+            prefs.getString("ai_model_name", provider.defaultModel) ?: provider.defaultModel,
+            prefs.getFloat("ai_temperature", 0.7f))
     }
 
-    /**
-     * 保存 AI 配置
-     */
-    fun saveAiConfig(config: AiConfig) {
-        prefs.edit()
-            .putString(KEY_PROVIDER, config.provider.name)
-            .putString(KEY_BASE_URL, config.baseUrl)
-            .putString(KEY_API_KEY, config.apiKey)
-            .putString(KEY_MODEL_NAME, config.modelName)
-            .putFloat(KEY_TEMPERATURE, config.temperature)
-            .apply()
+    @Synchronized override fun saveAiConfig(config: AiConfig) {
+        CredentialScope.requireEndpoint(config.baseUrl)
+        require(config.modelName.isNotBlank()) { "模型名称不能为空" }
+        vault.write(CredentialScope.id(config.provider.name, config.baseUrl), config.apiKey.trim())
+        check(prefs.edit().putString("ai_provider", config.provider.name)
+            .putString("ai_base_url", config.baseUrl.trim()).putString("ai_model_name", config.modelName.trim())
+            .putFloat("ai_temperature", config.temperature).remove("ai_api_key").commit()) { "AI配置保存失败" }
     }
 
-    /**
-     * 快捷切换平台预设并保存
-     */
-    fun selectProviderPreset(provider: AiProvider): AiConfig {
-        val currentKey = prefs.getString(KEY_API_KEY, "") ?: ""
-        val newConfig = AiConfig(
-            provider = provider,
-            baseUrl = provider.defaultBaseUrl,
-            apiKey = currentKey,
-            modelName = provider.defaultModel,
-            temperature = 0.7f
-        )
-        saveAiConfig(newConfig)
-        return newConfig
+    @Synchronized override fun selectProviderPreset(provider: AiProvider): AiConfig {
+        val current = getAiConfig()
+        val config = AiConfig(provider, provider.defaultBaseUrl,
+            vault.read(CredentialScope.id(provider.name, provider.defaultBaseUrl)), provider.defaultModel, current.temperature)
+        saveAiConfig(config)
+        return config
     }
 }

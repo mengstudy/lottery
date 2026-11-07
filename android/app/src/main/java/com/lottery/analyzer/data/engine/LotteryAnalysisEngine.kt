@@ -244,6 +244,26 @@ object LotteryAnalysisEngine {
         val rCount = hitReds.size
         val bCount = hitBlues.size
 
+        val draft = com.lottery.analyzer.data.model.PredictionDraft(
+            prediction.lotteryType, prediction.redBalls, prediction.blueBalls, prediction.strategy,
+            prediction.kind, prediction.kl8PlayType, prediction.blueSource
+        )
+        val invalid = runCatching { com.lottery.analyzer.data.model.PredictionRules.validate(draft) }.exceptionOrNull()
+        if (prediction.kind != com.lottery.analyzer.data.model.PredictionKind.SINGLE || invalid != null) {
+            val reason = when (prediction.kind) {
+                com.lottery.analyzer.data.model.PredictionKind.REFERENCE -> "参考池仅显示命中，不判定单注奖级"
+                com.lottery.analyzer.data.model.PredictionKind.COMPOUND -> "复式池需展开为单注核验，不按单注判奖"
+                com.lottery.analyzer.data.model.PredictionKind.LEGACY_UNCONFIRMED -> "旧记录类型待确认，仅显示命中"
+                else -> "记录号码与玩法不匹配，无法判奖"
+            }
+            return com.lottery.analyzer.data.model.PredictionVerificationResult(
+                record = prediction, isDrawn = true, actualRecord = actualDraw,
+                hitRedBalls = hitReds, hitBlueBalls = hitBlues,
+                resultSummary = "$reason（命中 $rCount+$bCount）", isWon = false
+            )
+        }
+
+
         var summary = ""
         var isWon = false
 

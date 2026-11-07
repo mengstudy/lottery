@@ -2,6 +2,8 @@ package com.lottery.analyzer.util
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.CompletableDeferred
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -38,8 +40,8 @@ data class LogEntry(
  * 内部后台落盘命令队列动作
  */
 private sealed class LogDiskAction {
-    data class Write(val content: String) : LogDiskAction()
-    object Clear : LogDiskAction()
+    data class Write(val content: String, val generation: Long) : LogDiskAction()
+    data class Clear(val generation: Long) : LogDiskAction()
 }
 
 /**
@@ -54,7 +56,7 @@ object AppLogger {
     private const val MAX_MEMORY_LOGS = 500
     private const val MAX_LOG_FILE_SIZE = 2 * 1024 * 1024L // 2MB
     private const val CHANNEL_CAPACITY = 1000 // 有界队列上限，队满时丢弃最旧日志防内存膨胀
-    private var logFile: File? = null
+    @Volatile private var logFile: File? = null
     private var idCounter = 0L
 
     // 不可变且线程安全的时间格式化器 (java.time 原生 API 26+)
@@ -70,34 +72,28 @@ object AppLogger {
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
     private val logScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val fileReady = CompletableDeferred<File?>()
+    private val diskGeneration = AtomicLong()
 
     init {
         // 启动后台串行落盘协程
         logScope.launch {
+            var appliedGeneration = 0L
             for (action in diskChannel) {
                 try {
-                    when (action) {
-                        is LogDiskAction.Write -> {
-                            val file = logFile ?: continue
-                            // 运行时文件大小超标检查与自动滚动
-                            if (file.exists() && file.length() > MAX_LOG_FILE_SIZE) {
-                                file.delete()
-                            }
-                            FileWriter(file, true).use { fw ->
-                                PrintWriter(fw).use { pw ->
-                                    pw.print(action.content)
-                                }
-                            }
-                        }
-                        is LogDiskAction.Clear -> {
-                            val file = logFile
-                            if (file != null && file.exists()) {
-                                file.delete()
-                            }
-                        }
+                    val file = fileReady.await() ?: continue
+                    val generation = diskGeneration.get()
+                    // Queue overflow cannot lose a clear: every subsequent action observes the epoch.
+                    if (appliedGeneration != generation) {
+                        FileWriter(file, false).use { it.flush() }
+                        appliedGeneration = generation
                     }
-                } catch (_: Throwable) {
-                    // 内部吞并文件落盘异常，防止影响业务主流程
+                    if (action is LogDiskAction.Write && action.generation == generation) {
+                        if (file.exists() && file.length() > MAX_LOG_FILE_SIZE) FileWriter(file, false).use { it.flush() }
+                        FileWriter(file, true).use { it.write(action.content) }
+                    }
+                } catch (_: Exception) {
+                    // Ordinary disk failures must not crash business operations.
                 }
             }
         }
@@ -117,29 +113,32 @@ object AppLogger {
             if (logFile != null && logFile!!.exists() && logFile!!.length() > MAX_LOG_FILE_SIZE) {
                 logFile!!.delete()
             }
+            fileReady.complete(logFile)
             i("AppLogger", "=== 日志系统初始化完成，存储路径: ${logFile?.absolutePath} ===")
         } catch (e: Exception) {
+            fileReady.complete(null)
             Log.e("AppLogger", "初始化日志文件失败: ${e.message}")
         }
     }
 
     private fun log(level: LogLevel, tag: String, message: String, tr: Throwable? = null) {
+        val safeMessage = message.take(16384) + if (message.length > 16384) "…[日志已截断]" else ""
         val nowMillis = System.currentTimeMillis()
         val nowDateTime = LocalDateTime.now()
         val timeStr = nowDateTime.format(timeFormatter)
         val fullTimeStr = nowDateTime.format(fullDateFormatter)
-        val errStr = tr?.stackTraceToString()
+        val errStr = tr?.stackTraceToString()?.take(16384)
 
         // 1. Android 原生 Logcat
         when (level) {
-            LogLevel.DEBUG -> Log.d(tag, message, tr)
-            LogLevel.INFO -> Log.i(tag, message, tr)
-            LogLevel.WARN -> Log.w(tag, message, tr)
-            LogLevel.ERROR -> Log.e(tag, message, tr)
+            LogLevel.DEBUG -> Log.d(tag, safeMessage, tr)
+            LogLevel.INFO -> Log.i(tag, safeMessage, tr)
+            LogLevel.WARN -> Log.w(tag, safeMessage, tr)
+            LogLevel.ERROR -> Log.e(tag, safeMessage, tr)
         }
 
         // 2. 内存环形队列快速更新 (加轻量锁仅保护内存集合，微秒级操作)
-        synchronized(this) {
+        val generation = synchronized(this) {
             idCounter++
             val e = LogEntry(
                 id = idCounter,
@@ -147,7 +146,7 @@ object AppLogger {
                 timeFormatted = timeStr,
                 level = level,
                 tag = tag,
-                message = message,
+                message = safeMessage,
                 errorDetail = errStr
             )
             if (memoryLogs.size >= MAX_MEMORY_LOGS) {
@@ -155,15 +154,16 @@ object AppLogger {
             }
             memoryLogs.addLast(e)
             _logsFlow.value = memoryLogs.toList()
+            diskGeneration.get()
         }
 
         // 3. 非阻塞投递后台落盘通道 (主线程 0 磁盘 I/O 阻塞)
         val contentBuilder = java.lang.StringBuilder()
-        contentBuilder.append("[$fullTimeStr] [${level.label}] [$tag]: $message\n")
+        contentBuilder.append("[$fullTimeStr] [${level.label}] [$tag]: $safeMessage\n")
         if (!errStr.isNullOrBlank()) {
             contentBuilder.append(errStr).append("\n")
         }
-        diskChannel.trySend(LogDiskAction.Write(contentBuilder.toString()))
+        diskChannel.trySend(LogDiskAction.Write(contentBuilder.toString(), generation))
     }
 
     /**
@@ -215,7 +215,7 @@ object AppLogger {
     fun clearLogs() {
         memoryLogs.clear()
         _logsFlow.value = emptyList()
-        diskChannel.trySend(LogDiskAction.Clear)
+        diskChannel.trySend(LogDiskAction.Clear(diskGeneration.incrementAndGet()))
         i("AppLogger", "已清空运行日志")
     }
 }

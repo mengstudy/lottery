@@ -288,7 +288,7 @@ private fun SinglePredictionItem(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = record.strategy,
+                    text = "${record.kind.title} · ${record.strategy}",
                     fontSize = 10.sp,
                     color = BluePrimary,
                     maxLines = 1,
@@ -304,7 +304,8 @@ private fun SinglePredictionItem(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = record.createdAt,
+                    text = if (record.createdAtEpoch > 0) java.time.Instant.ofEpochMilli(record.createdAtEpoch)
+                        .atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) else record.createdAt,
                     fontSize = 10.sp,
                     color = TextSecondary
                 )

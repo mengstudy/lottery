@@ -135,6 +135,7 @@ fun AiSettingsDialog(
                                 .background(bgColor)
                                 .border(1.dp, borderColor, RoundedCornerShape(8.dp))
                                 .clickable {
+                                    if (selectedProvider != provider) apiKey = ""
                                     selectedProvider = provider
                                     baseUrl = provider.defaultBaseUrl
                                     modelName = provider.defaultModel
@@ -183,7 +184,11 @@ fun AiSettingsDialog(
                 // 3. API 终端地址 Base URL
                 OutlinedTextField(
                     value = baseUrl,
-                    onValueChange = { baseUrl = it },
+                    onValueChange = {
+                        if (com.lottery.analyzer.data.db.CredentialScope.id(selectedProvider.name, it) !=
+                            com.lottery.analyzer.data.db.CredentialScope.id(selectedProvider.name, baseUrl)) apiKey = ""
+                        baseUrl = it
+                    },
                     label = { Text("接口 Base URL") },
                     placeholder = { Text("https://api.deepseek.com/v1") },
                     singleLine = true,
@@ -212,7 +217,8 @@ fun AiSettingsDialog(
                                 provider = selectedProvider,
                                 baseUrl = baseUrl,
                                 apiKey = apiKey,
-                                modelName = modelName
+                                modelName = modelName,
+                                temperature = config.temperature
                             )
                             onTestConnection(cur)
                         },
@@ -266,7 +272,8 @@ fun AiSettingsDialog(
                         provider = selectedProvider,
                         baseUrl = baseUrl.trim(),
                         apiKey = apiKey.trim(),
-                        modelName = modelName.trim()
+                        modelName = modelName.trim(),
+                        temperature = config.temperature
                     )
                     onSaveConfig(newConfig)
                     onDismiss()

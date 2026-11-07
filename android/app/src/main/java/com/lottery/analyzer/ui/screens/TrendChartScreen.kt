@@ -37,6 +37,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -98,7 +99,7 @@ fun TrendChartScreen(
     val hScrollState = rememberScrollState()
     val vListState = rememberLazyListState()
 
-    var showConnectLines by remember { mutableStateOf(false) } // 连线走势开关
+    var showConnectLines by rememberSaveable { mutableStateOf(false) } // 连线走势开关
 
     // 监听彩种或期数变更时触发数据加载
     LaunchedEffect(uiState.currentType) {

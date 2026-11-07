@@ -23,11 +23,29 @@ object DatabaseHelper {
 
         val database = SQLiteDatabase.openOrCreateDatabase(dbFile, null)
 
-        // 核心兜底：确保各彩种 lottery_results 表结构和索引必须存在
-        ensureTablesExist(database, dbFileName)
-
-        dbCache[dbFileName] = database
-        return database
+        try {
+            val supported = if (dbFileName == "user_predictions.db") PredictionSchema.VERSION else 1
+            check(database.version <= supported) { "数据库版本高于当前程序，拒绝降级打开" }
+            database.beginTransaction()
+            try {
+                ensureTablesExist(database, dbFileName)
+                if (dbFileName == "user_predictions.db") {
+                    val columns = database.rawQuery("PRAGMA table_info(user_predictions)", null).use { cursor ->
+                        buildSet { while (cursor.moveToNext()) add(cursor.getString(cursor.getColumnIndexOrThrow("name"))) }
+                    }
+                    PredictionSchema.upgrades(columns).forEach(database::execSQL)
+                    val quarantined = database.compileStatement(PredictionSchema.QUARANTINE_INVALID_TYPES).use { it.executeUpdateDelete() }
+                    if (quarantined > 0) Log.w(TAG, "已隔离 $quarantined 条未知彩种旧记录")
+                }
+                database.version = supported
+                database.setTransactionSuccessful()
+            } finally { database.endTransaction() }
+            dbCache[dbFileName] = database
+            return database
+        } catch (e: Exception) {
+            database.close()
+            throw e
+        }
     }
 
     private fun ensureTablesExist(db: SQLiteDatabase, dbFileName: String) {
@@ -116,6 +134,7 @@ object DatabaseHelper {
             }
         } catch (e: Exception) {
             Log.e(TAG, "初始化表结构失败: $dbFileName", e)
+            throw e
         }
     }
 }

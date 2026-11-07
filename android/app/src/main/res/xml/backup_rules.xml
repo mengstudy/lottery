@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <exclude domain="sharedpref" path="ai_lottery_preferences.xml" />
+    <exclude domain="sharedpref" path="ai_lottery_credentials.xml" />
+    <exclude domain="file" path="logs/" />
+    <exclude domain="file" path="crash/" />
+</full-backup-content>

@@ -34,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,6 +47,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lottery.analyzer.data.model.GeneratedLotteryBet
 import com.lottery.analyzer.data.model.LotteryType
 import com.lottery.analyzer.ui.components.AiLotteryWorkstationCard
 import com.lottery.analyzer.ui.components.BallStyle
@@ -62,12 +64,6 @@ import com.lottery.analyzer.ui.viewmodel.LotteryUiState
 import com.lottery.analyzer.ui.viewmodel.LotteryViewModel
 import kotlinx.coroutines.launch
 
-// 单注模拟结果实体
-data class GeneratedLotteryBet(
-    val redBalls: List<Int>,
-    val blueBalls: List<Int>
-)
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ToolsScreen(
@@ -78,84 +74,27 @@ fun ToolsScreen(
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    var selectedNumber by remember { mutableIntStateOf(1) }
+    var selectedNumber by rememberSaveable { mutableIntStateOf(1) }
     var trendData by remember { mutableStateOf<List<Pair<String, Int>>>(emptyList()) }
 
     // 智能选号生成的多注列表
     var generatedBets by remember { mutableStateOf<List<GeneratedLotteryBet>>(emptyList()) }
     // 工具箱子功能选项卡 (0: 选号推演, 1: 旋转矩阵与复式缩水, 2: 全景网格走势图)
-    var currentToolTab by remember { mutableIntStateOf(0) }
+    var currentToolTab by rememberSaveable { mutableIntStateOf(0) }
 
     // 重新获取走势
     LaunchedEffect(selectedNumber, uiState.currentType) {
         trendData = viewModel.getNumberTrend(selectedNumber)
     }
 
-    LaunchedEffect(uiState.predictionFeedback) {
+    LaunchedEffect(uiState.predictionFeedbackId) {
         uiState.predictionFeedback?.let {
+            viewModel.consumePredictionFeedback(uiState.predictionFeedbackId)
             snackbarHostState.showSnackbar(it)
         }
     }
 
-    // 生成一注的通用函数
-    fun generateSingleBet(type: LotteryType): GeneratedLotteryBet {
-        val analysis = uiState.analysis
-        val hotPool = (analysis?.hotNumbers ?: emptyList()).shuffled()
-        val warmPool = (analysis?.warmNumbers ?: emptyList()).shuffled()
-        val coldPool = (analysis?.coldNumbers ?: emptyList()).shuffled()
-        val pickedReds = mutableListOf<Int>()
-        when (type) {
-            LotteryType.SSQ -> {
-                // 双色球6红：3热 + 2温 + 1冷
-                pickedReds.addAll(hotPool.take(3))
-                pickedReds.addAll(warmPool.take(2))
-                pickedReds.addAll(coldPool.take(1))
-            }
-            LotteryType.DLT -> {
-                // 大乐透5红：2热 + 2温 + 1冷
-                pickedReds.addAll(hotPool.take(2))
-                pickedReds.addAll(warmPool.take(2))
-                pickedReds.addAll(coldPool.take(1))
-            }
-            LotteryType.KL8 -> {
-                // 快乐8选十：5热 + 3温 + 2冷
-                pickedReds.addAll(hotPool.take(5))
-                pickedReds.addAll(warmPool.take(3))
-                pickedReds.addAll(coldPool.take(2))
-            }
-        }
-
-        // 补足所需红球个数
-        val targetRedCount = if (type == LotteryType.KL8) 10 else type.redCount
-        while (pickedReds.size < targetRedCount) {
-            val remain = (1..type.maxRedNumber).filter { it !in pickedReds }
-            if (remain.isNotEmpty()) {
-                pickedReds.add(remain.random())
-            } else break
-        }
-
-        // 蓝球随机生成
-        val pickedBlues = mutableListOf<Int>()
-        when (type) {
-            LotteryType.SSQ -> {
-                // 双色球 1 个蓝球 (1-16)
-                pickedBlues.add((1..16).random())
-            }
-            LotteryType.DLT -> {
-                // 大乐透 2 个蓝球 (1-12，不重复)
-                val bluePool = (1..12).shuffled()
-                pickedBlues.addAll(bluePool.take(2))
-            }
-            LotteryType.KL8 -> {
-                // 快乐8无蓝球
-            }
-        }
-
-        return GeneratedLotteryBet(
-            redBalls = pickedReds.sorted(),
-            blueBalls = pickedBlues.sorted()
-        )
-    }
+    fun generateSingleBet(type: LotteryType) = com.lottery.analyzer.data.engine.LotteryBetGenerator.generate(type, uiState.analysis)
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -301,7 +240,8 @@ fun ToolsScreen(
                                     viewModel.savePredictionRecord(
                                         redBalls = b.redBalls,
                                         blueBalls = b.blueBalls,
-                                        strategy = "黄金比例智能模拟(第${i + 1}注)"
+                                        strategy = "黄金比例智能模拟(第${i + 1}注)",
+                                        blueSource = com.lottery.analyzer.data.model.BlueSource.GENERATED_CONFIRMED
                                     )
                                 }
                             },
@@ -331,7 +271,8 @@ fun ToolsScreen(
                                     viewModel.savePredictionRecord(
                                         redBalls = bet.redBalls,
                                         blueBalls = bet.blueBalls,
-                                        strategy = "遗漏黄金比例智能模拟"
+                                        strategy = "遗漏黄金比例智能模拟",
+                                        blueSource = com.lottery.analyzer.data.model.BlueSource.GENERATED_CONFIRMED
                                     )
                                 }
                             )
