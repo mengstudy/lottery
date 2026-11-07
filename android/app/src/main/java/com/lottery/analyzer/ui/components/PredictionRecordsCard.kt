@@ -28,8 +28,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lottery.analyzer.data.model.LotteryType
@@ -49,9 +50,7 @@ import com.lottery.analyzer.ui.theme.TextPrimary
 import com.lottery.analyzer.ui.theme.TextSecondary
 
 @OptIn(ExperimentalLayoutApi::class)
-
 @Composable
-
 fun PredictionRecordsCard(
     lotteryType: LotteryType,
     records: List<PredictionVerificationResult>,
@@ -76,18 +75,13 @@ fun PredictionRecordsCard(
     ) {
         Column(
             modifier = Modifier
-
                 .fillMaxWidth()
-
                 .padding(14.dp)
         ) {
             // 顶栏标题
-
             Row(
                 modifier = Modifier
-
                     .fillMaxWidth()
-
                     .clickable { isExpanded = !isExpanded },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
@@ -95,23 +89,18 @@ fun PredictionRecordsCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-
                             .size(8.dp, 16.dp)
-
                             .clip(RoundedCornerShape(4.dp))
-
                             .background(Color(0xFF059669))
                     )
-
                     Spacer(modifier = Modifier.width(6.dp))
-
                     Text(
                         text = "📋 预测选号记录与开奖比对 (${records.size}条)",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
                     )
-}
+                }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (records.isNotEmpty() && isExpanded) {
@@ -120,20 +109,17 @@ fun PredictionRecordsCard(
                             fontSize = 11.sp,
                             color = Color(0xFFEF4444),
                             modifier = Modifier
-
                                 .clickable { showClearConfirm = true }
-
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         )
-}
-
+                    }
                     Icon(
                         imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                         contentDescription = null,
                         tint = TextSecondary
                     )
-}
-}
+                }
+            }
 
             Text(
                 text = "记录推荐选号及策略，下一期开奖数据更新时将自动比对命中情况与中奖等级",
@@ -146,9 +132,7 @@ fun PredictionRecordsCard(
                 if (records.isEmpty()) {
                     Box(
                         modifier = Modifier
-
                             .fillMaxWidth()
-
                             .padding(vertical = 16.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -157,14 +141,14 @@ fun PredictionRecordsCard(
                             fontSize = 12.sp,
                             color = Color(0xFF94A3B8)
                         )
-}
-} else {
+                    }
+                } else {
                     val totalPages = maxOf(1, (totalCount + pageSize - 1) / pageSize)
                     val safePage = currentPage.coerceIn(0, totalPages - 1)
 
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         records.forEach { result ->
                             key(result.record.id) {
@@ -187,7 +171,7 @@ fun PredictionRecordsCard(
                                 TextButton(
                                     onClick = {
                                         if (safePage > 0) {
-                                            onPageChange?.invoke(safePage - 1)
+                                            onPageChange(safePage - 1)
                                         }
                                     },
                                     enabled = safePage > 0
@@ -204,7 +188,7 @@ fun PredictionRecordsCard(
                                 TextButton(
                                     onClick = {
                                         if (safePage < totalPages - 1) {
-                                            onPageChange?.invoke(safePage + 1)
+                                            onPageChange(safePage + 1)
                                         }
                                     },
                                     enabled = safePage < totalPages - 1
@@ -220,8 +204,6 @@ fun PredictionRecordsCard(
     }
 
     // 单条删除确认
-    // 单条删除确认
-
     if (recordToDelete != null) {
         AlertDialog(
             onDismissRequest = { recordToDelete = null },
@@ -231,23 +213,21 @@ fun PredictionRecordsCard(
                 TextButton(
                     onClick = {
                         recordToDelete?.let { onDelete(it) }
-
                         recordToDelete = null
-}
+                    }
                 ) {
                     Text("删除", color = RedPrimary, fontWeight = FontWeight.Bold)
-}
-},
+                }
+            },
             dismissButton = {
                 TextButton(onClick = { recordToDelete = null }) {
                     Text("取消")
-}
-}
+                }
+            }
         )
-}
+    }
 
     // 清空确认
-
     if (showClearConfirm) {
         AlertDialog(
             onDismissRequest = { showClearConfirm = false },
@@ -257,26 +237,23 @@ fun PredictionRecordsCard(
                 TextButton(
                     onClick = {
                         onClearAll()
-
                         showClearConfirm = false
-}
+                    }
                 ) {
                     Text("清空", color = RedPrimary, fontWeight = FontWeight.Bold)
-}
-},
+                }
+            },
             dismissButton = {
                 TextButton(onClick = { showClearConfirm = false }) {
                     Text("取消")
-}
-}
+                }
+            }
         )
-}
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
-
 @Composable
-
 private fun SinglePredictionItem(
     result: PredictionVerificationResult,
     onDeleteClick: () -> Unit
@@ -288,45 +265,42 @@ private fun SinglePredictionItem(
 
     Column(
         modifier = Modifier
-
             .fillMaxWidth()
-
-            .clip(RoundedCornerShape(12.dp))
-
+            .clip(RoundedCornerShape(8.dp))
             .background(if (result.isWon) Color(0xFFFEF2F2) else Color(0xFFF8FAFC))
-
-            .padding(10.dp)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
-        // 第一行：目标期号、策略标签、删除按钮
-
+        // 第一行：目标期号、策略标签（单行截断）、时间与删除按钮
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.weight(1f, fill = false),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
                     text = "目标第 ${record.targetIssue} 期",
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = RedDark
                 )
-
                 Spacer(modifier = Modifier.width(6.dp))
-
                 Text(
                     text = record.strategy,
                     fontSize = 10.sp,
                     color = BluePrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
-
                         .clip(RoundedCornerShape(4.dp))
-
                         .background(Color(0xFFEFF6FF))
-
-                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                        .padding(horizontal = 4.dp, vertical = 1.dp)
                 )
-}
+            }
+
+            Spacer(modifier = Modifier.width(6.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -334,76 +308,67 @@ private fun SinglePredictionItem(
                     fontSize = 10.sp,
                     color = TextSecondary
                 )
-
                 IconButton(
                     onClick = onDeleteClick,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(22.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.DeleteOutline,
                         contentDescription = "删除",
                         tint = Color(0xFF94A3B8),
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(15.dp)
                     )
-}
-}
-}
+                }
+            }
+        }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
-        // 第二行：预测号码展示（命中的球带金色高亮边框和星号标识）
-
+        // 第二行：预测号码展示（命中的球带金色高亮边框和对勾标识，紧凑 24dp）
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             record.redBalls.forEach { ball ->
-
                 val isHit = isDrawn && ball in hitRedSet
-
                 LotteryBall(
                     number = ball,
                     style = BallStyle.RED,
-                    size = 30.dp,
-                    fontSize = 12,
-                    isHeartSelected = isHit, // 命中球金边高亮
-
+                    size = 24.dp,
+                    fontSize = 11,
+                    isHeartSelected = isHit,
                     badgeText = if (isHit) "✓" else null,
                     badgeBgColor = Color(0xFF16A34A)
                 )
-}
+            }
 
             if (record.blueBalls.isNotEmpty()) {
                 Text(
                     text = "+",
-                    fontSize = 15.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF94A3B8),
-                    modifier = Modifier.padding(horizontal = 2.dp, vertical = 4.dp)
+                    modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp)
                 )
-
                 record.blueBalls.forEach { blue ->
-
                     val isHit = isDrawn && blue in hitBlueSet
-
                     LotteryBall(
                         number = blue,
                         style = BallStyle.BLUE,
-                        size = 30.dp,
-                        fontSize = 12,
+                        size = 24.dp,
+                        fontSize = 11,
                         isHeartSelected = isHit,
                         badgeText = if (isHit) "✓" else null,
                         badgeBgColor = Color(0xFF16A34A)
                     )
-}
-}
-}
+                }
+            }
+        }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
-        // 第三行：核验比对结果状态
-
+        // 第三行：核验比对结果状态与开奖号码
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -411,7 +376,7 @@ private fun SinglePredictionItem(
         ) {
             Text(
                 text = result.resultSummary,
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 fontWeight = if (result.isWon) FontWeight.Bold else FontWeight.Medium,
                 color = if (result.isWon) RedPrimary else if (!isDrawn) Color(0xFFD97706) else TextSecondary
             )
@@ -419,12 +384,11 @@ private fun SinglePredictionItem(
             if (isDrawn && result.actualRecord != null) {
                 Text(
                     text = "开奖: ${result.actualRecord.redBalls.joinToString(" ")}" +
-
                             if (result.actualRecord.blueBalls.isNotEmpty()) " + ${result.actualRecord.blueBalls.joinToString(" ")}" else "",
                     fontSize = 10.sp,
                     color = TextSecondary
                 )
-}
-}
-}
+            }
+        }
+    }
 }
