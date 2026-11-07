@@ -19,7 +19,6 @@ private data class WheelCoverageResult(
  * 复式缩水与旋转矩阵保奖计算引擎
  */
 object LotteryShrinkEngine {
-
     /**
      * 执行全量复式展开、条件过滤与旋转矩阵保奖缩水
      */
@@ -28,8 +27,10 @@ object LotteryShrinkEngine {
         type: LotteryType,
         config: ShrinkFilterConfig,
         lastDrawReds: Set<Int> = emptySet(),
-        historyRedSets: Set<Set<Int>> = emptySet()
+        historyRedSets: Set<Set<Int>> = emptySet(),
+        checkCancellation: (() -> Unit)? = null
     ): ShrinkResult {
+        checkCancellation?.invoke()
         val startTime = System.currentTimeMillis()
         val distinctPool = selectedBalls.distinct().sorted()
 
@@ -76,8 +77,8 @@ object LotteryShrinkEngine {
             )
         }
 
-        // 3. 生成全复式注数组合
-        val allCombinations = generateCombinations(distinctPool, k)
+        // 3. 生成全复式注数组合 (支持协同取消)
+        val allCombinations = generateCombinations(distinctPool, k, checkCancellation)
         val originalTotal = allCombinations.size
 
         // 4. 多维度形态条件过滤
@@ -106,7 +107,6 @@ object LotteryShrinkEngine {
         var isStrictGuaranteed = true
         var coverageRatio = 100f
         var warningMsg: String? = null
-
         val finalBets = when (config.wheelMode) {
             WheelGuaranteeMode.NONE -> conditionFiltered
             WheelGuaranteeMode.WHEEL_MATCH_MINUS_1 -> {
@@ -114,7 +114,8 @@ object LotteryShrinkEngine {
                 val wheelResult = applyGreedyCoveringWheel(
                     candidateBets = conditionFiltered,
                     pool = distinctPool,
-                    guaranteeM = guaranteeM
+                    guaranteeM = guaranteeM,
+                    checkCancellation = checkCancellation
                 )
                 isStrictGuaranteed = wheelResult.isComplete
                 coverageRatio = wheelResult.coverageRatio
@@ -128,7 +129,8 @@ object LotteryShrinkEngine {
                 val wheelResult = applyGreedyCoveringWheel(
                     candidateBets = conditionFiltered,
                     pool = distinctPool,
-                    guaranteeM = guaranteeM
+                    guaranteeM = guaranteeM,
+                    checkCancellation = checkCancellation
                 )
                 isStrictGuaranteed = wheelResult.isComplete
                 coverageRatio = wheelResult.coverageRatio
@@ -222,13 +224,22 @@ object LotteryShrinkEngine {
     /**
      * 递归组合生成
      */
-    fun generateCombinations(pool: List<Int>, k: Int): List<List<Int>> {
+    fun generateCombinations(
+        pool: List<Int>,
+        k: Int,
+        checkCancellation: (() -> Unit)? = null
+    ): List<List<Int>> {
         val result = mutableListOf<List<Int>>()
         val current = mutableListOf<Int>()
+        var count = 0
 
         fun backtrack(start: Int) {
             if (current.size == k) {
                 result.add(ArrayList(current))
+                count++
+                if (count % 1000 == 0) {
+                    checkCancellation?.invoke()
+                }
                 return
             }
             for (i in start until pool.size) {
@@ -249,12 +260,14 @@ object LotteryShrinkEngine {
     private fun applyGreedyCoveringWheel(
         candidateBets: List<List<Int>>,
         pool: List<Int>,
-        guaranteeM: Int
+        guaranteeM: Int,
+        checkCancellation: (() -> Unit)? = null
     ): WheelCoverageResult {
         if (candidateBets.isEmpty()) return WheelCoverageResult(emptyList(), false, 0f)
 
+        checkCancellation?.invoke()
         // 1. 生成大底中所有大小为 guaranteeM 的目标子集
-        val allSubsetsM = generateCombinations(pool, guaranteeM)
+        val allSubsetsM = generateCombinations(pool, guaranteeM, checkCancellation)
         if (allSubsetsM.isEmpty()) return WheelCoverageResult(candidateBets, true, 100f)
 
         val totalSubsets = allSubsetsM.size
@@ -263,22 +276,35 @@ object LotteryShrinkEngine {
         // 2. 预计算每个候选注所能覆盖的子集索引
         val subsetToIndex = allSubsetsM.mapIndexed { index, list -> list to index }.toMap()
         val betCoverageMap = ArrayList<Set<Int>>(candidateBets.size)
-
+        var betCounter = 0
         for (bet in candidateBets) {
-            val subOfBet = generateCombinations(bet, guaranteeM)
+            val subOfBet = generateCombinations(bet, guaranteeM, checkCancellation)
             val coveredIndices = subOfBet.mapNotNull { subsetToIndex[it] }.toSet()
             betCoverageMap.add(coveredIndices)
+            betCounter++
+            if (betCounter % 500 == 0) {
+                checkCancellation?.invoke()
+            }
         }
 
         val selectedBets = mutableListOf<List<Int>>()
         val availableBetIndices = (0 until candidateBets.size).toMutableSet()
 
-        // 3. 贪心迭代：每次选取能够覆盖未覆盖子集最多的注
+        // 3. 贪心迭代：每次选取能够覆盖未覆盖子集最多的注 (每轮循环检查取消探针)
+        var outerRound = 0
         while (uncoveredSubsets.isNotEmpty() && availableBetIndices.isNotEmpty()) {
+            outerRound++
+            if (outerRound % 10 == 0) {
+                checkCancellation?.invoke()
+            }
             var bestBetIndex = -1
             var maxGain = 0
-
+            var innerCheck = 0
             for (betIdx in availableBetIndices) {
+                innerCheck++
+                if (innerCheck % 2000 == 0) {
+                    checkCancellation?.invoke()
+                }
                 val coverage = betCoverageMap[betIdx]
                 var gain = 0
                 for (subIdx in coverage) {
@@ -305,7 +331,6 @@ object LotteryShrinkEngine {
         val coveredCount = totalSubsets - uncoveredSubsets.size
         val coverageRatio = if (totalSubsets > 0) (coveredCount.toFloat() / totalSubsets) * 100f else 100f
         val isComplete = uncoveredSubsets.isEmpty()
-
         return WheelCoverageResult(
             bets = selectedBets,
             isComplete = isComplete,

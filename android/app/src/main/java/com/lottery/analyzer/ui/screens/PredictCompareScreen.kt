@@ -116,7 +116,8 @@ fun PredictCompareScreen(
                 inputText = uiState.collectedBallsText,
                 onInputChange = { viewModel.updateCollectedBallsText(it) },
                 analysisResult = uiState.frequencyResult,
-                onClear = { viewModel.clearCollectedBalls() }
+                onClear = { viewModel.clearCollectedBalls() },
+                isParsing = uiState.isParsingCollectedText
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -181,6 +182,10 @@ fun PredictCompareScreen(
             PredictionRecordsCard(
                 lotteryType = uiState.currentType,
                 records = uiState.predictionRecords,
+                totalCount = uiState.predictionTotalCount,
+                currentPage = uiState.predictionCurrentPage,
+                pageSize = uiState.predictionPageSize,
+                onPageChange = { page -> viewModel.loadPredictions(page = page) },
                 onDelete = { viewModel.deletePredictionRecord(it) },
                 onClearAll = { viewModel.clearPredictionRecords() }
             )

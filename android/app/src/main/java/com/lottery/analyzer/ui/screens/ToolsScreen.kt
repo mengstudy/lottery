@@ -78,7 +78,6 @@ fun ToolsScreen(
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-
     var selectedNumber by remember { mutableIntStateOf(1) }
     var trendData by remember { mutableStateOf<List<Pair<String, Int>>>(emptyList()) }
 
@@ -104,7 +103,6 @@ fun ToolsScreen(
         val hotPool = (analysis?.hotNumbers ?: emptyList()).shuffled()
         val warmPool = (analysis?.warmNumbers ?: emptyList()).shuffled()
         val coldPool = (analysis?.coldNumbers ?: emptyList()).shuffled()
-
         val pickedReds = mutableListOf<Int>()
         when (type) {
             LotteryType.SSQ -> {
@@ -374,6 +372,10 @@ fun ToolsScreen(
             PredictionRecordsCard(
                 lotteryType = uiState.currentType,
                 records = uiState.predictionRecords,
+                totalCount = uiState.predictionTotalCount,
+                currentPage = uiState.predictionCurrentPage,
+                pageSize = uiState.predictionPageSize,
+                onPageChange = { page -> viewModel.loadPredictions(page = page) },
                 onDelete = { viewModel.deletePredictionRecord(it) },
                 onClearAll = { viewModel.clearPredictionRecords() }
             )
@@ -694,7 +696,6 @@ private fun TrendLineChart(
             val width = size.width
             val height = size.height
             val stepX = width / (data.size - 1).coerceAtLeast(1)
-
             val path = Path()
             val points = mutableListOf<Offset>()
 

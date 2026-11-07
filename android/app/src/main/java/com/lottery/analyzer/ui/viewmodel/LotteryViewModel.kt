@@ -22,12 +22,17 @@ import com.lottery.analyzer.data.model.ShrinkResult
 import com.lottery.analyzer.data.model.TrendMatrixData
 import com.lottery.analyzer.data.model.WheelGuaranteeMode
 import com.lottery.analyzer.data.repository.LotteryRepository
+import com.lottery.analyzer.util.AppLogger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -46,11 +51,15 @@ data class LotteryUiState(
     // 心水红球与他人频次比对状态
     val myHeartBalls: Set<Int> = emptySet(),
     val collectedBallsText: String = "",
+    val isParsingCollectedText: Boolean = false,
     val frequencyResult: FrequencyAnalysisResult = FrequencyAnalysisResult(0, emptyMap(), emptyList()),
     val heartBallDistributions: List<HeartBallLevelDistribution> = emptyList(),
     // 预测与选号策略记录状态
     val nextIssueTarget: String = "",
     val predictionRecords: List<PredictionVerificationResult> = emptyList(),
+    val predictionTotalCount: Int = 0,
+    val predictionCurrentPage: Int = 0,
+    val predictionPageSize: Int = 10,
     val predictionFeedback: String? = null,
     // AI 大模型状态
     val aiConfig: AiConfig = AiConfig(),
@@ -74,14 +83,23 @@ data class LotteryUiState(
 )
 
 class LotteryViewModel(application: Application) : AndroidViewModel(application) {
+    companion object {
+        private val REGEX_NON_DIGIT = Regex("[^0-9]+")
+        private val REGEX_BRACKETED_BET_LABEL = Regex("""[【\[\(（][^】\]\)）]*第?\s*\d+\s*注?[^】\]\)）]*[】\]\)）]""")
+        private val REGEX_GENERAL_BRACKETS = Regex("""【[^】]*】|\[[^\]]*\]""")
+        private val REGEX_STARTING_BET_PREFIX = Regex("""^(?:他人)?第?\s*\d+\s*注[:：\s]*""")
+        private val REGEX_STARTING_BET_NUM = Regex("""^注\s*\d+[:：\s]*""")
+        private val REGEX_STARTING_ORDER_PUNCT = Regex("""^\d+[\.\、\)]\s*""")
+        private val REGEX_RED_LABEL = Regex("""(?:红球|前区|红)[:：]?""")
+        private val REGEX_BLUE_LABEL = Regex("""(?:蓝球|后区|蓝)[:：]?""")
+        private val REGEX_BLUE_REPLACE_PLUS = Regex("""(?:蓝球|后区)[:：]?""")
+    }
 
     private val repository = LotteryRepository(application)
     private val aiConfigPreferences = AiConfigPreferences(application)
     private val aiService = AiLotteryService()
-
     private val _uiState = MutableStateFlow(LotteryUiState())
     val uiState: StateFlow<LotteryUiState> = _uiState.asStateFlow()
-
     private var switchJob: Job? = null
     private var syncJob: Job? = null
     private var shrinkJob: Job? = null
@@ -89,6 +107,9 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
     private var trendJob: Job? = null
     private var issueJob: Job? = null
     private var predictionJob: Job? = null
+    private var shrinkGeneration = 0
+    private var parseJob: Job? = null
+    private var textParsingGeneration = 0
 
     init {
         _uiState.value = _uiState.value.copy(
@@ -110,6 +131,9 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
      * 切换彩种
      */
     fun switchLotteryType(type: LotteryType) {
+        shrinkGeneration++
+        textParsingGeneration++
+        parseJob?.cancel()
         switchJob?.cancel()
         syncJob?.cancel()
         shrinkJob?.cancel()
@@ -124,6 +148,9 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
                 errorMessage = null,
                 myHeartBalls = emptySet(),
                 predictionRecords = emptyList(),
+                predictionTotalCount = 0,
+                predictionCurrentPage = 0,
+                isParsingCollectedText = false,
                 collectedBallsText = "",
                 frequencyResult = FrequencyAnalysisResult(
                     validGroupsCount = 0,
@@ -276,107 +303,126 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
      */
     fun updateCollectedBallsText(text: String) {
         val currentType = _uiState.value.currentType
-        val maxRed = currentType.maxRedNumber
-        val maxBlue = currentType.maxBlueNumber
+        val currentGen = ++textParsingGeneration
+        parseJob?.cancel()
 
-        val freqMap = mutableMapOf<Int, Int>()
-        val blueFreqMap = mutableMapOf<Int, Int>()
-        val parsedBets = mutableListOf<List<Int>>()
-        val parsedCompleteBets = mutableListOf<Pair<List<Int>, List<Int>>>()
-        var validGroups = 0
+        if (text.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                collectedBallsText = "",
+                isParsingCollectedText = false,
+                frequencyResult = FrequencyAnalysisResult(
+                    validGroupsCount = 0,
+                    frequencyMap = emptyMap(),
+                    sortedByFreq = emptyList(),
+                    parsedBets = emptyList(),
+                    blueFrequencyMap = emptyMap(),
+                    sortedBluesByFreq = emptyList(),
+                    parsedCompleteBets = emptyList()
+                )
+            )
+            return
+        }
 
-        fun parseSegment(segment: String, maxVal: Int): List<Int> {
-            val trimmed = segment.trim()
-            if (trimmed.isBlank() || maxVal <= 0) return emptyList()
+        // 主线程即时回显文本与加载指示器
+        _uiState.value = _uiState.value.copy(
+            collectedBallsText = text,
+            isParsingCollectedText = true
+        )
 
-            // 核心健壮解析：先按所有非数字字符(空格/逗号/标点)切分为独立Token，再逐个Token提取
-            val tokens = trimmed.split(Regex("[^0-9]+")).filter { it.isNotBlank() }
-            val result = mutableListOf<Int>()
+        parseJob = viewModelScope.launch(Dispatchers.Default) {
+            delay(200) // 200ms 防抖
+            ensureActive()
 
-            for (token in tokens) {
-                if (token.length <= 2) {
-                    // 独立1~2位数字 (如 "05", "6")
-                    val num = token.toIntOrNull()
-                    if (num != null && num in 1..maxVal && num !in result) {
-                        result.add(num)
-                    }
-                } else {
-                    // 连续无空格多位数字 (如 "01020304" 或 "0510")，按每2位切割
-                    var i = 0
-                    while (i + 1 < token.length) {
-                        val num = token.substring(i, i + 2).toIntOrNull()
+            val maxRed = currentType.maxRedNumber
+            val maxBlue = currentType.maxBlueNumber
+            val freqMap = mutableMapOf<Int, Int>()
+            val blueFreqMap = mutableMapOf<Int, Int>()
+            val parsedBets = mutableListOf<List<Int>>()
+            val parsedCompleteBets = mutableListOf<Pair<List<Int>, List<Int>>>()
+            var validGroups = 0
+
+            fun parseSegment(segment: String, maxVal: Int): List<Int> {
+                val trimmed = segment.trim()
+                if (trimmed.isBlank() || maxVal <= 0) return emptyList()
+
+                val tokens = trimmed.split(REGEX_NON_DIGIT).filter { it.isNotBlank() }
+                val result = mutableListOf<Int>()
+                for (token in tokens) {
+                    if (token.length <= 2) {
+                        val num = token.toIntOrNull()
                         if (num != null && num in 1..maxVal && num !in result) {
                             result.add(num)
                         }
-                        i += 2
-                    }
-                    if (i < token.length) {
-                        val single = token.substring(i).toIntOrNull()
-                        if (single != null && single in 1..maxVal && single !in result) {
-                            result.add(single)
+                    } else {
+                        var i = 0
+                        while (i + 1 < token.length) {
+                            val twoDigits = token.substring(i, i + 2)
+                            val num = twoDigits.toIntOrNull()
+                            if (num != null && num in 1..maxVal && num !in result) {
+                                result.add(num)
+                            }
+                            i += 2
                         }
                     }
                 }
-            }
-            return result.sorted()
-        }
-
-        val lines = text.split("\n")
-        for (line in lines) {
-            val trimmedLine = line.trim()
-            if (trimmedLine.isBlank()) continue
-
-            // 预清洗：剥离括号标签、注号序号、红球/前区/蓝球/后区等标签文字，防止注号(如"第1注")被误识为红球
-            var cleanLine = trimmedLine
-                .replace(Regex("""[【\[\(（][^】\]\)）]*第?\s*\d+\s*注?[^】\]\)）]*[】\]\)）]"""), " ")
-                .replace(Regex("""【[^】]*】|\[[^\]]*\]"""), " ")
-                .trim()
-
-            cleanLine = cleanLine
-                .replaceFirst(Regex("""^(?:他人)?第?\s*\d+\s*注[:：\s]*"""), "")
-                .replaceFirst(Regex("""^注\s*\d+[:：\s]*"""), "")
-                .replaceFirst(Regex("""^\d+[\.\、\)]\s*"""), "")
-                .replace(Regex("""(?:红球|前区|红)[:：]?"""), " ")
-
-            if (cleanLine.contains("+")) {
-                cleanLine = cleanLine.replace(Regex("""(?:蓝球|后区|蓝)[:：]?"""), " ")
-            } else if (cleanLine.contains("蓝球") || cleanLine.contains("后区")) {
-                cleanLine = cleanLine.replace(Regex("""(?:蓝球|后区)[:：]?"""), " + ")
-            }
-            cleanLine = cleanLine.trim()
-
-            val (redPart, bluePart) = if (cleanLine.contains("+") && maxBlue > 0) {
-                val parts = cleanLine.split("+", limit = 2)
-                parts[0] to parts[1]
-            } else {
-                cleanLine to ""
+                return result.sorted()
             }
 
-            val rowReds = parseSegment(redPart, maxRed)
-            val rowBlues = if (maxBlue > 0 && bluePart.isNotBlank()) parseSegment(bluePart, maxBlue) else emptyList()
-
-            if (rowReds.isNotEmpty() || rowBlues.isNotEmpty()) {
-                validGroups++
-                // 核心修复：仅当红球非空时才加入红球防撞检验池，防止纯蓝球行(+06)加入空列表导致防撞号全灭
-                if (rowReds.isNotEmpty()) {
-                    parsedBets.add(rowReds)
+            val lineList = text.split("\n")
+            for ((idx, line) in lineList.withIndex()) {
+                if (idx % 50 == 0) {
+                    ensureActive()
                 }
-                parsedCompleteBets.add(Pair(rowReds, rowBlues))
-                for (r in rowReds) {
-                    freqMap[r] = (freqMap[r] ?: 0) + 1
+                val trimmedLine = line.trim()
+                if (trimmedLine.isBlank()) continue
+
+                var cleanLine = trimmedLine
+                    .replace(REGEX_BRACKETED_BET_LABEL, " ")
+                    .replace(REGEX_GENERAL_BRACKETS, " ")
+                    .trim()
+
+                cleanLine = cleanLine
+                    .replaceFirst(REGEX_STARTING_BET_PREFIX, "")
+                    .replaceFirst(REGEX_STARTING_BET_NUM, "")
+                    .replaceFirst(REGEX_STARTING_ORDER_PUNCT, "")
+                    .trim()
+
+                cleanLine = cleanLine
+                    .replace(REGEX_RED_LABEL, "")
+                    .replace(REGEX_BLUE_REPLACE_PLUS, "+")
+                    .trim()
+
+                val rowReds = mutableListOf<Int>()
+                val rowBlues = mutableListOf<Int>()
+                if (cleanLine.contains("+")) {
+                    val parts = cleanLine.split("+")
+                    val redPart = parts.firstOrNull().orEmpty()
+                    val bluePart = parts.drop(1).joinToString(" ")
+                    rowReds.addAll(parseSegment(redPart, maxRed))
+                    rowBlues.addAll(parseSegment(bluePart, maxBlue))
+                } else {
+                    rowReds.addAll(parseSegment(cleanLine, maxRed))
                 }
-                for (b in rowBlues) {
-                    blueFreqMap[b] = (blueFreqMap[b] ?: 0) + 1
+
+                if (rowReds.isNotEmpty() || rowBlues.isNotEmpty()) {
+                    validGroups++
+                    if (rowReds.isNotEmpty()) {
+                        parsedBets.add(rowReds)
+                    }
+                    parsedCompleteBets.add(Pair(rowReds, rowBlues))
+                    for (r in rowReds) {
+                        freqMap[r] = (freqMap[r] ?: 0) + 1
+                    }
+                    for (b in rowBlues) {
+                        blueFreqMap[b] = (blueFreqMap[b] ?: 0) + 1
+                    }
                 }
             }
-        }
 
-        val sortedReds = freqMap.toList().sortedByDescending { it.second }
-        val sortedBlues = blueFreqMap.toList().sortedByDescending { it.second }
-
-        _uiState.value = _uiState.value.copy(
-            collectedBallsText = text,
-            frequencyResult = FrequencyAnalysisResult(
+            ensureActive()
+            val sortedReds = freqMap.toList().sortedByDescending { it.second }
+            val sortedBlues = blueFreqMap.toList().sortedByDescending { it.second }
+            val parseResult = FrequencyAnalysisResult(
                 validGroupsCount = validGroups,
                 frequencyMap = freqMap,
                 sortedByFreq = sortedReds,
@@ -385,15 +431,28 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
                 sortedBluesByFreq = sortedBlues,
                 parsedCompleteBets = parsedCompleteBets
             )
-        )
+
+            // 核心修复 (P2-1)：后台计算完毕后切回主线程校验代数并更新，杜绝竞态覆盖清空
+            withContext(Dispatchers.Main.immediate) {
+                if (currentGen == textParsingGeneration && _uiState.value.currentType == currentType) {
+                    _uiState.value = _uiState.value.copy(
+                        isParsingCollectedText = false,
+                        frequencyResult = parseResult
+                    )
+                }
+            }
+        }
     }
 
     /**
      * 清空他人购买号码
      */
     fun clearCollectedBalls() {
+        textParsingGeneration++
+        parseJob?.cancel()
         _uiState.value = _uiState.value.copy(
             collectedBallsText = "",
+            isParsingCollectedText = false,
             frequencyResult = FrequencyAnalysisResult(
                 validGroupsCount = 0,
                 frequencyMap = emptyMap(),
@@ -430,16 +489,23 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
     /**
      * 加载当前彩种已保存的预测记录并完成自动比对验证
      */
-    fun loadPredictions() {
+    fun loadPredictions(page: Int = _uiState.value.predictionCurrentPage) {
         val targetType = _uiState.value.currentType
+        val pageSize = _uiState.value.predictionPageSize
         predictionJob?.cancel()
         predictionJob = viewModelScope.launch {
             try {
-                val list = repository.getVerifiedPredictions(targetType)
+                val result = repository.getVerifiedPredictionsPaged(targetType, page, pageSize)
                 if (_uiState.value.currentType != targetType) return@launch
-                _uiState.value = _uiState.value.copy(predictionRecords = list)
+                _uiState.value = _uiState.value.copy(
+                    predictionRecords = result.records,
+                    predictionTotalCount = result.totalCount,
+                    predictionCurrentPage = result.validPage
+                )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                // 忽略或记录
+                AppLogger.e("LotteryViewModel", "加载预测记录失败: ${e.message}", e)
             }
         }
     }
@@ -455,7 +521,6 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
     ) {
         val target = if (targetIssue.isNotBlank()) targetIssue else _uiState.value.nextIssueTarget
         val timeStr = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date())
-
         val record = PredictionRecord(
             lotteryType = _uiState.value.currentType,
             targetIssue = target,
@@ -617,7 +682,6 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // ==================== AI 大模型功能控制 ====================
-
     /**
      * 显示/关闭 AI 配置弹窗
      */
@@ -698,7 +762,6 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
         val type = _uiState.value.currentType
         val targetIssue = _uiState.value.nextIssueTarget
         val config = _uiState.value.aiConfig
-
         if (config.apiKey.isBlank()) {
             _uiState.value = _uiState.value.copy(
                 showAiSettingsDialog = true,
@@ -787,7 +850,6 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // ==================== 复式缩水与旋转矩阵控制 ====================
-
     fun toggleShrinkBall(ball: Int) {
         val current = _uiState.value.shrinkSelectedBalls.toMutableSet()
         if (ball in current) current.remove(ball) else current.add(ball)
@@ -818,11 +880,9 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
         val selected = _uiState.value.shrinkSelectedBalls.toList()
         val type = _uiState.value.currentType
         val config = _uiState.value.shrinkConfig
-
         val minCount = if (type == LotteryType.KL8) config.kl8PlayType.pickCount else type.redCount
         val titleText = if (type == LotteryType.KL8) "快乐8[${config.kl8PlayType.title}]" else type.title
         val maxCount = if (type == LotteryType.KL8) 14 else 16
-
         if (selected.size < minCount) {
             _uiState.value = _uiState.value.copy(
                 errorMessage = "选号池号码不足：" + titleText + "至少需要选择 " + minCount + " 个红球"
@@ -837,18 +897,27 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
         }
 
         val targetType = type
+        val currentGen = ++shrinkGeneration
         shrinkJob?.cancel()
         shrinkJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isShrinking = true, errorMessage = null)
             try {
                 val result = repository.executeShrink(targetType, selected, config)
-                if (_uiState.value.currentType != targetType) return@launch
+                // 核心修复 (P2-3)：校验当前任务版本与彩种，旧任务结果直接废弃
+                if (currentGen != shrinkGeneration || _uiState.value.currentType != targetType) return@launch
 
                 _uiState.value = _uiState.value.copy(
                     shrinkResult = result
                 )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (currentGen == shrinkGeneration && _uiState.value.currentType == targetType) {
+                    _uiState.value = _uiState.value.copy(errorMessage = "缩水计算失败: ${e.message}")
+                }
             } finally {
-                if (_uiState.value.currentType == targetType) {
+                // 核心修复 (P2-3)：严格校验 currentGen == shrinkGeneration，旧任务退出绝不冲掉新任务的 isShrinking
+                if (currentGen == shrinkGeneration) {
                     _uiState.value = _uiState.value.copy(isShrinking = false)
                 }
             }
@@ -868,7 +937,6 @@ class LotteryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // ==================== 全景网格走势图控制 ====================
-
     fun loadTrendMatrixData() {
         val type = _uiState.value.currentType
         val limit = _uiState.value.trendMatrixLimit

@@ -9,23 +9,33 @@ import com.lottery.analyzer.data.model.IssueAnalysis
 import com.lottery.analyzer.data.model.Kl8PlayType
 import com.lottery.analyzer.data.model.LotteryType
 import com.lottery.analyzer.util.AppLogger
+import com.lottery.analyzer.util.executeAndReadString
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /**
  * AI 大模型服务层，支持所有兼容 OpenAI /v1/chat/completions 规范的平台
  * (包括 DeepSeek, SiliconFlow, 阿里通义千问, OpenAI 以及自定义中转)
  */
 class AiLotteryService {
-
     private val gson = Gson()
     private val client = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
@@ -88,38 +98,39 @@ class AiLotteryService {
                 .post(jsonString.toRequestBody(JSON_MEDIA_TYPE))
                 .build()
 
-            client.newCall(request).execute().use { response ->
-                val elapsed = System.currentTimeMillis() - startTime
-                val body = response.body?.string().orEmpty()
-                AppLogger.i(TAG, "收到测试响应: HTTP ${response.code}, 耗时: ${elapsed}ms")
+            val (code, body) = client.newCall(request).executeAndReadString()
+            val elapsed = System.currentTimeMillis() - startTime
+            AppLogger.i(TAG, "收到测试响应: HTTP $code, 耗时: ${elapsed}ms")
 
-                if (!response.isSuccessful) {
-                    val errMsg = try {
-                        val json = gson.fromJson(body, JsonObject::class.java)
-                        json.getAsJsonObject("error")?.get("message")?.asString ?: body
-                    } catch (_: Exception) {
-                        body
-                    }
-                    AppLogger.e(TAG, "测试连接失败: HTTP ${response.code}, 错误: $errMsg")
-                    return@withContext Result.failure(Exception("HTTP ${response.code}: $errMsg"))
-                }
-
-                val reply = try {
+            if (code !in 200..299) {
+                val errMsg = try {
                     val json = gson.fromJson(body, JsonObject::class.java)
-                    val choices = json.getAsJsonArray("choices")
-                    if (choices != null && choices.size() > 0) {
-                        choices[0].asJsonObject.getAsJsonObject("message").get("content").asString
-                    } else {
-                        "响应成功但内容为空"
-                    }
-                } catch (e: Exception) {
-                    AppLogger.w(TAG, "解析测试响应JSON失败", e)
-                    "连接成功，但解析响应失败: ${e.message}"
+                    json.getAsJsonObject("error")?.get("message")?.asString ?: body
+                } catch (_: Exception) {
+                    body
                 }
-
-                AppLogger.i(TAG, "测试连接成功! 耗时: ${elapsed}ms, 模型回复: ${reply.trim()}")
-                Result.success(reply.trim())
+                AppLogger.e(TAG, "测试连接失败: HTTP $code, 错误: $errMsg")
+                return@withContext Result.failure(Exception("HTTP $code: $errMsg"))
             }
+
+            val reply = try {
+                val json = gson.fromJson(body, JsonObject::class.java)
+                val choices = json.getAsJsonArray("choices")
+                if (choices != null && choices.size() > 0) {
+                    choices[0].asJsonObject.getAsJsonObject("message").get("content").asString
+                } else {
+                    "响应成功但内容为空"
+                }
+            } catch (e: Exception) {
+                AppLogger.w(TAG, "解析测试响应JSON失败", e)
+                "连接成功，但解析响应失败: ${e.message}"
+            }
+
+            AppLogger.i(TAG, "测试连接成功! 耗时: ${elapsed}ms, 模型回复: ${reply.trim()}")
+            Result.success(reply.trim())
+        } catch (e: CancellationException) {
+            AppLogger.i(TAG, "测试连接被取消")
+            throw e
         } catch (e: Exception) {
             val elapsed = System.currentTimeMillis() - startTime
             AppLogger.e(TAG, "测试连接异常 (耗时 ${elapsed}ms): ${e.message}", e)
@@ -211,77 +222,79 @@ class AiLotteryService {
                 .build()
 
             AppLogger.i(TAG, "请求正在发送至云端，等待模型推理...")
-            client.newCall(request).execute().use { response ->
-                val elapsed = System.currentTimeMillis() - startTime
-                val body = response.body?.string().orEmpty()
-                AppLogger.i(TAG, "收到云端推演响应: HTTP ${response.code}, 耗时: ${elapsed}ms")
+            ensureActive()
+            val (code, body) = client.newCall(request).executeAndReadString()
+            val elapsed = System.currentTimeMillis() - startTime
+            AppLogger.i(TAG, "收到云端推演响应: HTTP $code, 耗时: ${elapsed}ms")
 
-                if (!response.isSuccessful) {
-                    val errMsg = try {
-                        val json = gson.fromJson(body, JsonObject::class.java)
-                        json.getAsJsonObject("error")?.get("message")?.asString ?: body
-                    } catch (_: Exception) {
-                        body
-                    }
-                    AppLogger.e(TAG, "推演请求返回错误: HTTP ${response.code}, 内容: $errMsg")
-                    return@withContext Result.failure(Exception("HTTP ${response.code}: $errMsg"))
-                }
-
-                val content = try {
+            if (code !in 200..299) {
+                val errMsg = try {
                     val json = gson.fromJson(body, JsonObject::class.java)
-                    val choices = json.getAsJsonArray("choices")
-                    choices[0].asJsonObject.getAsJsonObject("message").get("content").asString
-                } catch (e: Exception) {
-                    AppLogger.e(TAG, "解析大模型响应 JSON 失败", e)
-                    return@withContext Result.failure(Exception("解析大模型响应失败: ${e.message}\n原始响应: $body"))
+                    json.getAsJsonObject("error")?.get("message")?.asString ?: body
+                } catch (_: Exception) {
+                    body
                 }
-
-                // 从生成文本中抽取推荐号码 (动态按彩种与快乐8玩法核对红球数)
-                val extractedBets = parseRecommendedBets(content, lotteryType, kl8PlayType)
-                val strategySummary = parseStrategySummary(content)
-
-                // 动态计算防撞号重叠度合规范围 (快乐8小玩法如选二、选三时按实际选号上限调整)
-                val maxAllowedOverlap = if (lotteryType == LotteryType.KL8) {
-                    minOf(4, maxOf(1, kl8PlayType.pickCount - 1))
-                } else {
-                    4
-                }
-
-                // 过滤出有效红球注 (排除红球为空的行，双重防护防止纯蓝球行导致全部被过滤)
-                val validOtherRedBets = otherBets.filter { it.isNotEmpty() }
-                // 统计并硬拦截防撞号违规注
-                val validBets = if (mode == AiAnalysisMode.HEART_FUSION && validOtherRedBets.isNotEmpty()) {
-                    extractedBets.filterIndexed { idx, bet ->
-                        val overlaps = validOtherRedBets.map { oBet -> bet.first.count { it in oBet } }
-                        val isCompliant = overlaps.all { it in 1..maxAllowedOverlap }
-                        val minO = overlaps.minOrNull() ?: 0
-                        val maxO = overlaps.maxOrNull() ?: 0
-                        if (!isCompliant) {
-                            AppLogger.w(TAG, "第 ${idx + 1} 注防撞拦截剔除: 与他人各注交集区间为 [${minO}..${maxO}]码 (合规区间: 1..$maxAllowedOverlap 码)")
-                        } else {
-                            AppLogger.i(TAG, "第 ${idx + 1} 注防撞合规: 与他人各注交集区间为 [${minO}..${maxO}]码 (合规区间: 1..$maxAllowedOverlap 码)")
-                        }
-                        isCompliant
-                    }
-                } else {
-                    extractedBets
-                }
-
-                AppLogger.i(TAG, "推演成功完成! 耗时: ${elapsed}ms, 校验后保留 ${validBets.size} 注推荐, 策略: $strategySummary")
-
-                Result.success(
-                    AiRecommendationResult(
-                        mode = mode,
-                        targetIssue = targetNextIssue,
-                        rawResponse = content,
-                        analysisText = content,
-                        recommendedBets = validBets,
-                        strategySummary = strategySummary,
-                        lotteryType = lotteryType,
-                        kl8PlayType = if (lotteryType == LotteryType.KL8) kl8PlayType else null
-                    )
-                )
+                AppLogger.e(TAG, "推演请求返回错误: HTTP $code, 内容: $errMsg")
+                return@withContext Result.failure(Exception("HTTP $code: $errMsg"))
             }
+
+            val content = try {
+                val json = gson.fromJson(body, JsonObject::class.java)
+                val choices = json.getAsJsonArray("choices")
+                choices[0].asJsonObject.getAsJsonObject("message").get("content").asString
+            } catch (e: Exception) {
+                AppLogger.e(TAG, "解析大模型响应 JSON 失败", e)
+                return@withContext Result.failure(Exception("解析大模型响应失败: ${e.message}\n原始响应: $body"))
+            }
+
+            // 从生成文本中抽取推荐号码 (动态按彩种与快乐8玩法核对红球数)
+            val extractedBets = parseRecommendedBets(content, lotteryType, kl8PlayType)
+            val strategySummary = parseStrategySummary(content)
+
+            // 动态计算防撞号重叠度合规范围 (快乐8小玩法如选二、选三时按实际选号上限调整)
+            val maxAllowedOverlap = if (lotteryType == LotteryType.KL8) {
+                minOf(4, maxOf(1, kl8PlayType.pickCount - 1))
+            } else {
+                4
+            }
+
+            // 过滤出有效红球注 (排除红球为空的行，双重防护防止纯蓝球行导致全部被过滤)
+            val validOtherRedBets = otherBets.filter { it.isNotEmpty() }
+            // 统计并硬拦截防撞号违规注
+            val validBets = if (mode == AiAnalysisMode.HEART_FUSION && validOtherRedBets.isNotEmpty()) {
+                extractedBets.filterIndexed { idx, bet ->
+                    val overlaps = validOtherRedBets.map { oBet -> bet.first.count { it in oBet } }
+                    val isCompliant = overlaps.all { it in 1..maxAllowedOverlap }
+                    val minO = overlaps.minOrNull() ?: 0
+                    val maxO = overlaps.maxOrNull() ?: 0
+                    if (!isCompliant) {
+                        AppLogger.w(TAG, "第 ${idx + 1} 注防撞拦截剔除: 与他人各注交集区间为 [${minO}..${maxO}]码 (合规区间: 1..$maxAllowedOverlap 码)")
+                    } else {
+                        AppLogger.i(TAG, "第 ${idx + 1} 注防撞合规: 与他人各注交集区间为 [${minO}..${maxO}]码 (合规区间: 1..$maxAllowedOverlap 码)")
+                    }
+                    isCompliant
+                }
+            } else {
+                extractedBets
+            }
+
+            AppLogger.i(TAG, "推演成功完成! 耗时: ${elapsed}ms, 校验后保留 ${validBets.size} 注推荐, 策略: $strategySummary")
+
+            Result.success(
+                AiRecommendationResult(
+                    mode = mode,
+                    targetIssue = targetNextIssue,
+                    rawResponse = content,
+                    analysisText = content,
+                    recommendedBets = validBets,
+                    strategySummary = strategySummary,
+                    lotteryType = lotteryType,
+                    kl8PlayType = if (lotteryType == LotteryType.KL8) kl8PlayType else null
+                )
+            )
+        } catch (e: CancellationException) {
+            AppLogger.i(TAG, "AI 推演任务被取消")
+            throw e
         } catch (e: Exception) {
             val elapsed = System.currentTimeMillis() - startTime
             AppLogger.e(TAG, "推演过程发生异常 (耗时 ${elapsed}ms): ${e.message}", e)
@@ -428,7 +441,6 @@ class AiLotteryService {
         val lines = text.lines()
         val expectedRed = if (lotteryType == LotteryType.KL8) kl8PlayType.pickCount else lotteryType.redCount
         val expectedBlue = lotteryType.blueCount
-
         val structuredRegex = Pattern.compile(
             """【推荐第\s*\d+\s*注】.*?红球[:：]\s*([\d\s,，]+?)(?:\s*\+\s*蓝球[:：]\s*([\d\s,，]+))?${'$'}""",
             Pattern.CASE_INSENSITIVE
@@ -439,7 +451,6 @@ class AiLotteryService {
             if (matcher.find()) {
                 val redPart = matcher.group(1).orEmpty()
                 val bluePart = matcher.group(2).orEmpty()
-
                 val redBalls = extractNumbers(redPart, 1, lotteryType.maxRedNumber).distinct().sorted()
                 val blueBalls = if (lotteryType.maxBlueNumber > 0) {
                     extractNumbers(bluePart, 1, lotteryType.maxBlueNumber).distinct().sorted()

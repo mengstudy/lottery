@@ -7,31 +7,13 @@ import android.database.sqlite.SQLiteDatabase
 import com.lottery.analyzer.data.model.LotteryType
 import com.lottery.analyzer.data.model.PredictionRecord
 
-class PredictionDao(context: Context) {
-
-    private val db: SQLiteDatabase
-
-    init {
-        val dbFile = context.getDatabasePath("user_predictions.db")
-        dbFile.parentFile?.mkdirs()
-        db = SQLiteDatabase.openOrCreateDatabase(dbFile, null)
-        createTableIfNotExists()
-    }
-
-    private fun createTableIfNotExists() {
-        val sql = """
-            CREATE TABLE IF NOT EXISTS user_predictions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                lottery_type TEXT NOT NULL,
-                target_issue TEXT NOT NULL,
-                red_balls TEXT NOT NULL,
-                blue_balls TEXT NOT NULL,
-                strategy TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                note TEXT
-            );
-        """.trimIndent()
-        db.execSQL(sql)
+/**
+ * 用户预测与实战选号数据访问对象
+ * 统一接入全局应用级共享 DatabaseHelper 单例池，懒加载初始化，杜绝在主线程冷启动建库
+ */
+class PredictionDao(private val context: Context) {
+    private fun getDb(): SQLiteDatabase {
+        return DatabaseHelper.getDatabase(context.applicationContext, "user_predictions.db")
     }
 
     /**
@@ -47,14 +29,14 @@ class PredictionDao(context: Context) {
             put("created_at", record.createdAt)
             put("note", record.note)
         }
-        return db.insert("user_predictions", null, cv)
+        return getDb().insert("user_predictions", null, cv)
     }
 
     /**
      * 删除指定单条记录
      */
     fun delete(id: Long): Boolean {
-        return db.delete("user_predictions", "id = ?", arrayOf(id.toString())) > 0
+        return getDb().delete("user_predictions", "id = ?", arrayOf(id.toString())) > 0
     }
 
     /**
@@ -62,19 +44,62 @@ class PredictionDao(context: Context) {
      */
     fun clear(type: LotteryType? = null): Boolean {
         return if (type != null) {
-            db.delete("user_predictions", "lottery_type = ?", arrayOf(type.name)) >= 0
+            getDb().delete("user_predictions", "lottery_type = ?", arrayOf(type.name)) >= 0
         } else {
-            db.delete("user_predictions", null, null) >= 0
+            getDb().delete("user_predictions", null, null) >= 0
         }
     }
 
     /**
-     * 查询记录（按创建时间倒序）
+     * 获取指定彩种的记录总数
+     */
+    fun getCount(type: LotteryType? = null): Int {
+        val selection = if (type != null) "lottery_type = ?" else null
+        val selectionArgs = if (type != null) arrayOf(type.name) else null
+        val cursor = getDb().rawQuery(
+            "SELECT COUNT(*) FROM user_predictions" + (if (selection != null) " WHERE $selection" else ""),
+            selectionArgs
+        )
+        cursor.use {
+            if (it.moveToFirst()) {
+                return it.getInt(0)
+            }
+        }
+        return 0
+    }
+
+    /**
+     * 分页查询预测记录（按 id 倒序），用于有限预览与懒加载
+     */
+    fun getPaged(type: LotteryType? = null, limit: Int = 20, offset: Int = 0): List<PredictionRecord> {
+        val selection = if (type != null) "lottery_type = ?" else null
+        val selectionArgs = if (type != null) arrayOf(type.name) else null
+        val cursor = getDb().query(
+            "user_predictions",
+            null,
+            selection,
+            selectionArgs,
+            null,
+            null,
+            "id DESC",
+            "$offset, $limit"
+        )
+        val list = mutableListOf<PredictionRecord>()
+        cursor.use {
+            while (it.moveToNext()) {
+                list.add(parseRecord(it))
+            }
+        }
+        return list
+    }
+
+    /**
+     * 查询记录（按 id 倒序）
      */
     fun getAll(type: LotteryType? = null): List<PredictionRecord> {
         val selection = if (type != null) "lottery_type = ?" else null
         val selectionArgs = if (type != null) arrayOf(type.name) else null
-        val cursor = db.query(
+        val cursor = getDb().query(
             "user_predictions",
             null,
             selection,
@@ -106,10 +131,8 @@ class PredictionDao(context: Context) {
         val strategy = cursor.getString(cursor.getColumnIndexOrThrow("strategy"))
         val createdAt = cursor.getString(cursor.getColumnIndexOrThrow("created_at"))
         val note = cursor.getString(cursor.getColumnIndexOrThrow("note")) ?: ""
-
         val redBalls = redStr.split(",").mapNotNull { it.trim().toIntOrNull() }
         val blueBalls = if (blueStr.isBlank()) emptyList() else blueStr.split(",").mapNotNull { it.trim().toIntOrNull() }
-
         return PredictionRecord(
             id = id,
             lotteryType = lotteryType,

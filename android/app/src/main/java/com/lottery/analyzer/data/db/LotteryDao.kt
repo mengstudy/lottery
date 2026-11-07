@@ -7,7 +7,6 @@ import com.lottery.analyzer.data.model.LotteryRecord
 import com.lottery.analyzer.data.model.LotteryType
 
 class LotteryDao(private val context: Context) {
-
     /**
      * 获取指定彩种的所有开奖历史记录
      * @param asc 是否按开奖日期/期号升序排列（计算遗漏时需要升序）
@@ -24,6 +23,39 @@ class LotteryDao(private val context: Context) {
             }
         }
         return records
+    }
+
+    /**
+     * 批量根据期号集合查询开奖记录（分批 IN 查询，彻底杜绝 N+1 数据库查询，保证跨年份历史预测不漏查）
+     */
+    fun getRecordsByIssues(type: LotteryType, issues: Collection<String>): Map<String, LotteryRecord> {
+        if (issues.isEmpty()) return emptyMap()
+        val distinctIssues = issues.filter { it.isNotBlank() }.distinct()
+        if (distinctIssues.isEmpty()) return emptyMap()
+
+        val db = DatabaseHelper.getDatabase(context, type.dbName)
+        val resultMap = mutableMapOf<String, LotteryRecord>()
+        val batchSize = 100
+        for (i in distinctIssues.indices step batchSize) {
+            val batch = distinctIssues.subList(i, minOf(i + batchSize, distinctIssues.size))
+            val placeholders = batch.joinToString(",") { "?" }
+            val cursor = db.query(
+                "lottery_results",
+                null,
+                "issue IN ($placeholders)",
+                batch.toTypedArray(),
+                null,
+                null,
+                null
+            )
+            cursor.use {
+                while (it.moveToNext()) {
+                    val record = parseRecord(type, it)
+                    resultMap[record.issue] = record
+                }
+            }
+        }
+        return resultMap
     }
 
     /**
@@ -118,7 +150,6 @@ class LotteryDao(private val context: Context) {
         val issue = cursor.getString(cursor.getColumnIndexOrThrow("issue"))
         val drawDate = cursor.getString(cursor.getColumnIndexOrThrow("draw_date"))
         val region = cursor.getColumnIndex("region").takeIf { it >= 0 }?.let { cursor.getString(it) } ?: ""
-
         val redBalls = mutableListOf<Int>()
         val blueBalls = mutableListOf<Int>()
 

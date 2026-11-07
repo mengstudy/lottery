@@ -5,7 +5,6 @@ import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 
 object DatabaseHelper {
-
     private const val TAG = "DatabaseHelper"
     private val dbCache = mutableMapOf<String, SQLiteDatabase>()
 
@@ -94,6 +93,25 @@ object DatabaseHelper {
                     )
                     db.execSQL("CREATE INDEX IF NOT EXISTS idx_kl8_issue ON lottery_results(issue);")
                     db.execSQL("CREATE INDEX IF NOT EXISTS idx_kl8_draw_date ON lottery_results(draw_date);")
+                }
+                "user_predictions.db" -> {
+                    // 用户预测与选号策略记录库
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS user_predictions (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            lottery_type TEXT NOT NULL,
+                            target_issue TEXT NOT NULL,
+                            red_balls TEXT NOT NULL,
+                            blue_balls TEXT NOT NULL,
+                            strategy TEXT NOT NULL,
+                            created_at TEXT NOT NULL,
+                            note TEXT
+                        );
+                        """.trimIndent()
+                    )
+                    db.execSQL("CREATE INDEX IF NOT EXISTS idx_pred_type_issue ON user_predictions(lottery_type, target_issue);")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS idx_pred_id ON user_predictions(id);")
                 }
             }
         } catch (e: Exception) {

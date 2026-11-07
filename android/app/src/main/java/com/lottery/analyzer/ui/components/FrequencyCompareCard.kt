@@ -38,6 +38,7 @@ fun FrequencyCompareCard(
     onInputChange: (String) -> Unit,
     analysisResult: FrequencyAnalysisResult,
     onClear: () -> Unit,
+    isParsing: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -72,7 +73,14 @@ fun FrequencyCompareCard(
                     )
                 }
 
-                if (analysisResult.validGroupsCount > 0) {
+                if (isParsing) {
+                    Text(
+                        text = "⚡ 解析中...",
+                        fontSize = 12.sp,
+                        color = Color(0xFFF59E0B),
+                        fontWeight = FontWeight.Bold
+                    )
+                } else if (analysisResult.validGroupsCount > 0) {
                     Text(
                         text = "已解析 ${analysisResult.validGroupsCount} 组",
                         fontSize = 12.sp,
