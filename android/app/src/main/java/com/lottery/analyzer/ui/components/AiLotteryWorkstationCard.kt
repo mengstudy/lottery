@@ -47,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,6 +59,8 @@ import androidx.compose.ui.unit.sp
 import com.lottery.analyzer.data.model.AiAnalysisMode
 import com.lottery.analyzer.data.model.AiConfig
 import com.lottery.analyzer.data.model.AiRecommendationResult
+import com.lottery.analyzer.data.model.AiWindowOptions
+import com.lottery.analyzer.data.engine.WindowStrategy
 import com.lottery.analyzer.data.model.Kl8PlayType
 import com.lottery.analyzer.data.model.LotteryType
 import com.lottery.analyzer.ui.theme.BorderLight
@@ -88,6 +91,8 @@ fun AiLotteryWorkstationCard(
     otherBallSet: Set<Int> = emptySet(),
     otherBets: List<List<Int>> = emptyList(),
     kl8PlayType: Kl8PlayType = Kl8PlayType.XUAN_TEN,
+    windowOptions: AiWindowOptions = AiWindowOptions(),
+    onWindowOptionsChange: (AiWindowOptions) -> Unit = {},
     onKl8PlayTypeChange: ((Kl8PlayType) -> Unit)? = null,
     onOpenSettings: () -> Unit,
     onRunAnalysis: (mode: AiAnalysisMode, count: Int) -> Unit,
@@ -97,9 +102,11 @@ fun AiLotteryWorkstationCard(
     onViewLogs: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    var selectedMode by remember { mutableStateOf(AiAnalysisMode.FULL_RECOMMEND) }
-    var selectedBetCount by remember { mutableIntStateOf(3) }
+    var selectedMode by rememberSaveable { mutableStateOf(AiAnalysisMode.FULL_RECOMMEND) }
+    var selectedBetCount by rememberSaveable { mutableIntStateOf(3) }
     var isThoughtExpanded by remember { mutableStateOf(false) }
+    var windowText by rememberSaveable(windowOptions.periods, lotteryType) { mutableStateOf(windowOptions.periods.toString()) }
+    val validWindow = windowText.toIntOrNull()?.takeIf { it in 1..1000 }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -355,6 +362,50 @@ fun AiLotteryWorkstationCard(
                 }
             }
 
+            if (lotteryType != LotteryType.KL8) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.material3.Switch(
+                        checked = windowOptions.enabled,
+                        onCheckedChange = { onWindowOptionsChange(windowOptions.copy(enabled = it)) }
+                    )
+                    Text("结合历史开奖频次", fontSize = 13.sp)
+                }
+                if (windowOptions.enabled) {
+                    Text("使用本地最新有效开奖作为截止期；频次与遗漏、他人选号分别计算。", fontSize = 11.sp, color = TextSecondary)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(30, 50, 100).forEach { periods ->
+                            androidx.compose.material3.FilterChip(selected = validWindow == periods,
+                                onClick = { windowText = periods.toString(); onWindowOptionsChange(windowOptions.copy(periods = periods)) },
+                                label = { Text("${periods}期") })
+                        }
+                    }
+                    androidx.compose.material3.OutlinedTextField(
+                        value = windowText,
+                        onValueChange = { value ->
+                            if (value.length <= 4 && value.all { it in '0'..'9' }) {
+                                windowText = value
+                                val periods = value.toIntOrNull()
+                                // Cancel an in-flight request even when the new draft is incomplete.
+                                onWindowOptionsChange(windowOptions.copy(periods = periods?.takeIf { it in 1..1000 } ?: windowOptions.periods))
+                            }
+                        },
+                        label = { Text("统计窗口（1~1000期）") },
+                        isError = validWindow == null,
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        WindowStrategy.values().forEach { strategy ->
+                            androidx.compose.material3.FilterChip(selected = windowOptions.strategy == strategy,
+                                onClick = { onWindowOptionsChange(windowOptions.copy(strategy = strategy)) },
+                                label = { Text(strategy.title) })
+                        }
+                    }
+                    Text("冷热为软偏好；分区均衡、包含连号由本地严格核验。本轮只生成单注。", fontSize = 11.sp, color = TextSecondary)
+                }
+            }
+
             // 3. 注数与执行栏
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -389,7 +440,8 @@ fun AiLotteryWorkstationCard(
                 // 发起推演按钮
                 Button(
                     onClick = { onRunAnalysis(selectedMode, selectedBetCount) },
-                    enabled = !isLoading && aiConfig.apiKey.isNotBlank(),
+                    enabled = !isLoading && aiConfig.apiKey.isNotBlank() &&
+                        (lotteryType == LotteryType.KL8 || !windowOptions.enabled || validWindow != null),
                     colors = ButtonDefaults.buttonColors(containerColor = PurplePrimary)
                 ) {
                     if (isLoading) {
@@ -432,7 +484,7 @@ fun AiLotteryWorkstationCard(
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = "推演耗时约 5~15 秒，请稍候",
+                            text = "耗时取决于模型与网络，请稍候",
                             fontSize = 11.sp,
                             color = TextSecondary
                         )
@@ -518,6 +570,16 @@ fun AiLotteryWorkstationCard(
                         }
                     }
 
+                    Text("请求 ${aiResult.requestedCount} 注，识别 ${aiResult.parsedCount} 组，本地核验保留 ${aiResult.recommendedBets.size} 注。", fontSize = 12.sp, color = PurplePrimary)
+                    if (aiResult.recommendedBets.isEmpty()) Text("没有通过核验的推荐，可调整参数后手动重试。", fontSize = 12.sp, color = RedPrimary)
+                    if (aiResult.rejectionReasons.isNotEmpty()) Text(
+                        "剔除：" + aiResult.rejectionReasons.entries.joinToString("；") { "${it.key} ${it.value}组" }, fontSize = 11.sp, color = TextSecondary)
+                    Text("请求模型：${aiResult.providerName}/${aiResult.modelName} · 分析截止 ${aiResult.baseIssue}", fontSize = 11.sp, color = TextSecondary)
+                    aiResult.windowContext?.let { context ->
+                        Text("${context.strategy.title} · 请求${context.stats.requestedPeriods}期/实取${context.stats.sampleCount}期 · ${context.stats.firstIssue}—${context.stats.lastIssue}", fontSize = 11.sp, color = TextSecondary)
+                        if (context.stats.excludedCount > 0) Text("统计排除无效或重复记录 ${context.stats.excludedCount} 条", fontSize = 11.sp, color = TextSecondary)
+                    }
+
                     // 思考与推演逻辑折叠区
                     Row(
                         modifier = Modifier
@@ -530,7 +592,7 @@ fun AiLotteryWorkstationCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = if (isThoughtExpanded) "收起 AI 深度推演论述" else "展开查看 AI 概率推演思路与形态依据",
+                            text = if (isThoughtExpanded) "收起 AI 分析原文" else "展开 AI 分析原文（未经规则校验）",
                             fontSize = 12.sp,
                             color = PurplePrimary,
                             fontWeight = FontWeight.Medium

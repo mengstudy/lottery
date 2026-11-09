@@ -9,6 +9,8 @@ import com.lottery.analyzer.data.repository.LotteryRepositoryContract
 import java.time.Instant
 import androidx.lifecycle.viewModelScope
 import com.lottery.analyzer.data.ai.AiLotteryService
+import com.lottery.analyzer.data.ai.AiAnalysisFactsBuilder
+import com.lottery.analyzer.data.engine.WindowStrategy
 import com.lottery.analyzer.data.db.AiConfigPreferences
 import com.lottery.analyzer.data.model.AiAnalysisMode
 import com.lottery.analyzer.data.model.AiConfig
@@ -78,6 +80,7 @@ data class LotteryUiState(
     val aiConfig: AiConfig = AiConfig(),
     val isAiLoading: Boolean = false,
     val aiResult: AiRecommendationResult? = null,
+    val aiWindowOptions: AiWindowOptions = AiWindowOptions(),
     val aiError: String? = null,
     val aiTestMessage: String? = null,
     val showAiSettingsDialog: Boolean = false,
@@ -101,7 +104,8 @@ class LotteryViewModel @JvmOverloads constructor(
     private val repository: LotteryRepositoryContract = LotteryRepository(application),
     private val aiConfigPreferences: AiSettingsStore = AiConfigPreferences(application),
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default
+    private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val recommendationClient: AiRecommendationClient? = null
 ) : AndroidViewModel(application) {
     companion object {
         private val REGEX_NON_DIGIT = Regex("[^0-9]+")
@@ -141,6 +145,11 @@ class LotteryViewModel @JvmOverloads constructor(
     private data class RestoredInput(val hearts: Set<Int>, val shrink: Set<Int>, val text: String, val play: Kl8PlayType)
 
     init {
+        _uiState.value = _uiState.value.copy(aiWindowOptions = AiWindowOptions(
+            enabled = savedStateHandle.get<Boolean>("aiWindowEnabled") ?: true,
+            periods = (savedStateHandle.get<Int>("aiWindowPeriods") ?: 50).coerceIn(1, 1000),
+            strategy = runCatching { WindowStrategy.valueOf(savedStateHandle.get<String>("aiWindowStrategy") ?: "BALANCED") }.getOrDefault(WindowStrategy.BALANCED)
+        ))
         val restoredType = runCatching { LotteryType.valueOf(savedStateHandle.get<String>("type") ?: "SSQ") }.getOrDefault(LotteryType.SSQ)
         val restoredHearts = savedStateHandle.get<IntArray>("hearts")?.toSet().orEmpty()
         val restoredText = savedStateHandle.get<String>("collected").orEmpty()
@@ -833,15 +842,27 @@ class LotteryViewModel @JvmOverloads constructor(
         )
     }
 
+    fun updateAiWindowOptions(options: AiWindowOptions) {
+        if (options.periods !in 1..1000) return
+        clearAiResult()
+        savedStateHandle["aiWindowEnabled"] = options.enabled
+        savedStateHandle["aiWindowPeriods"] = options.periods
+        savedStateHandle["aiWindowStrategy"] = options.strategy.name
+        _uiState.value = _uiState.value.copy(aiWindowOptions = options)
+    }
+
     fun runAiAnalysis(mode: AiAnalysisMode, betCount: Int = 3) {
         val state = _uiState.value
         if (state.isParsingCollectedText) {
             _uiState.value = state.copy(aiError = "他人号码正在解析，请稍后再发起推荐")
             return
         }
-        val analysis = state.analysis
-        if (analysis == null) {
+        if (state.recordsDesc.isEmpty() || state.isLoading) {
             _uiState.value = state.copy(aiError = "尚未加载到当前彩种分析数据")
+            return
+        }
+        if (betCount !in 1..20) {
+            _uiState.value = state.copy(aiError = "推荐注数须为1~20")
             return
         }
         if (state.aiConfig.apiKey.isBlank()) {
@@ -854,13 +875,19 @@ class LotteryViewModel @JvmOverloads constructor(
         aiJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isAiLoading = true, aiError = null, aiResult = null)
             try {
-                val result = aiService.generateRecommendation(
-                    config = state.aiConfig, lotteryType = state.currentType, analysis = analysis,
+                val facts = withContext(computeDispatcher) {
+                    val context = coroutineContext
+                    AiAnalysisFactsBuilder.prepare(state.currentType, state.recordsDesc, state.nextIssueTarget, state.aiWindowOptions) { context.ensureActive() }
+                }
+                ensureActive()
+                val request = AiRecommendationRequest(
+                    config = state.aiConfig, lotteryType = state.currentType, analysis = facts.analysis,
                     targetNextIssue = state.nextIssueTarget, mode = mode, userSelection = state.myHeartBalls,
                     topOtherBalls = state.frequencyResult.sortedByFreq, topOtherBlues = state.frequencyResult.sortedBluesByFreq,
                     otherBets = state.frequencyResult.parsedBets, otherCompleteBets = state.frequencyResult.parsedCompleteBets,
-                    betCount = betCount, kl8PlayType = state.kl8PlayType
+                    betCount = betCount, kl8PlayType = state.kl8PlayType, windowContext = facts.windowContext
                 )
+                val result = (recommendationClient ?: aiService).generateRecommendation(request)
                 if (generation != aiGeneration || _uiState.value.currentType != state.currentType) return@launch
                 _uiState.value = _uiState.value.copy(aiResult = result.getOrNull(), aiError = result.exceptionOrNull()?.message)
             } catch (e: CancellationException) { throw e }
@@ -881,7 +908,10 @@ class LotteryViewModel @JvmOverloads constructor(
         if (betIndex in result.recommendedBets.indices) {
             val (reds, blues) = result.recommendedBets[betIndex]
             val playSuffix = if (result.lotteryType == LotteryType.KL8 && result.kl8PlayType != null) "-${result.kl8PlayType.title}" else ""
-            val strategy = "AI大模型[${_uiState.value.aiConfig.provider.title}]-${result.mode.title}${playSuffix}#${betIndex + 1}"
+            val provenance = result.windowContext?.let {
+                "频次v1/${it.strategy.title}/${it.stats.requestedPeriods}期(实${it.stats.sampleCount})/${it.stats.firstIssue}-${it.stats.lastIssue}"
+            } ?: "未启用历史频次/截止${result.baseIssue}"
+            val strategy = "AIv2[${result.providerName}/${result.modelName}]-${result.mode.title}${playSuffix}/$provenance#${betIndex + 1}"
             val target = result.targetIssue.ifBlank { _uiState.value.nextIssueTarget }
             savePredictionRecord(
                 redBalls = reds,

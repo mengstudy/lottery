@@ -22,12 +22,72 @@ class LotteryViewModelTest {
     private val models=mutableListOf<LotteryViewModel>()
     @Before fun setup(){Dispatchers.setMain(dispatcher)}
     @After fun cleanup(){models.forEach{it.viewModelScope.cancel()};Dispatchers.resetMain()}
-    private fun model(repo:FakeRepository=FakeRepository(),handle:SavedStateHandle=SavedStateHandle()):LotteryViewModel =
+    private fun model(repo:FakeRepository=FakeRepository(),handle:SavedStateHandle=SavedStateHandle(),client:AiRecommendationClient?=null):LotteryViewModel =
         LotteryViewModel(Application(),handle,repo,object:AiSettingsStore {
             override fun getAiConfig()=AiConfig(apiKey="offline-test")
             override fun saveAiConfig(config:AiConfig){}
             override fun selectProviderPreset(provider:AiProvider)=AiConfig(provider=provider)
-        },dispatcher,dispatcher).also{models.add(it)}
+        },dispatcher,dispatcher,client).also{models.add(it)}
+
+    @Test fun aiUsesLatestRetainedFactsAndPersistsOriginalModelAndWindow()=runTest {
+        val repo=FakeRepository()
+        var captured:AiRecommendationRequest?=null
+        val client=object:AiRecommendationClient {
+            override suspend fun generateRecommendation(request:AiRecommendationRequest):Result<AiRecommendationResult> {
+                captured=request
+                return Result.success(AiRecommendationResult(request.mode,request.targetNextIssue,"offline","offline",
+                    listOf((1..6).toList() to listOf(1)),"offline",request.lotteryType,
+                    requestedCount=request.betCount,parsedCount=1,windowContext=request.windowContext,
+                    baseIssue=request.analysis.issue,providerName="captured-provider",modelName="snapshot-model"))
+            }
+        }
+        val vm=model(repo,client=client);advanceUntilIdle()
+        vm.updateAiWindowOptions(AiWindowOptions(periods=100))
+        vm.runAiAnalysis(AiAnalysisMode.FULL_RECOMMEND,3);advanceUntilIdle()
+        assertEquals("2026123",captured!!.analysis.issue)
+        assertEquals(100,captured!!.windowContext!!.stats.requestedPeriods)
+        assertEquals(1,captured!!.windowContext!!.stats.sampleCount)
+        vm.saveAiBetToPrediction(0)
+        val draft=vm.uiState.value.pendingPredictions.single()
+        assertTrue(draft.strategy.contains("captured-provider/snapshot-model"))
+        assertTrue(draft.strategy.contains("100期(实1)"))
+        assertEquals(PredictionKind.SINGLE,draft.kind)
+        assertTrue(repo.saved.isEmpty())
+    }
+
+    @Test fun changedAiWindowCancelsAndRejectsLateResponseAndRestoresSettings()=runTest {
+        val gate=CompletableDeferred<Unit>()
+        var captured:AiRecommendationRequest?=null
+        val client=object:AiRecommendationClient {
+            override suspend fun generateRecommendation(request:AiRecommendationRequest):Result<AiRecommendationResult> {
+                captured=request
+                withContext(NonCancellable){gate.await()}
+                return Result.success(AiRecommendationResult(request.mode,request.targetNextIssue,"late","late",emptyList(),"late"))
+            }
+        }
+        val handle=SavedStateHandle()
+        val vm=model(handle=handle,client=client);advanceUntilIdle()
+        vm.runAiAnalysis(AiAnalysisMode.FULL_RECOMMEND);runCurrent()
+        assertNotNull(captured);assertTrue(vm.uiState.value.isAiLoading)
+        vm.updateAiWindowOptions(AiWindowOptions(periods=30,strategy=com.lottery.analyzer.data.engine.WindowStrategy.CONSECUTIVE))
+        gate.complete(Unit);advanceUntilIdle()
+        assertNull(vm.uiState.value.aiResult);assertFalse(vm.uiState.value.isAiLoading)
+        val restored=model(handle=handle);advanceUntilIdle()
+        assertEquals(vm.uiState.value.aiWindowOptions,restored.uiState.value.aiWindowOptions)
+    }
+
+    @Test fun kl8RequestHasNoWindowFactsEvenWhenWindowSettingIsEnabled()=runTest {
+        var captured:AiRecommendationRequest?=null
+        val client=object:AiRecommendationClient {
+            override suspend fun generateRecommendation(request:AiRecommendationRequest):Result<AiRecommendationResult> {
+                captured=request;return Result.failure(IllegalStateException("offline"))
+            }
+        }
+        val vm=model(client=client);advanceUntilIdle();vm.switchLotteryType(LotteryType.KL8);advanceUntilIdle()
+        vm.runAiAnalysis(AiAnalysisMode.FULL_RECOMMEND);advanceUntilIdle()
+        assertEquals(LotteryType.KL8,captured!!.lotteryType);assertNull(captured!!.windowContext)
+        assertFalse(vm.uiState.value.isAiLoading)
+    }
 
     @Test fun clearedInputCannotBeRestoredByOldParser()=runTest {
         val vm=model();advanceUntilIdle()

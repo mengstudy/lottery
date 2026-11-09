@@ -1,5 +1,31 @@
 package com.lottery.analyzer.data.model
 
+import com.lottery.analyzer.data.engine.WindowFrequencyStats
+import com.lottery.analyzer.data.engine.WindowStrategy
+
+data class AiWindowOptions(val enabled: Boolean = true, val periods: Int = 50, val strategy: WindowStrategy = WindowStrategy.BALANCED)
+data class AiWindowContext(val stats: WindowFrequencyStats, val strategy: WindowStrategy)
+
+data class AiRecommendationRequest(
+    val config: AiConfig,
+    val lotteryType: LotteryType,
+    val analysis: IssueAnalysis,
+    val targetNextIssue: String,
+    val mode: AiAnalysisMode,
+    val userSelection: Set<Int>,
+    val topOtherBalls: List<Pair<Int, Int>> = emptyList(),
+    val topOtherBlues: List<Pair<Int, Int>> = emptyList(),
+    val otherBets: List<List<Int>> = emptyList(),
+    val otherCompleteBets: List<Pair<List<Int>, List<Int>>> = emptyList(),
+    val betCount: Int = 3,
+    val kl8PlayType: Kl8PlayType = Kl8PlayType.XUAN_TEN,
+    val windowContext: AiWindowContext? = null
+)
+
+interface AiRecommendationClient {
+    suspend fun generateRecommendation(request: AiRecommendationRequest): Result<AiRecommendationResult>
+}
+
 /**
  * 支持的 AI 平台预设
  */
@@ -81,5 +107,12 @@ data class AiRecommendationResult(
     val recommendedBets: List<Pair<List<Int>, List<Int>>>, // (红球, 蓝球)
     val strategySummary: String,
     val lotteryType: LotteryType = LotteryType.SSQ,
-    val kl8PlayType: Kl8PlayType? = null
+    val kl8PlayType: Kl8PlayType? = null,
+    val requestedCount: Int = 0,
+    val parsedCount: Int = 0,
+    val rejectionReasons: Map<String, Int> = emptyMap(),
+    val windowContext: AiWindowContext? = null,
+    val baseIssue: String = "",
+    val providerName: String = "",
+    val modelName: String = ""
 )

@@ -5,6 +5,9 @@ import com.google.gson.JsonObject
 import com.lottery.analyzer.data.model.AiAnalysisMode
 import com.lottery.analyzer.data.model.AiConfig
 import com.lottery.analyzer.data.model.AiRecommendationResult
+import com.lottery.analyzer.data.model.AiRecommendationRequest
+import com.lottery.analyzer.data.model.AiRecommendationClient
+import com.lottery.analyzer.data.model.AiWindowContext
 import com.lottery.analyzer.data.model.IssueAnalysis
 import com.lottery.analyzer.data.model.Kl8PlayType
 import com.lottery.analyzer.data.model.LotteryType
@@ -35,7 +38,7 @@ import kotlin.coroutines.resumeWithException
  * AI 大模型服务层，支持所有兼容 OpenAI /v1/chat/completions 规范的平台
  * (包括 DeepSeek, SiliconFlow, 阿里通义千问, OpenAI 以及自定义中转)
  */
-class AiLotteryService {
+class AiLotteryService : AiRecommendationClient {
     private val gson = Gson()
     private val client = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
@@ -146,20 +149,20 @@ class AiLotteryService {
     /**
      * 生成 AI 模拟选号与分析
      */
-    suspend fun generateRecommendation(
-        config: AiConfig,
-        lotteryType: LotteryType,
-        analysis: IssueAnalysis,
-        targetNextIssue: String,
-        mode: AiAnalysisMode,
-        userSelection: Set<Int>,
-        topOtherBalls: List<Pair<Int, Int>> = emptyList(),
-        topOtherBlues: List<Pair<Int, Int>> = emptyList(),
-        otherBets: List<List<Int>> = emptyList(),
-        otherCompleteBets: List<Pair<List<Int>, List<Int>>> = emptyList(),
-        betCount: Int = 3,
-        kl8PlayType: Kl8PlayType = Kl8PlayType.XUAN_TEN
-    ): Result<AiRecommendationResult> = withContext(Dispatchers.IO) {
+    override suspend fun generateRecommendation(request: AiRecommendationRequest): Result<AiRecommendationResult> = withContext(Dispatchers.IO) {
+        val input = request
+        val config = input.config
+        val lotteryType = input.lotteryType
+        val analysis = input.analysis
+        val targetNextIssue = input.targetNextIssue
+        val mode = input.mode
+        val userSelection = input.userSelection
+        val topOtherBalls = input.topOtherBalls
+        val topOtherBlues = input.topOtherBlues
+        val otherBets = input.otherBets
+        val otherCompleteBets = input.otherCompleteBets
+        val betCount = input.betCount
+        val kl8PlayType = input.kl8PlayType
         val startTime = System.currentTimeMillis()
         val endpoint = normalizeEndpointUrl(config.baseUrl)
         AppLogger.i(
@@ -168,6 +171,11 @@ class AiLotteryService {
         )
 
         try {
+            require(betCount in 1..20) { "推荐注数须为1~20" }
+            require(analysis.lotteryType == lotteryType) { "分析彩种不匹配" }
+            input.windowContext?.let {
+                require(it.stats.type == lotteryType && it.stats.lastIssue == analysis.issue) { "频次与遗漏分析截止期不一致" }
+            }
             if (config.apiKey.isBlank()) {
                 AppLogger.w(TAG, "AI推演终止: 未配置 API Key")
                 return@withContext Result.failure(IllegalStateException("请先配置并保存 AI API Key"))
@@ -184,23 +192,26 @@ class AiLotteryService {
                 otherBets = otherBets,
                 otherCompleteBets = otherCompleteBets,
                 betCount = betCount,
-                kl8PlayType = kl8PlayType
+                kl8PlayType = kl8PlayType,
+                windowContext = input.windowContext
             )
             AppLogger.d(TAG, "已构建提示词，长度: ${prompt.length} 字符")
 
             val systemPrompt = """
-                你是一位深耕国家级概率统计学、离散组合数学与彩票数字规律的资深分析专家。
+                你是帮助整理彩票开奖统计和选号偏好的分析助手。
                 请基于用户提供的历史开奖数据、形态指标、0~9+各层遗漏号码池以及他人偏好，进行严谨客观的推演。
                 【执行要求】：
                 1. 声明彩票开奖属于随机事件，推演分析仅基于统计学形态与离散数学偏好，请理性购彩。
                 2. 论述逻辑请务必【简明扼要，直奔主题】（建议控制在 200 字以内），重点说明奇偶比、和值及 0~9+ 遗漏层级的动态平衡。
-                3. 【心水融合防撞号铁律】：若执行“心水与他人频次融合”模式，所推荐的每注号码必须严格避开他人已购号码（1行1注），与他人任意单注的重复号码个数必须严格控制在 1 ~ 4 个之间（即每注与他人单注的重复度为 1-4 码，最多允许重复 4 个，严禁超出 4 个），保持选号方案的差异性与独立性！
+                3. 融合模式按本次任务列明的他人单注交集范围执行；它是用户的差异化偏好，不代表改变中奖概率。
                 4. 随后严格输出标准结构的推荐号码，确保格式严格对齐如下：
                    【推荐第1注】红球: 02 08 15 21 26 30 + 蓝球: 06
                    【推荐第2注】红球: 05 12 18 23 27 33 + 蓝球: 14
                    若是快乐8（无蓝球）：
                    【推荐第1注】红球: 03 08 15 22 29 35 48 57 66 79
                 5. 最后附带一句话【策略总结】概括本次选号的核心偏好（如：心水为胆+防撞号微重合2码+温冷回补等）。
+                6. 历史开奖频次、当前遗漏、用户心水、他人选号频次是不同维度，不可互相替代。历史出现率不等于下期中奖概率，不得声称提高胜率。
+                7. 每注必须是当前彩种合法单注，无越界、无重复；本次分区或连号硬约束必须满足。若约束无法兼容，请说明原因，不得伪造统计或修改约束。
             """.trimIndent()
 
             val requestBodyMap = mapOf(
@@ -214,7 +225,7 @@ class AiLotteryService {
             )
 
             val jsonString = gson.toJson(requestBodyMap)
-            val request = Request.Builder()
+            val httpRequest = Request.Builder()
                 .url(endpoint)
                 .addHeader("Authorization", "Bearer ${config.apiKey.trim()}")
                 .addHeader("Content-Type", "application/json")
@@ -223,7 +234,7 @@ class AiLotteryService {
 
             AppLogger.i(TAG, "请求正在发送至云端，等待模型推理...")
             ensureActive()
-            val (code, body) = client.newCall(request).executeAndReadString()
+            val (code, body) = client.newCall(httpRequest).executeAndReadString()
             val elapsed = System.currentTimeMillis() - startTime
             AppLogger.i(TAG, "收到云端推演响应: HTTP $code, 耗时: ${elapsed}ms")
 
@@ -247,38 +258,13 @@ class AiLotteryService {
                 return@withContext Result.failure(Exception("解析大模型响应失败: ${e.message}\n原始响应: $body"))
             }
 
-            // 从生成文本中抽取推荐号码 (动态按彩种与快乐8玩法核对红球数)
-            val extractedBets = parseRecommendedBets(content, lotteryType, kl8PlayType)
+            val validation = withContext(Dispatchers.Default) {
+                val context = coroutineContext
+                AiBetGuardrails.parse(content, input) { context.ensureActive() }
+            }
+            val validBets = validation.bets
             val strategySummary = parseStrategySummary(content)
-
-            // 动态计算防撞号重叠度合规范围 (快乐8小玩法如选二、选三时按实际选号上限调整)
-            val maxAllowedOverlap = if (lotteryType == LotteryType.KL8) {
-                minOf(4, maxOf(1, kl8PlayType.pickCount - 1))
-            } else {
-                4
-            }
-
-            // 过滤出有效红球注 (排除红球为空的行，双重防护防止纯蓝球行导致全部被过滤)
-            val validOtherRedBets = otherBets.filter { it.isNotEmpty() }
-            // 统计并硬拦截防撞号违规注
-            val validBets = if (mode == AiAnalysisMode.HEART_FUSION && validOtherRedBets.isNotEmpty()) {
-                extractedBets.filterIndexed { idx, bet ->
-                    val overlaps = validOtherRedBets.map { oBet -> bet.first.count { it in oBet } }
-                    val isCompliant = overlaps.all { it in 1..maxAllowedOverlap }
-                    val minO = overlaps.minOrNull() ?: 0
-                    val maxO = overlaps.maxOrNull() ?: 0
-                    if (!isCompliant) {
-                        AppLogger.w(TAG, "第 ${idx + 1} 注防撞拦截剔除: 与他人各注交集区间为 [${minO}..${maxO}]码 (合规区间: 1..$maxAllowedOverlap 码)")
-                    } else {
-                        AppLogger.i(TAG, "第 ${idx + 1} 注防撞合规: 与他人各注交集区间为 [${minO}..${maxO}]码 (合规区间: 1..$maxAllowedOverlap 码)")
-                    }
-                    isCompliant
-                }
-            } else {
-                extractedBets
-            }
-
-            AppLogger.i(TAG, "推演成功完成! 耗时: ${elapsed}ms, 校验后保留 ${validBets.size} 注推荐, 策略: $strategySummary")
+            AppLogger.i(TAG, "AI核验完成：请求${betCount}注，识别${validation.parsedCount}组，保留${validBets.size}注，剔除原因=${validation.rejectionReasons}")
 
             Result.success(
                 AiRecommendationResult(
@@ -289,7 +275,14 @@ class AiLotteryService {
                     recommendedBets = validBets,
                     strategySummary = strategySummary,
                     lotteryType = lotteryType,
-                    kl8PlayType = if (lotteryType == LotteryType.KL8) kl8PlayType else null
+                    kl8PlayType = if (lotteryType == LotteryType.KL8) kl8PlayType else null,
+                    requestedCount = betCount,
+                    parsedCount = validation.parsedCount,
+                    rejectionReasons = validation.rejectionReasons,
+                    windowContext = input.windowContext,
+                    baseIssue = analysis.issue,
+                    providerName = config.provider.title,
+                    modelName = config.modelName.trim()
                 )
             )
         } catch (e: CancellationException) {
@@ -321,16 +314,18 @@ class AiLotteryService {
         otherBets: List<List<Int>> = emptyList(),
         otherCompleteBets: List<Pair<List<Int>, List<Int>>> = emptyList(),
         betCount: Int,
-        kl8PlayType: Kl8PlayType = Kl8PlayType.XUAN_TEN
+        kl8PlayType: Kl8PlayType = Kl8PlayType.XUAN_TEN,
+        windowContext: AiWindowContext? = null
     ): String {
         val sb = StringBuilder()
+        val maxOverlap = if (lotteryType == LotteryType.KL8) minOf(4, maxOf(1, kl8PlayType.pickCount - 1)) else 4
         if (lotteryType == LotteryType.KL8) {
             sb.appendLine("【彩种与玩法】: 快乐8 - ${kl8PlayType.title} (单注选 ${kl8PlayType.pickCount} 码，${kl8PlayType.desc})")
         } else {
             sb.appendLine("【彩种】: ${lotteryType.title} (${lotteryType.subtitle})")
         }
         sb.appendLine("【分析基准期】: 第 ${analysis.issue} 期 (开奖日: ${analysis.drawDate})")
-        sb.appendLine("【下期目标期号】: 第 $targetNextIssue 期")
+        sb.appendLine("【下期目标期号】: ${targetNextIssue.ifBlank { "待用户核对官方期号，不能自行编造" }}")
         sb.appendLine("【最新开出号码】:")
         sb.append("  红球: ").appendLine(analysis.redBalls.joinToString(" ") { String.format("%02d", it) })
         if (analysis.blueBalls.isNotEmpty()) {
@@ -397,6 +392,8 @@ class AiLotteryService {
             }
         }
 
+        windowContext?.let { sb.appendLine(AiWindowPrompt.build(it)) }
+
         sb.appendLine("\n【本次任务模式】: ${mode.title}")
         when (mode) {
             AiAnalysisMode.FULL_RECOMMEND -> {
@@ -406,12 +403,12 @@ class AiLotteryService {
                 sb.appendLine("请执行【心水与他人频次融合推演】，严格遵循以下规则生成 $betCount 注方案：")
                 sb.appendLine("1. 【心水胆码核心】：以用户自选的心水红球作为核心骨架与优先保留号码。")
                 if (otherBets.isNotEmpty()) {
-                    sb.appendLine("2. 【严格防撞号与重复度约束 (1-4码)】：")
+                    sb.appendLine("2. 【严格防撞号与重复度约束 (1-$maxOverlap 码)】：")
                     sb.appendLine("   - 重点避开上面列出的他人每一注号码（1行1注），严禁整注雷同或高度撞车！")
-                    sb.appendLine("   - 所推荐的任意一注号码，与上述他人已购的【任意单注】之间的重复号码个数，必须严格控制在 1 ~ 4 个之间（即每注与他人的重复度为 1-4 码，最多不超过 4 码）！")
-                    sb.appendLine("3. 【其余号码补充】：除 1~4 码适度借鉴他人号码以及用户心水球外，其余空缺号码必须从他人未涉足的优质 0~9+ 遗漏层级（如活跃温号、深冷回补号）中精选补齐，确保组合兼顾热度与独特性！")
+                    sb.appendLine("   - 所推荐的任意一注号码，与上述他人已购的【任意单注】之间的重复号码个数，必须严格控制在 1 ~ $maxOverlap 个之间（即每注与他人的重复度为 1-$maxOverlap 码，最多不超过 $maxOverlap 码）！")
+                    sb.appendLine("3. 【其余号码补充】：除 1~$maxOverlap 码适度借鉴他人号码以及用户心水球外，其余空缺号码必须从他人未涉足的优质 0~9+ 遗漏层级（如活跃温号、深冷回补号）中精选补齐，确保组合兼顾热度与独特性！")
                 } else if (topOtherBalls.isNotEmpty()) {
-                    sb.appendLine("2. 【严格防撞号约束 (1-4码)】：所推荐的每注号码与他人号码的重叠数必须严格控制在 1 ~ 4 码之间，严禁超过 4 码！")
+                    sb.appendLine("2. 【严格防撞号约束 (1-$maxOverlap 码)】：所推荐的每注号码与他人号码的重叠数必须严格控制在 1 ~ $maxOverlap 码之间，严禁超过 $maxOverlap 码！")
                     sb.appendLine("3. 其余号码从他人未选的优质 0~9+ 遗漏层级中补充。")
                 } else {
                     sb.appendLine("2. 结合下期 0~9+ 遗漏层级与冷热号轮动，补齐其余红蓝球。")
@@ -421,71 +418,12 @@ class AiLotteryService {
                 }
             }
             AiAnalysisMode.DIAGNOSE_SELECTION -> {
-                sb.appendLine("请对用户当前自选的心水号码进行全方位健康度诊断（分析和值、奇偶比、连号及遗漏层级结构是否合理），随后给出 1~2 注微调优化方案。")
+                sb.appendLine("请对用户当前自选的心水号码进行全方位健康度诊断（分析和值、奇偶比、连号及遗漏层级结构是否合理），随后给出 $betCount 注微调优化方案。")
             }
         }
 
         sb.appendLine("\n请在 200 字内简述推演思路，随后立即输出标准格式推荐号码与一句话【策略总结】。")
         return sb.toString()
-    }
-
-    /**
-     * 解析推荐号码
-     */
-    private fun parseRecommendedBets(
-        text: String,
-        lotteryType: LotteryType,
-        kl8PlayType: Kl8PlayType = Kl8PlayType.XUAN_TEN
-    ): List<Pair<List<Int>, List<Int>>> {
-        val result = mutableListOf<Pair<List<Int>, List<Int>>>()
-        val lines = text.lines()
-        val expectedRed = if (lotteryType == LotteryType.KL8) kl8PlayType.pickCount else lotteryType.redCount
-        val expectedBlue = lotteryType.blueCount
-        val structuredRegex = Pattern.compile(
-            """【推荐第\s*\d+\s*注】.*?红球[:：]\s*([\d\s,，]+?)(?:\s*\+\s*蓝球[:：]\s*([\d\s,，]+))?${'$'}""",
-            Pattern.CASE_INSENSITIVE
-        )
-
-        for (line in lines) {
-            val matcher = structuredRegex.matcher(line.trim())
-            if (matcher.find()) {
-                val redPart = matcher.group(1).orEmpty()
-                val bluePart = matcher.group(2).orEmpty()
-                val redBalls = extractNumbers(redPart, 1, lotteryType.maxRedNumber).distinct().sorted()
-                val blueBalls = if (lotteryType.maxBlueNumber > 0) {
-                    extractNumbers(bluePart, 1, lotteryType.maxBlueNumber).distinct().sorted()
-                } else emptyList()
-
-                // 核心合法性校验：严格核实红蓝球个数精准无误，号码不重复
-                if (redBalls.size == expectedRed && blueBalls.size == expectedBlue) {
-                    result.add(Pair(redBalls, blueBalls))
-                }
-            }
-        }
-
-        // 备用兜底：如果模型没有按【推荐第X注】格式输出，按行通用提取类似 "02 08 15 21 26 30 + 06" 的行
-        if (result.isEmpty()) {
-            for (line in lines) {
-                if (line.contains("+")) {
-                    val parts = line.split("+")
-                    val reds = extractNumbers(parts[0], 1, lotteryType.maxRedNumber).distinct().sorted()
-                    val blues = if (parts.size > 1 && lotteryType.maxBlueNumber > 0) {
-                        extractNumbers(parts[1], 1, lotteryType.maxBlueNumber).distinct().sorted()
-                    } else emptyList()
-
-                    if (reds.size == expectedRed && blues.size == expectedBlue) {
-                        result.add(Pair(reds, blues))
-                    }
-                } else if (lotteryType == LotteryType.KL8) {
-                    val reds = extractNumbers(line, 1, lotteryType.maxRedNumber).distinct().sorted()
-                    if (reds.size == expectedRed) {
-                        result.add(Pair(reds, emptyList()))
-                    }
-                }
-            }
-        }
-
-        return result
     }
 
     /**
@@ -503,16 +441,4 @@ class AiLotteryService {
         return "AI 大模型多维统计综合推演"
     }
 
-    private fun extractNumbers(text: String, min: Int, max: Int): List<Int> {
-        val numPattern = Pattern.compile("""\b\d{1,2}\b""")
-        val matcher = numPattern.matcher(text)
-        val nums = mutableSetOf<Int>()
-        while (matcher.find()) {
-            val n = matcher.group().toIntOrNull()
-            if (n != null && n in min..max) {
-                nums.add(n)
-            }
-        }
-        return nums.toList()
-    }
 }

@@ -316,6 +316,8 @@ fun ToolsScreen(
                 otherBallSet = uiState.frequencyResult.frequencyMap.keys,
                 otherBets = uiState.frequencyResult.parsedBets,
                 kl8PlayType = uiState.kl8PlayType,
+                windowOptions = uiState.aiWindowOptions,
+                onWindowOptionsChange = viewModel::updateAiWindowOptions,
                 onKl8PlayTypeChange = { viewModel.setKl8PlayType(it) },
                 onOpenSettings = { viewModel.setAiSettingsDialogVisible(true) },
                 onRunAnalysis = { mode, count -> viewModel.runAiAnalysis(mode, count) },
