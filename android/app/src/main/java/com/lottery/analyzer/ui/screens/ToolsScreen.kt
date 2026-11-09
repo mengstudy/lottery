@@ -286,6 +286,24 @@ fun ToolsScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
+            com.lottery.analyzer.ui.components.FrequencyStrategyCard(
+                type = uiState.currentType,
+                records = uiState.recordsDesc,
+                dataLoading = uiState.isLoading,
+                onSave = { output, index ->
+                    if (output.stats.type == uiState.currentType) {
+                        val bet = output.bets[index]
+                        viewModel.savePredictionRecord(
+                            redBalls = bet.redBalls,
+                            blueBalls = bet.blueBalls,
+                            strategy = output.description(index),
+                            blueSource = com.lottery.analyzer.data.model.BlueSource.GENERATED_CONFIRMED
+                        )
+                    }
+                }
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+
             // 3. 🤖 AI 大模型智能推演工作台
             AiLotteryWorkstationCard(
                 lotteryType = uiState.currentType,
