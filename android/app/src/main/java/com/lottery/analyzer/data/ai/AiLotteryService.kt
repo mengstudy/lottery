@@ -224,12 +224,16 @@ class AiLotteryService : AiRecommendationClient {
                 return@withContext Result.failure(Exception("解析大模型响应失败: ${e.message}\n原始响应: $body"))
             }
 
-            val validation = withContext(Dispatchers.Default) {
+            val selectionResult = if (input.selectionContext == null) null else withContext(Dispatchers.Default) {
                 val context = coroutineContext
-                AiBetGuardrails.parse(content, input) { context.ensureActive() }
+                AiCandidateSelectionParser.parse(content,input){context.ensureActive()}
+            }
+            val validation = selectionResult?.validation ?: withContext(Dispatchers.Default) {
+                val context = coroutineContext
+                AiBetGuardrails.parse(content,input){context.ensureActive()}
             }
             val validBets = validation.bets
-            val strategySummary = parseStrategySummary(content)
+            val strategySummary = selectionResult?.summary ?: parseStrategySummary(content)
             AppLogger.i(TAG, "AI核验完成：请求${betCount}注，识别${validation.parsedCount}组，保留${validBets.size}注，剔除原因=${validation.rejectionReasons}")
 
             Result.success(
@@ -237,7 +241,7 @@ class AiLotteryService : AiRecommendationClient {
                     mode = mode,
                     targetIssue = targetNextIssue,
                     rawResponse = content,
-                    analysisText = content,
+                    analysisText = selectionResult?.explanation ?: content,
                     recommendedBets = validBets,
                     strategySummary = strategySummary,
                     lotteryType = lotteryType,
@@ -251,7 +255,9 @@ class AiLotteryService : AiRecommendationClient {
                     modelName = config.modelName.trim(),
                     candidateAudit = validation.entries,
                     finishReason = runCatching { gson.fromJson(body, JsonObject::class.java).getAsJsonArray("choices")[0].asJsonObject.get("finish_reason")?.takeUnless { it.isJsonNull }?.asString }.getOrNull(),
-                    responseReceivedAtEpoch = responseReceivedAt
+                    responseReceivedAtEpoch = responseReceivedAt,
+                    memoryContext = input.memoryContext,
+                    selectionContext = input.selectionContext
                 )
             )
         } catch (e: CancellationException) {

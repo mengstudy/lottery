@@ -89,6 +89,8 @@ fun AiLotteryWorkstationCard(
     aiError: String?,
     heartBallCount: Int,
     collectionError: String?,
+    memoryOptions: com.lottery.analyzer.data.model.AiMemoryOptions,
+    onMemoryOptionsChange: (com.lottery.analyzer.data.model.AiMemoryOptions) -> Unit,
     otherBallSet: Set<Int> = emptySet(),
     otherBets: List<List<Int>> = emptyList(),
     kl8PlayType: Kl8PlayType = Kl8PlayType.XUAN_TEN,
@@ -407,6 +409,8 @@ fun AiLotteryWorkstationCard(
                 }
             }
 
+            AiMemoryOptionsCard(memoryOptions,onMemoryOptionsChange)
+
             // 3. 注数与执行栏
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -578,6 +582,11 @@ fun AiLotteryWorkstationCard(
                     if (aiResult.rejectionReasons.isNotEmpty()) Text(
                         "剔除：" + aiResult.rejectionReasons.entries.joinToString("；") { "${it.key} ${it.value}组" }, fontSize = 11.sp, color = TextSecondary)
                     Text("请求模型：${aiResult.providerName}/${aiResult.modelName} · 分析截止 ${aiResult.baseIssue}", fontSize = 11.sp, color = TextSecondary)
+                    aiResult.memoryContext?.let { memory ->
+                        Text("记忆截止${memory.asOfIssue} · 正式${memory.formalIssues}期 · 观察${memory.observationIssues}期\n${memoryPolicyTitle(memory.policyStatus)}",fontSize=11.sp,color=TextSecondary)
+                        Text("候选配额："+memory.weights.entries.joinToString(" / "){"${it.key} ${"%.0f".format(it.value*100)}%"},fontSize=10.sp,color=TextSecondary)
+                    }
+                    aiResult.selectionContext?.let { selection -> Text("本地${selection.candidates.size}组合法候选 → AI选择${aiResult.recommendedBets.size}组；同池随机对照已固定。",fontSize=11.sp,color=TextSecondary) }
                     aiResult.windowContext?.let { context ->
                         Text("${context.strategy.title} · 请求${context.stats.requestedPeriods}期/实取${context.stats.sampleCount}期 · ${context.stats.firstIssue}—${context.stats.lastIssue}", fontSize = 11.sp, color = TextSecondary)
                         if (context.stats.excludedCount > 0) Text("统计排除无效或重复记录 ${context.stats.excludedCount} 条", fontSize = 11.sp, color = TextSecondary)

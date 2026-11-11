@@ -36,6 +36,12 @@ object DatabaseHelper {
                     }
                     PredictionSchema.upgrades(columns).forEach(database::execSQL)
                     MemoryArchiveSchema.statements.forEach(database::execSQL)
+                    for (table in MemoryArchiveSchema.additions.keys) {
+                        val archiveColumns = database.rawQuery("PRAGMA table_info($table)", null).use { cursor ->
+                            buildSet { while (cursor.moveToNext()) add(cursor.getString(cursor.getColumnIndexOrThrow("name"))) }
+                        }
+                        MemoryArchiveSchema.upgrades(table, archiveColumns).forEach(database::execSQL)
+                    }
                     val quarantined = database.compileStatement(PredictionSchema.QUARANTINE_INVALID_TYPES).use { it.executeUpdateDelete() }
                     if (quarantined > 0) Log.w(TAG, "已隔离 $quarantined 条未知彩种旧记录")
                 }

@@ -4,10 +4,25 @@ import com.lottery.analyzer.data.model.*
 
 /** Single prompt builder used both for the sent request and its credential-free archive. */
 object AiPromptBuilder {
-    fun build(r: AiRecommendationRequest): AiPromptContent = AiPromptContent(
-        system(), userPrompt(r.lotteryType, r.analysis, r.targetNextIssue, r.mode, r.userSelection,
-            r.topOtherBalls, r.topOtherBlues, r.otherBets, r.otherCompleteBets, r.betCount, r.kl8PlayType, r.windowContext)
-    )
+    fun build(r: AiRecommendationRequest): AiPromptContent {
+        var prompt=userPrompt(r.lotteryType,r.analysis,r.targetNextIssue,r.mode,r.userSelection,r.topOtherBalls,
+            r.topOtherBlues,r.otherBets,r.otherCompleteBets,r.betCount,r.kl8PlayType,r.windowContext)
+        if(r.selectionContext!=null)prompt=prompt.substringBefore("\n请在 200 字内简述推演思路")
+        r.memoryContext?.let { memory ->
+            prompt+="\n【逐期记忆摘要：仅截止${memory.asOfIssue}，窗口${memory.historyPeriods}期】\n"+
+                "匹配当前规则的正式样本${memory.formalIssues}期；观察记录${memory.observationIssues}期不作为成绩证据。\n"+
+                "历史请求${memory.requestedGroups}组，校验保留${memory.retainedGroups}组；这仅表示合规率。\n"+
+                memory.formalSummary+"\n策略状态=${memory.policyStatus}；配额=${memory.weights}。不得把历史命中描述为下期中奖概率。\n"
+        }
+        val selection=r.selectionContext?:return AiPromptContent(system(),prompt)
+        prompt=prompt+"\n【本地候选：只能选编号，不能改写号码】\n"+selection.candidates.joinToString("\n") {
+            "[${it.id}] ${it.reds.joinToString(" ")}"+if(it.blues.isNotEmpty())" + ${it.blues.joinToString(" ")}" else ""
+        }+"\n"+selection.candidates.joinToString("\n") {
+            "[${it.id}] ${it.strategy} 和${it.sum} 奇${it.odd}:${it.reds.size-it.odd} 区${it.zones.joinToString(":")} 连${it.consecutive} 心水重${it.heartOverlap} 他人重${it.minOtherOverlap}~${it.maxOtherOverlap}"
+        }+"\n在符合心水等软偏好的候选之间，优先降低已选各组的号码重叠，说明多样性取舍；不把多样性说成提高中奖概率。"+
+            "\n请选择${r.betCount}个不同编号，仅返回JSON：{\"candidate_ids\":[\"实际候选编号\"],\"explanation\":\"简短依据\",\"strategy_summary\":\"偏好总结\"}。数组必须使用上方真实编号。"
+        return AiPromptContent("你是候选方案比较助手。只能从给定候选中选择编号，不得生成新号码或修改候选。遵守用户硬约束；只能引用提供的统计。诊断模式也只能选择已有候选并作简短解释。只输出要求的JSON，不使用Markdown，不声称提高中奖概率。",prompt)
+    }
     private fun system(): String = """
                 你是帮助整理彩票开奖统计和选号偏好的分析助手。
                 请基于用户提供的历史开奖数据、形态指标、0~9+各层遗漏号码池以及他人偏好，进行严谨客观的推演。

@@ -49,7 +49,7 @@ class AiBetGuardrailsTest {
         val malformed = "【推荐第1注】红球: 01 02 03 04 05 06 99 + 蓝球: 01\n01 02 03 04 05 06 + 01"
         assertTrue(AiBetGuardrails.parse(malformed, request()).bets.isEmpty())
         assertTrue(AiBetGuardrails.parse("和值建议 01 02 03 04 05 06 + 01", request()).bets.isEmpty())
-        assertEquals(1, AiBetGuardrails.parse("01,02,03,04,05,06 + 01", request()).bets.size)
+        assertTrue(AiBetGuardrails.parse("01,02,03,04,05,06 + 01", request()).bets.isEmpty())
         assertTrue(AiBetGuardrails.parse("01 02 03 04 05 06 + 01 + 02", request()).bets.isEmpty())
     }
 

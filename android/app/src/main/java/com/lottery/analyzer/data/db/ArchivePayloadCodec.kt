@@ -102,7 +102,32 @@ object ArchivePayloadCodec {
         "otherRedFrequency" to value.otherRedFrequency.map { obj("number" to it.first, "count" to it.second) },
         "otherBlueFrequency" to value.otherBlueFrequency.map { obj("number" to it.first, "count" to it.second) },
         "collectedGroups" to groups(value.collectedGroups), "kl8PlayType" to value.kl8PlayType,
-        "requestedCount" to value.requestedCount))
+        "requestedCount" to value.requestedCount,
+        "memoryContext" to value.memoryContext?.let(::memory),
+        "selectionContext" to value.selectionContext?.let(::selection)))
+
+    private fun memory(value: LearningContext) = obj("asOfIssue" to value.asOfIssue,"historyPeriods" to value.historyPeriods,
+        "formalIssues" to value.formalIssues,"observationIssues" to value.observationIssues,"evaluatedPlans" to value.evaluatedPlans,
+        "requestedGroups" to value.requestedGroups,"retainedGroups" to value.retainedGroups,"formalSummary" to value.formalSummary,
+        "weights" to value.weights,"policyKey" to value.policyKey,"policyStatus" to value.policyStatus,
+        "policyVersion" to value.policyVersion,"evidenceDigest" to value.evidenceDigest)
+    private fun selection(value: CandidateSelectionContext) = obj("seed" to value.seed,"baselineOrder" to value.baselineOrder,
+        "generatorVersion" to value.generatorVersion,"evaluationProtocol" to value.evaluationProtocol,"basis" to value.basis,
+        "candidates" to value.candidates.map { obj("id" to it.id,"strategy" to it.strategy,"reds" to it.reds,"blues" to it.blues,
+            "sum" to it.sum,"odd" to it.odd,"zones" to it.zones,"consecutive" to it.consecutive,"heartOverlap" to it.heartOverlap,
+            "minOtherOverlap" to it.minOtherOverlap,"maxOtherOverlap" to it.maxOtherOverlap) })
+
+    fun selectionFromFacts(raw: String): CandidateSelectionContext? {
+        val value=decodeFacts(raw).getAsJsonObject("selectionContext")?:return null
+        val candidates=value.getAsJsonArray("candidates").map { element -> val c=element.asJsonObject
+            LocalCandidate(c["id"].asString,c["strategy"].asString,numbers(c["reds"]),numbers(c["blues"]),c["sum"].asInt,c["odd"].asInt,
+                numbers(c["zones"]),c["consecutive"].asInt,c["heartOverlap"].asInt,c["minOtherOverlap"].asInt,c["maxOtherOverlap"].asInt)
+        }
+        require(candidates.size in 1..20&&candidates.map{it.id}.distinct().size==candidates.size)
+        val order=value.getAsJsonArray("baselineOrder").map{it.asString}
+        require(order.size==candidates.size&&order.toSet()==candidates.map{it.id}.toSet())
+        return CandidateSelectionContext(value["seed"].asLong,candidates,order,value["generatorVersion"].asString,value["evaluationProtocol"].asString,value["basis"].asString)
+    }
 
     /** Returns normalized protocol v2 JSON; never reflects into current business model classes. */
     fun decodeFacts(raw: String): JsonObject {

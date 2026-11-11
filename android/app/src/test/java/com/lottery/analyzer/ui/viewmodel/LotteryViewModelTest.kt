@@ -43,6 +43,38 @@ class LotteryViewModelTest {
         assertEquals(1,archive.collections.size)
     }
 
+    @Test fun memoryAndCandidateOptionsPersistAndFrozenSelectionReachesClient()=runTest {
+        var captured:AiRecommendationRequest?=null
+        val client=object:AiRecommendationClient {
+            override suspend fun generateRecommendation(request:AiRecommendationRequest):Result<AiRecommendationResult> {
+                captured=request;return Result.failure(Exception("offline"))
+            }
+        }
+        val handle=SavedStateHandle();val vm=model(handle=handle,client=client);advanceUntilIdle()
+        val options=AiMemoryOptions(enabled=true,twoStage=true,adaptive=false,historyPeriods=60,candidateCount=12)
+        vm.updateAiMemoryOptions(options);vm.runAiAnalysis(AiAnalysisMode.FULL_RECOMMEND);advanceUntilIdle()
+        assertEquals(60,captured!!.memoryContext!!.historyPeriods)
+        assertEquals(12,captured!!.selectionContext!!.candidates.size)
+        assertNotNull(captured!!.preparedPrompt)
+        val restored=model(handle=handle);advanceUntilIdle();assertEquals(options,restored.uiState.value.aiMemoryOptions)
+        captured=null
+        vm.updateAiMemoryOptions(options.copy(enabled=false,twoStage=false));vm.runAiAnalysis(AiAnalysisMode.FULL_RECOMMEND);advanceUntilIdle()
+        assertNotNull(captured);assertNull(captured!!.memoryContext);assertNull(captured!!.selectionContext)
+    }
+
+    @Test fun invalidCollectorRowsBlockArchiveAndModelRatherThanUsingValidSubset()=runTest {
+        var calls=0
+        val client=object:AiRecommendationClient {override suspend fun generateRecommendation(request:AiRecommendationRequest):Result<AiRecommendationResult>{calls++;return Result.failure(Exception("unexpected"))}}
+        val archive=FakeArchiveStore();val vm=model(client=client,archive=archive);advanceUntilIdle()
+        vm.updateCollectedBallsText("01 02 03 04 05 06 + 01\n01 99 + 01");advanceUntilIdle()
+        assertEquals(1,vm.uiState.value.frequencyResult.validGroupsCount)
+        assertEquals(1,vm.uiState.value.frequencyResult.rejectedRows)
+        vm.runAiAnalysis(AiAnalysisMode.FULL_RECOMMEND);advanceUntilIdle()
+        vm.saveCollectedBatch("2026124",ArchiveOrigin.REALTIME_RECOMMEND,"");advanceUntilIdle()
+        assertEquals(0,calls);assertTrue(archive.collections.isEmpty())
+        assertTrue(vm.uiState.value.aiError!!.contains("未通过校验"))
+    }
+
     @Test fun oversizedDraftClearsOldStatsStopsParsingAndBlocksNewAiOrManualConfirmation()=runTest {
         var calls=0
         val client=object:AiRecommendationClient {override suspend fun generateRecommendation(request:AiRecommendationRequest):Result<AiRecommendationResult> {calls++;return Result.failure(Exception("not expected"))}}
@@ -238,6 +270,9 @@ class LotteryViewModelTest {
     }
 
     private class FakeArchiveStore:MemoryArchiveStore {
+        override fun settle(type:LotteryType,check:()->Unit)=SettlementResult()
+        override fun performance(type:LotteryType,periods:Int,cutoffIssue:String?)=PerformanceReport()
+        override fun learning(request:AiRecommendationRequest,options:AiMemoryOptions)=LearningContext(request.analysis.issue,options.historyPeriods,0,0,0,0,0,"",emptyMap(),"","INSUFFICIENT_DATA","","")
         val collections=mutableListOf<CollectionSnapshot>()
         override fun begin(start:ArchiveRunStart){}
         override fun complete(id:String,result:AiRecommendationResult,at:Long)=result.recommendedBets.indices.map{"$id:$it"}

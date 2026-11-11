@@ -27,9 +27,9 @@ fun MemoryArchiveCard(viewModel: LotteryViewModel, state: LotteryUiState) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("逐期记忆档案", fontWeight = FontWeight.Bold)
             Text("收集批次 ${state.memoryArchive.batchCount} · AI请求 ${state.memoryArchive.runCount} · 原始方案 ${state.memoryArchive.originalCount} · 确认版本 ${state.memoryArchive.finalCount}", fontSize = 12.sp)
-            Text("第一阶段仅归档；自动开奖结算和动态调整将在后续接入。缺少可信时间依据的记录不进入正式成绩。", fontSize = 11.sp)
+            Text("同步开奖或刷新后自动结算。缺少可信时间依据的记录仅作观察，不进入正式成绩与自动调权。", fontSize = 11.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { collecting = true }, enabled = CollectionInputPolicy.error(state.collectedBallsText) == null && !state.isParsingCollectedText && state.frequencyResult.parsedCompleteBets.isNotEmpty()) { Text("记录收集批次") }
+                OutlinedButton(onClick = { collecting = true }, enabled = CollectionInputPolicy.error(state.collectedBallsText,state.frequencyResult) == null && !state.isParsingCollectedText && state.frequencyResult.parsedCompleteBets.isNotEmpty()) { Text("记录收集批次") }
                 TextButton(onClick = viewModel::refreshMemoryArchive) { Text("刷新") }
             }
             state.memoryArchiveError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
@@ -41,6 +41,7 @@ fun MemoryArchiveCard(viewModel: LotteryViewModel, state: LotteryUiState) {
                     Text("${run.targetIssue.ifBlank { "目标待确认" }} · ${statusTitle(run.status)} · 保留${run.accepted}/${run.requested}注", fontSize = 12.sp)
                 }
             }
+            MemoryPerformanceCard(viewModel,state)
         }
     }
     if (collecting) AlertDialog(
@@ -72,9 +73,10 @@ fun MemoryArchiveCard(viewModel: LotteryViewModel, state: LotteryUiState) {
                     if (detail.finishReason == "length") Text("响应达到长度上限，保留了通过核验的完整方案。", fontSize = 12.sp)
                     Text("原始方案与确认版本分别留档；最多展示200条。", fontSize = 11.sp)
                     detail.entries.forEachIndexed { index, entry ->
-                        Text("${index + 1}. ${if (entry.stage == "AI_ORIGINAL") "AI原始" else if (entry.edited) "用户修改确认" else "用户确认"} · ${entry.rejection ?: "已通过校验"}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        val stage=when(entry.stage){"LOCAL_CANDIDATE"->"本地候选";"AI_ORIGINAL"->"AI原始";else->if(entry.edited)"用户修改确认" else "用户确认"}
+                        Text("${index + 1}. $stage · ${entry.rejection ?: "已通过校验"}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         Text((entry.reds?.joinToString(" ") ?: "无法解析") + entry.blues?.takeIf { it.isNotEmpty() }?.joinToString(" ", prefix = " + ").orEmpty(), fontSize = 12.sp)
-                        Text(if (entry.timing == ArchiveTiming.POST_DRAW.name) "时间资格：开奖后记录" else "时间资格：证据不足，不计正式成绩", fontSize = 11.sp)
+                        Text(when(entry.timing){ArchiveTiming.CONFIRMED_PRE_DRAW.name->"时间资格：已确认开奖前";ArchiveTiming.POST_DRAW.name->"时间资格：开奖后记录";else->"时间资格：证据不足，不计正式成绩"}, fontSize = 11.sp)
                     }
                 }
             }, confirmButton = { TextButton(onClick = { viewModel.showMemoryArchiveRun(null) }) { Text("关闭") } })

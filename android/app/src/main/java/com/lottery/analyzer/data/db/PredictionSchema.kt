@@ -1,7 +1,7 @@
 package com.lottery.analyzer.data.db
 
 object PredictionSchema {
-    const val VERSION = 3
+    const val VERSION = 4
     val additions = linkedMapOf(
         "prediction_kind" to "TEXT NOT NULL DEFAULT 'LEGACY_UNCONFIRMED'",
         "kl8_play_type" to "TEXT",

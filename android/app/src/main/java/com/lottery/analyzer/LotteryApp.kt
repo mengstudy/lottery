@@ -33,6 +33,7 @@ class LotteryApp : Application() {
                 val archive = AndroidMemoryArchiveStore(this@LotteryApp)
                 archive.recoverInterrupted(ArchiveProcessSession.id, System.currentTimeMillis())
                 archive.prunePayloads()
+                com.lottery.analyzer.data.model.LotteryType.values().forEach { archive.settle(it) }
             } catch (e: Exception) {
                 AppLogger.w("MemoryArchive", "归档恢复未完成，后续请求会再次校验存储", e)
             }

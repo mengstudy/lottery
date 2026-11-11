@@ -17,10 +17,10 @@ object AiAnalysisFactsBuilder {
         val filtered = records.filter {
             checkCancelled()
             val issue = issueValue(it.issue)
-            issue != null && (cutoff == null || issue <= cutoff)
+            issue == null || cutoff == null || issue <= cutoff
         }
         val valid = filtered.filter { record ->
-            record.redBalls.size == type.redCount && record.redBalls.distinct().size == type.redCount &&
+            issueValue(record.issue) != null && record.redBalls.size == type.redCount && record.redBalls.distinct().size == type.redCount &&
                 record.redBalls.all { it in 1..type.maxRedNumber } && record.blueBalls.size == type.blueCount &&
                 record.blueBalls.distinct().size == type.blueCount && record.blueBalls.all { it in 1..type.maxBlueNumber }
         }

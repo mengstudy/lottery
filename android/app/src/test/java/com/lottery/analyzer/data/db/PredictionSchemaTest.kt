@@ -5,6 +5,55 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PredictionSchemaTest {
+    @Test fun v3ToV4PreservesArchivesAndSeedsAreNotInventedForLegacyRows() {
+        Class.forName("org.sqlite.JDBC")
+        DriverManager.getConnection("jdbc:sqlite::memory:").use { db->
+            val sql=MemoryArchiveStoreTest.JdbcSql(db)
+            javaClass.getResource("/memory-archive-v3.sql")!!.readText().split(';').filter{it.isNotBlank()}.forEach{sql.execute(it)}
+            sql.execute("PRAGMA user_version=3")
+            sql.execute("INSERT INTO collected_batches(id,lottery_type,target_issue,origin,source_label,created_at_epoch,snapshot_hash,parser_version,raw_text,groups_json,declared_kind,timing_status,timing_evidence) VALUES('old-batch','SSQ','2026001','REALTIME_RECOMMEND','old',1,'hash','collected-v1','original','[{\"first\":[1,2],\"second\":[3]}]','REFERENCE','INSUFFICIENT_TIMING_EVIDENCE','old')")
+            val before=sql.query("SELECT * FROM collected_batches").single()
+            fun upgrade()=sql.transaction {
+                MemoryArchiveSchema.statements.forEach{sql.execute(it)}
+                MemoryArchiveSchema.additions.keys.forEach{table->
+                    val columns=sql.query("PRAGMA table_info($table)").map{it["name"]!!}.toSet()
+                    MemoryArchiveSchema.upgrades(table,columns).forEach{sql.execute(it)}
+                }
+                sql.execute("PRAGMA user_version=${PredictionSchema.VERSION}")
+            }
+            upgrade();upgrade()
+            val after=sql.query("SELECT * FROM collected_batches").single()
+            assertEquals(before,after.filterKeys{it in before.keys})
+            assertNull(after["baseline_seed"]);assertNull(after["evaluation_protocol"])
+            assertEquals("4",sql.query("PRAGMA user_version").single()["user_version"])
+            assertTrue(sql.query("SELECT * FROM archive_evaluations").isEmpty())
+            val version=sql.query("SELECT version FROM archive_source_versions").single()["version"]!!.toInt()
+            sql.execute("UPDATE collected_batches SET evaluation_protocol='eval-v1'")
+            assertEquals(version+1,sql.query("SELECT version FROM archive_source_versions").single()["version"]!!.toInt())
+            assertEquals(listOf(listOf(1,2) to listOf(3)),SqlMemoryArchiveStore(sql).collection("old-batch")!!.groups)
+        }
+    }
+
+    @Test fun failedV4MigrationRollsBackNewTablesColumnsAndVersion() {
+        Class.forName("org.sqlite.JDBC")
+        DriverManager.getConnection("jdbc:sqlite::memory:").use { db->
+            val sql=MemoryArchiveStoreTest.JdbcSql(db)
+            javaClass.getResource("/memory-archive-v3.sql")!!.readText().split(';').filter{it.isNotBlank()}.forEach{sql.execute(it)}
+            sql.execute("PRAGMA user_version=3")
+            try {
+                sql.transaction<Unit> {
+                    MemoryArchiveSchema.statements.forEach{sql.execute(it)}
+                    MemoryArchiveSchema.upgrades("collected_batches",sql.query("PRAGMA table_info(collected_batches)").map{it["name"]!!}.toSet()).forEach{sql.execute(it)}
+                    error("interrupted")
+                }
+                fail()
+            }catch(_:IllegalStateException){}
+            assertEquals("3",sql.query("PRAGMA user_version").single()["user_version"])
+            assertFalse(sql.query("PRAGMA table_info(collected_batches)").any{it["name"]=="baseline_seed"})
+            assertTrue(sql.query("SELECT name FROM sqlite_master WHERE name='archive_evaluations'").isEmpty())
+        }
+    }
+
     @Test fun v2ToV3PreservesEveryOldColumnIdAndLegacyFlag() {
         Class.forName("org.sqlite.JDBC")
         DriverManager.getConnection("jdbc:sqlite::memory:").use { connection ->

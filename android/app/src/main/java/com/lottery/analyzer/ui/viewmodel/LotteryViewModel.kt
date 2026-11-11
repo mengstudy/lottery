@@ -15,6 +15,7 @@ import com.lottery.analyzer.data.db.MemoryArchiveStore
 import com.lottery.analyzer.data.db.AndroidMemoryArchiveStore
 import com.lottery.analyzer.data.db.ArchiveProcessSession
 import com.lottery.analyzer.data.engine.WindowStrategy
+import com.lottery.analyzer.data.engine.CandidatePoolEngine
 import com.lottery.analyzer.data.db.AiConfigPreferences
 import com.lottery.analyzer.data.model.AiAnalysisMode
 import com.lottery.analyzer.data.model.AiConfig
@@ -86,6 +87,10 @@ data class LotteryUiState(
     val isAiLoading: Boolean = false,
     val aiResult: AiRecommendationResult? = null,
     val aiWindowOptions: AiWindowOptions = AiWindowOptions(),
+    val aiMemoryOptions: AiMemoryOptions = AiMemoryOptions(),
+    val performanceReport: PerformanceReport = PerformanceReport(),
+    val settlementResult: SettlementResult = SettlementResult(),
+    val isSettlingArchive: Boolean = false,
     val memoryArchive: MemoryArchiveOverview = MemoryArchiveOverview(),
     val memoryArchiveError: String? = null,
     val memoryArchiveDetail: ArchiveRunDetail? = null,
@@ -117,17 +122,6 @@ class LotteryViewModel @JvmOverloads constructor(
     private val recommendationClient: AiRecommendationClient? = null,
     private val archiveStore: MemoryArchiveStore = AndroidMemoryArchiveStore(application)
 ) : AndroidViewModel(application) {
-    companion object {
-        private val REGEX_NON_DIGIT = Regex("[^0-9]+")
-        private val REGEX_BRACKETED_BET_LABEL = Regex("""[【\[\(（][^】\]\)）]*第?\s*\d+\s*注?[^】\]\)）]*[】\]\)）]""")
-        private val REGEX_GENERAL_BRACKETS = Regex("""【[^】]*】|\[[^\]]*\]""")
-        private val REGEX_STARTING_BET_PREFIX = Regex("""^(?:他人)?第?\s*\d+\s*注[:：\s]*""")
-        private val REGEX_STARTING_BET_NUM = Regex("""^注\s*\d+[:：\s]*""")
-        private val REGEX_STARTING_ORDER_PUNCT = Regex("""^\d+[\.\、\)]\s*""")
-        private val REGEX_RED_LABEL = Regex("""(?:红球|前区|红)[:：]?""")
-        private val REGEX_BLUE_LABEL = Regex("""(?:蓝球|后区|蓝)[:：]?""")
-        private val REGEX_BLUE_REPLACE_PLUS = Regex("""(?:蓝球|后区)[:：]?""")
-    }
 
     private val aiService = AiLotteryService()
     private val _uiState = MutableStateFlow(LotteryUiState())
@@ -159,6 +153,12 @@ class LotteryViewModel @JvmOverloads constructor(
     private data class RestoredInput(val hearts: Set<Int>, val shrink: Set<Int>, val text: String, val play: Kl8PlayType)
 
     init {
+        _uiState.value = _uiState.value.copy(aiMemoryOptions = AiMemoryOptions(
+            enabled=savedStateHandle.get<Boolean>("memoryEnabled")?:true,
+            twoStage=savedStateHandle.get<Boolean>("twoStage")?:true,
+            adaptive=savedStateHandle.get<Boolean>("adaptive")?:true,
+            historyPeriods=(savedStateHandle.get<Int>("memoryPeriods")?:30).coerceIn(1,200),
+            candidateCount=(savedStateHandle.get<Int>("candidateCount")?:16).coerceIn(12,20)))
         _uiState.value = _uiState.value.copy(aiWindowOptions = AiWindowOptions(
             enabled = savedStateHandle.get<Boolean>("aiWindowEnabled") ?: true,
             periods = (savedStateHandle.get<Int>("aiWindowPeriods") ?: 50).coerceIn(1, 1000),
@@ -222,6 +222,7 @@ class LotteryViewModel @JvmOverloads constructor(
             _uiState.value = _uiState.value.copy(
                 currentType = type,
                 memoryArchive = MemoryArchiveOverview(), memoryArchiveDetail = null, memoryCollectionDetail = null, memoryArchiveError = null,
+                performanceReport = PerformanceReport(), settlementResult = SettlementResult(), isSettlingArchive = false,
                 isLoading = true,
                 errorMessage = null,
                 myHeartBalls = emptySet(),
@@ -436,104 +437,7 @@ class LotteryViewModel @JvmOverloads constructor(
             delay(200) // 200ms 防抖
             ensureActive()
 
-            val maxRed = currentType.maxRedNumber
-            val maxBlue = currentType.maxBlueNumber
-            val freqMap = mutableMapOf<Int, Int>()
-            val blueFreqMap = mutableMapOf<Int, Int>()
-            val parsedBets = mutableListOf<List<Int>>()
-            val parsedCompleteBets = mutableListOf<Pair<List<Int>, List<Int>>>()
-            var validGroups = 0
-
-            fun parseSegment(segment: String, maxVal: Int): List<Int> {
-                val trimmed = segment.trim()
-                if (trimmed.isBlank() || maxVal <= 0) return emptyList()
-
-                val tokens = trimmed.split(REGEX_NON_DIGIT).filter { it.isNotBlank() }
-                val result = mutableListOf<Int>()
-                for (token in tokens) {
-                    if (token.length <= 2) {
-                        val num = token.toIntOrNull()
-                        if (num != null && num in 1..maxVal && num !in result) {
-                            result.add(num)
-                        }
-                    } else {
-                        var i = 0
-                        while (i + 1 < token.length) {
-                            val twoDigits = token.substring(i, i + 2)
-                            val num = twoDigits.toIntOrNull()
-                            if (num != null && num in 1..maxVal && num !in result) {
-                                result.add(num)
-                            }
-                            i += 2
-                        }
-                    }
-                }
-                return result.sorted()
-            }
-
-            val lineList = text.split("\n")
-            for ((idx, line) in lineList.withIndex()) {
-                if (idx % 50 == 0) {
-                    ensureActive()
-                }
-                val trimmedLine = line.trim()
-                if (trimmedLine.isBlank()) continue
-
-                var cleanLine = trimmedLine
-                    .replace(REGEX_BRACKETED_BET_LABEL, " ")
-                    .replace(REGEX_GENERAL_BRACKETS, " ")
-                    .trim()
-
-                cleanLine = cleanLine
-                    .replaceFirst(REGEX_STARTING_BET_PREFIX, "")
-                    .replaceFirst(REGEX_STARTING_BET_NUM, "")
-                    .replaceFirst(REGEX_STARTING_ORDER_PUNCT, "")
-                    .trim()
-
-                cleanLine = cleanLine
-                    .replace(REGEX_RED_LABEL, "")
-                    .replace(REGEX_BLUE_REPLACE_PLUS, "+")
-                    .trim()
-
-                val rowReds = mutableListOf<Int>()
-                val rowBlues = mutableListOf<Int>()
-                if (cleanLine.contains("+")) {
-                    val parts = cleanLine.split("+")
-                    val redPart = parts.firstOrNull().orEmpty()
-                    val bluePart = parts.drop(1).joinToString(" ")
-                    rowReds.addAll(parseSegment(redPart, maxRed))
-                    rowBlues.addAll(parseSegment(bluePart, maxBlue))
-                } else {
-                    rowReds.addAll(parseSegment(cleanLine, maxRed))
-                }
-
-                if (rowReds.isNotEmpty() || rowBlues.isNotEmpty()) {
-                    validGroups++
-                    if (rowReds.isNotEmpty()) {
-                        parsedBets.add(rowReds)
-                    }
-                    parsedCompleteBets.add(Pair(rowReds, rowBlues))
-                    for (r in rowReds) {
-                        freqMap[r] = (freqMap[r] ?: 0) + 1
-                    }
-                    for (b in rowBlues) {
-                        blueFreqMap[b] = (blueFreqMap[b] ?: 0) + 1
-                    }
-                }
-            }
-
-            ensureActive()
-            val sortedReds = freqMap.toList().sortedByDescending { it.second }
-            val sortedBlues = blueFreqMap.toList().sortedByDescending { it.second }
-            val parseResult = FrequencyAnalysisResult(
-                validGroupsCount = validGroups,
-                frequencyMap = freqMap,
-                sortedByFreq = sortedReds,
-                parsedBets = parsedBets,
-                blueFrequencyMap = blueFreqMap,
-                sortedBluesByFreq = sortedBlues,
-                parsedCompleteBets = parsedCompleteBets
-            )
+            val parseResult = com.lottery.analyzer.data.engine.CollectedNumbersParser.parse(text,currentType){ensureActive()}
 
             // 核心修复 (P2-1)：后台计算完毕后切回主线程校验代数并更新，杜绝竞态覆盖清空
             withContext(Dispatchers.Main.immediate) {
@@ -649,7 +553,7 @@ class LotteryViewModel @JvmOverloads constructor(
         val pending = _uiState.value.pendingPredictions
         if (pending.isEmpty()) return
         if (pending.any { it.archiveParentEntryId == null }) {
-            CollectionInputPolicy.error(_uiState.value.collectedBallsText)?.let {
+            CollectionInputPolicy.error(_uiState.value.collectedBallsText,_uiState.value.frequencyResult)?.let {
                 _uiState.value = _uiState.value.copy(predictionSaveError = it)
                 return
             }
@@ -770,6 +674,7 @@ class LotteryViewModel @JvmOverloads constructor(
                 )
                 recalcHeartDistributions()
                 loadPredictions()
+                refreshMemoryArchive()
                 if (fullHistory) loadTrendMatrixData()
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
@@ -871,6 +776,7 @@ class LotteryViewModel @JvmOverloads constructor(
      * 设置快乐8所选玩法 (选一 至 选十)
      */
     fun setKl8PlayType(playType: Kl8PlayType) {
+        if(playType!=_uiState.value.kl8PlayType) clearAiResult()
         savedStateHandle["play"] = playType.name
         _uiState.value = _uiState.value.copy(
             kl8PlayType = playType,
@@ -889,7 +795,7 @@ class LotteryViewModel @JvmOverloads constructor(
 
     fun runAiAnalysis(mode: AiAnalysisMode, betCount: Int = 3) {
         val state = _uiState.value
-        CollectionInputPolicy.error(state.collectedBallsText)?.let {
+        CollectionInputPolicy.error(state.collectedBallsText,state.frequencyResult)?.let {
             _uiState.value = state.copy(aiError = it)
             return
         }
@@ -920,13 +826,24 @@ class LotteryViewModel @JvmOverloads constructor(
                     AiAnalysisFactsBuilder.prepare(state.currentType, state.recordsDesc, state.nextIssueTarget, state.aiWindowOptions) { context.ensureActive() }
                 }
                 ensureActive()
-                val request = AiRecommendationRequest(
+                val baseRequest = AiRecommendationRequest(
                     config = state.aiConfig, lotteryType = state.currentType, analysis = facts.analysis,
                     targetNextIssue = state.nextIssueTarget, mode = mode, userSelection = state.myHeartBalls,
                     topOtherBalls = state.frequencyResult.sortedByFreq, topOtherBlues = state.frequencyResult.sortedBluesByFreq,
                     otherBets = state.frequencyResult.parsedBets, otherCompleteBets = state.frequencyResult.parsedCompleteBets,
                     betCount = betCount, kl8PlayType = state.kl8PlayType, windowContext = facts.windowContext
                 )
+                val memory=if(state.aiMemoryOptions.enabled) withContext(ioDispatcher) {
+                    val context=coroutineContext
+                    archiveStore.settle(state.currentType){context.ensureActive()}
+                    archiveStore.learning(baseRequest,state.aiMemoryOptions)
+                } else null
+                val contextual=baseRequest.copy(memoryContext=memory)
+                val selection=if(state.aiMemoryOptions.twoStage) withContext(computeDispatcher) {
+                    val context=coroutineContext
+                    CandidatePoolEngine.generate(contextual,state.aiMemoryOptions.candidateCount,kotlin.random.Random.nextLong()){context.ensureActive()}
+                } else null
+                val request=contextual.copy(selectionContext=selection)
                 val archived = ArchivedAiRecommendationClient(recommendationClient ?: aiService, archiveStore,
                     ArchiveProcessSession.id, ioDispatcher)
                 val result = archived.generate(request, collectionSnapshot(state, state.nextIssueTarget))
@@ -954,7 +871,8 @@ class LotteryViewModel @JvmOverloads constructor(
             val provenance = result.windowContext?.let {
                 "频次v1/${it.strategy.title}/${it.stats.requestedPeriods}期(实${it.stats.sampleCount})/${it.stats.firstIssue}-${it.stats.lastIssue}"
             } ?: "未启用历史频次/截止${result.baseIssue}"
-            val strategy = "AIv2[${result.providerName}/${result.modelName}]-${result.mode.title}${playSuffix}/$provenance#${betIndex + 1}"
+            val aiVersion=if(result.selectionContext==null)"AIv2" else "AIv3"
+            val strategy = "$aiVersion[${result.providerName}/${result.modelName}]-${result.mode.title}${playSuffix}/$provenance#${betIndex + 1}"
             val target = result.targetIssue.ifBlank { _uiState.value.nextIssueTarget }
             savePredictionRecord(
                 redBalls = reds,
@@ -991,12 +909,12 @@ class LotteryViewModel @JvmOverloads constructor(
     private fun collectionSnapshot(state: LotteryUiState, target: String): CollectionSnapshot? {
         if (state.collectedBallsText.isBlank() && state.frequencyResult.parsedCompleteBets.isEmpty()) return null
         return CollectionSnapshot(state.currentType, target, state.collectedBallsText,
-            state.frequencyResult.parsedCompleteBets.map { it.first.toList() to it.second.toList() })
+            state.frequencyResult.parsedCompleteBets.map { it.first.toList() to it.second.toList() }, parserVersion=state.frequencyResult.parserVersion)
     }
 
     fun saveCollectedBatch(targetIssue: String, origin: ArchiveOrigin, source: String) {
         val state = _uiState.value
-        CollectionInputPolicy.error(state.collectedBallsText)?.let { feedback(it); return }
+        CollectionInputPolicy.error(state.collectedBallsText,state.frequencyResult)?.let { feedback(it); return }
         if (state.isParsingCollectedText) { feedback("号码正在解析，请稍后归档"); return }
         val snapshot = collectionSnapshot(state, targetIssue.trim())
         if (snapshot == null || snapshot.groups.isEmpty()) { feedback("请先输入并解析收集号码"); return }
@@ -1014,20 +932,39 @@ class LotteryViewModel @JvmOverloads constructor(
     fun refreshMemoryArchive() {
         val type = _uiState.value.currentType
         val generation = ++archiveRefreshGeneration
+        val periods=_uiState.value.aiMemoryOptions.historyPeriods
         archiveRefreshJob?.cancel()
         archiveRefreshJob = viewModelScope.launch {
+            _uiState.value=_uiState.value.copy(isSettlingArchive=true)
             try {
-                val overview = withContext(ioDispatcher) { archiveStore.overview(type) }
+                val archiveData = withContext(ioDispatcher) {
+                    val context=coroutineContext
+                    val result=archiveStore.settle(type){context.ensureActive()}
+                    Triple(archiveStore.overview(type),archiveStore.performance(type,periods),result)
+                }
                 if (generation == archiveRefreshGeneration && _uiState.value.currentType == type) {
-                    _uiState.value = _uiState.value.copy(memoryArchive = overview, memoryArchiveError = null)
+                    _uiState.value = _uiState.value.copy(memoryArchive = archiveData.first, performanceReport=archiveData.second,
+                        settlementResult=archiveData.third, memoryArchiveError = null)
                 }
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) {
                 if (generation == archiveRefreshGeneration && _uiState.value.currentType == type) {
-                    _uiState.value = _uiState.value.copy(memoryArchive = MemoryArchiveOverview(), memoryArchiveError = "归档读取失败，请检查存储后刷新")
+                    _uiState.value = _uiState.value.copy(memoryArchive = MemoryArchiveOverview(), performanceReport = PerformanceReport(), memoryArchiveError = "归档结算或读取失败，请检查存储后刷新")
                 }
+            } finally {
+                if(generation==archiveRefreshGeneration&&_uiState.value.currentType==type)_uiState.value=_uiState.value.copy(isSettlingArchive=false)
             }
         }
+    }
+
+    fun updateAiMemoryOptions(options:AiMemoryOptions) {
+        if(options.historyPeriods !in 1..200||options.candidateCount !in 12..20)return
+        clearAiResult()
+        savedStateHandle["memoryEnabled"]=options.enabled;savedStateHandle["twoStage"]=options.twoStage
+        savedStateHandle["adaptive"]=options.adaptive;savedStateHandle["memoryPeriods"]=options.historyPeriods
+        savedStateHandle["candidateCount"]=options.candidateCount
+        _uiState.value=_uiState.value.copy(aiMemoryOptions=options)
+        refreshMemoryArchive()
     }
 
     fun showMemoryArchiveRun(id: String?) {

@@ -3,6 +3,7 @@ package com.lottery.analyzer.data.db
 import com.google.gson.Gson
 import com.lottery.analyzer.data.model.*
 import java.util.UUID
+import com.lottery.analyzer.data.engine.StableSeed
 
 interface ArchiveSql {
     fun execute(sql: String, args: List<Any?> = emptyList())
@@ -19,11 +20,15 @@ interface MemoryArchiveStore {
     fun overview(type: LotteryType): MemoryArchiveOverview
     fun detail(id: String): ArchiveRunDetail?
     fun collection(id: String): ArchiveCollectionDetail?
+    fun settle(type: LotteryType, check: () -> Unit = {}): SettlementResult
+    fun performance(type: LotteryType, periods: Int = 30, cutoffIssue: String? = null): PerformanceReport
+    fun learning(request: AiRecommendationRequest, options: AiMemoryOptions): LearningContext
 }
 
 /** SQL shared by Android and real SQLite JVM tests. All writes use stable IDs, never REPLACE. */
 class SqlMemoryArchiveStore(
     private val sql: ArchiveSql,
+    private val drawLookup: (LotteryType, List<String>) -> Map<String,LotteryRecord> = { _, _ -> emptyMap() },
     private val knownDraw: (LotteryType, String) -> Boolean = { _, _ -> false }
 ) : MemoryArchiveStore {
     private val gson = Gson()
@@ -49,7 +54,8 @@ class SqlMemoryArchiveStore(
             "target_issue" to snapshot.targetIssue, "origin" to snapshot.origin.name, "source_label" to snapshot.sourceLabel,
             "created_at_epoch" to at, "snapshot_hash" to hash, "parser_version" to snapshot.parserVersion,
             "raw_text" to snapshot.rawText, "groups_json" to json, "declared_kind" to snapshot.declaredKind.name,
-            "play_type" to snapshot.kl8PlayType?.name, "timing_status" to eligibility.name, "timing_evidence" to evidence(eligibility)))
+            "play_type" to snapshot.kl8PlayType?.name, "timing_status" to eligibility.name, "timing_evidence" to evidence(eligibility),
+            "baseline_seed" to StableSeed.of(id), "evaluation_protocol" to "eval-v1"))
         id
     }
 
@@ -67,7 +73,23 @@ class SqlMemoryArchiveStore(
             "created_at_epoch" to start.createdAt, "updated_at_epoch" to start.createdAt,
             "provider_name" to start.provider, "endpoint_host" to start.endpointHost, "model_name" to start.model,
             "temperature" to start.temperature, "requested_count" to start.facts.requestedCount,
-            "collection_batch_id" to batch, "facts_json" to factsJson, "prompt_version" to "AIv2", "rule_version" to "guardrails-v1"))
+            "collection_batch_id" to batch, "facts_json" to factsJson,
+            "prompt_version" to if(start.facts.selectionContext==null)"AIv2" else "AIv3-selection",
+            "rule_version" to if(start.facts.selectionContext==null)"guardrails-v2" else "selection-v1",
+            "baseline_seed" to StableSeed.of(start.id), "evaluation_protocol" to "eval-v1"))
+        start.facts.selectionContext?.let { selection ->
+            selection.candidates.forEachIndexed { index, candidate ->
+                insert("recommendation_entries", linkedMapOf("id" to UUID.randomUUID().toString(),"run_id" to start.id,
+                    "collection_batch_id" to batch,"lottery_type" to start.lotteryType.name,"target_issue" to start.targetIssue,
+                    "stage" to "LOCAL_CANDIDATE","origin" to start.origin.name,"ordinal" to index+1,
+                    "red_json" to gson.toJson(candidate.reds),"blue_json" to gson.toJson(candidate.blues),
+                    "kind" to PredictionKind.SINGLE.name,"play_type" to start.facts.kl8PlayType?.name,
+                    "blue_source" to BlueSource.GENERATED_CONFIRMED.name,"timing_status" to eligibility.name,"timing_evidence" to evidence(eligibility),
+                    "created_at_epoch" to start.createdAt,"strategy_id" to candidate.strategy,"candidate_id" to candidate.id,
+                    "baseline_order" to selection.baselineOrder.indexOf(candidate.id),"baseline_seed" to StableSeed.of("${start.id}:${candidate.id}"),
+                    "evaluation_protocol" to "eval-v1","policy_key" to ArchiveLearningStore.policyKey(start.facts)))
+            }
+        }
         val prompt = ArchivePayloadCodec.encodePrompt(start.prompt)
         insert("ai_archive_payload", linkedMapOf("run_id" to start.id, "raw_prompt" to prompt.take(65536), "prompt_truncated" to if (prompt.length > 65536) 1 else 0))
     }
@@ -90,16 +112,23 @@ class SqlMemoryArchiveStore(
                 PredictionKind.SINGLE, result.kl8PlayType, BlueSource.PROVIDED))
         }
         for (candidate in audits) {
+            val local = candidate.candidateId?.let { sql.query("SELECT * FROM recommendation_entries WHERE run_id=? AND stage='LOCAL_CANDIDATE' AND candidate_id=?",listOf(id,it)).firstOrNull() }
+            if(candidate.acceptedIndex!=null && run["prompt_version"]=="AIv3-selection") {
+                require(local!=null && local["red_json"]==gson.toJson(candidate.reds) && local["blue_json"]==gson.toJson(candidate.blues)) { "AI返回了候选池之外的号码" }
+            }
             val entryId = UUID.randomUUID().toString()
             insert("recommendation_entries", linkedMapOf("id" to entryId, "run_id" to id,
-                "collection_batch_id" to run["collection_batch_id"], "lottery_type" to type.name,
+                "collection_batch_id" to run["collection_batch_id"], "parent_entry_id" to local?.get("id"), "lottery_type" to type.name,
                 "target_issue" to result.targetIssue, "stage" to "AI_ORIGINAL", "origin" to run["origin"],
                 "ordinal" to candidate.ordinal, "accepted_index" to candidate.acceptedIndex,
                 "red_json" to candidate.reds?.let(gson::toJson), "blue_json" to candidate.blues?.let(gson::toJson),
                 "kind" to PredictionKind.SINGLE.name, "play_type" to result.kl8PlayType?.name,
                 "blue_source" to BlueSource.PROVIDED.name, "rejection_reason" to candidate.rejection,
                 "raw_line" to candidate.rawLine.take(2048), "timing_status" to eligibility.name,
-                "timing_evidence" to evidence(eligibility), "created_at_epoch" to run["created_at_epoch"]!!.toLong(), "response_at_epoch" to at))
+                "timing_evidence" to evidence(eligibility), "created_at_epoch" to run["created_at_epoch"]!!.toLong(), "response_at_epoch" to at,
+                "candidate_id" to candidate.candidateId,"strategy_id" to local?.get("strategy_id"),
+                "baseline_seed" to StableSeed.of("$id:original:${candidate.ordinal}"),"evaluation_protocol" to "eval-v1",
+                "policy_key" to local?.get("policy_key")))
         }
         val status = if (result.recommendedBets.size < run["requested_count"]!!.toInt() || result.finishReason == "length") ArchiveRunStatus.PARTIAL else ArchiveRunStatus.COMPLETED
         sql.execute("UPDATE ai_request_archive SET status=?,response_at_epoch=?,updated_at_epoch=?,parsed_count=?,accepted_count=?,rejection_json=?,finish_reason=?,timing_status=?,timing_evidence=? WHERE id=? AND status='PENDING'",
@@ -137,7 +166,8 @@ class SqlMemoryArchiveStore(
             "kind" to record.kind.name, "play_type" to record.kl8PlayType?.name, "blue_source" to record.blueSource.name,
             "timing_status" to eligibility.name, "timing_evidence" to evidence(eligibility),
             "created_at_epoch" to record.createdAtEpoch, "edited_at_epoch" to (record.archiveEditedAtEpoch ?: record.createdAtEpoch.takeIf { changed }),
-            "confirmed_at_epoch" to record.createdAtEpoch))
+            "confirmed_at_epoch" to record.createdAtEpoch,"strategy_id" to parent?.get("strategy_id"),
+            "baseline_seed" to StableSeed.of(id),"evaluation_protocol" to "eval-v1","policy_key" to parent?.get("policy_key")))
         return id
     }
 
@@ -170,8 +200,20 @@ class SqlMemoryArchiveStore(
     fun prunePayloads(keep: Int = 100) {
         require(keep >= 0)
         sql.execute("""DELETE FROM ai_archive_payload WHERE run_id IN (
-            SELECT id FROM ai_request_archive WHERE status IN ('FAILED','CANCELLED','INTERRUPTED')
+            SELECT r.id FROM ai_request_archive r WHERE status IN ('COMPLETED','PARTIAL','FAILED','CANCELLED','INTERRUPTED')
+            AND (NOT EXISTS(SELECT 1 FROM recommendation_entries e WHERE e.run_id=r.id)
+                OR EXISTS(SELECT 1 FROM archive_draw_heads h JOIN archive_source_versions v
+                    ON h.lottery_type=v.lottery_type AND h.issue=v.issue
+                    WHERE h.lottery_type=r.lottery_type AND h.issue=r.target_issue
+                    AND h.source_digest=CAST(v.version AS TEXT)))
             ORDER BY created_at_epoch DESC LIMIT -1 OFFSET ?)""", listOf(keep))
-        // Successful unsettled plans are protected; Phase 2 will add settled-plan reclamation.
     }
+
+    override fun settle(type: LotteryType, check: () -> Unit): SettlementResult = synchronized(ArchiveLearningStore.lock(type)) {
+        val learning = ArchiveLearningStore(sql)
+        val issues = learning.targets(type)
+        if(issues.isEmpty()) SettlementResult() else learning.settle(type,drawLookup(type,issues),check)
+    }
+    override fun performance(type: LotteryType, periods: Int, cutoffIssue: String?) = ArchiveLearningStore(sql).performance(type,periods,cutoffIssue)
+    override fun learning(request: AiRecommendationRequest, options: AiMemoryOptions) = ArchiveLearningStore(sql).learning(request,options)
 }

@@ -28,10 +28,11 @@ class AndroidArchiveSql(private val db: SQLiteDatabase) : ArchiveSql {
 class AndroidMemoryArchiveStore(context: Context) : MemoryArchiveStore {
     private val app = context.applicationContext
     private fun store(): SqlMemoryArchiveStore = forDatabase(DatabaseHelper.getDatabase(app, "user_predictions.db"))
-    fun forDatabase(db: SQLiteDatabase) = SqlMemoryArchiveStore(AndroidArchiveSql(db)) { type, issue ->
+    fun forDatabase(db: SQLiteDatabase) = SqlMemoryArchiveStore(AndroidArchiveSql(db),
+        drawLookup = { type, issues -> LotteryDao(app).getRecordsByIssues(type, issues) }, knownDraw = { type, issue ->
         val draws = DatabaseHelper.getDatabase(app, type.dbName)
         draws.rawQuery("SELECT 1 FROM lottery_results WHERE issue=? LIMIT 1", arrayOf(issue)).use { it.moveToFirst() }
-    }
+    })
     override fun begin(start: ArchiveRunStart) = store().begin(start)
     override fun complete(id: String, result: AiRecommendationResult, at: Long) = store().complete(id, result, at)
     override fun finish(id: String, status: ArchiveRunStatus, at: Long, category: String) = store().finish(id, status, at, category)
@@ -40,5 +41,8 @@ class AndroidMemoryArchiveStore(context: Context) : MemoryArchiveStore {
     override fun overview(type: LotteryType) = store().overview(type)
     override fun detail(id: String) = store().detail(id)
     override fun collection(id: String) = store().collection(id)
+    override fun settle(type: LotteryType, check: () -> Unit) = store().settle(type, check)
+    override fun performance(type: LotteryType, periods: Int, cutoffIssue: String?) = store().performance(type, periods, cutoffIssue)
+    override fun learning(request: AiRecommendationRequest, options: AiMemoryOptions) = store().learning(request, options)
     fun prunePayloads() = store().prunePayloads()
 }

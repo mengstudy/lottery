@@ -43,7 +43,7 @@ fun FrequencyCompareCard(
     isParsing: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val inputError = CollectionInputPolicy.error(inputText)
+    val inputError = CollectionInputPolicy.error(inputText, analysisResult)
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -94,7 +94,7 @@ fun FrequencyCompareCard(
             }
 
             Text(
-                text = "粘贴他人购买的号码，支持'+'分隔红蓝球（如 010203041212+05 或带空格），系统将自动统计频次",
+                text = "支持两位数连写或空格分隔；有蓝球彩种可用'+'。快乐8请整行用空格分隔，异常行会提示并阻止推荐。",
                 fontSize = 11.sp,
                 color = TextSecondary,
                 modifier = Modifier.padding(start = 14.dp, top = 2.dp, bottom = 10.dp)
@@ -108,7 +108,7 @@ fun FrequencyCompareCard(
                 onValueChange = onInputChange,
                 placeholder = {
                     Text(
-                        "粘贴或输入多行号码 (+号区分红蓝球)，如:\n010203041212+05\n01020305060708+05101216\n01 05 12 18 25 30 + 06",
+                        "粘贴或输入多行号码，如:\n010203041213+05\n01020305060708+05101216\n01 05 12 18 25 30 + 06",
                         fontSize = 12.sp,
                         color = Color(0xFF94A3B8)
                     )

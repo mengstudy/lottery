@@ -133,7 +133,10 @@ data class FrequencyAnalysisResult(
     val parsedBets: List<List<Int>> = emptyList(), // 每行解析出的具体注数红球列表 (兼容旧逻辑)
     val blueFrequencyMap: Map<Int, Int> = emptyMap(), // 蓝球号码 -> 出现次数
     val sortedBluesByFreq: List<Pair<Int, Int>> = emptyList(), // 蓝球按频次降序
-    val parsedCompleteBets: List<Pair<List<Int>, List<Int>>> = emptyList() // 每行解析出的完整(红球, 蓝球)列表
+    val parsedCompleteBets: List<Pair<List<Int>, List<Int>>> = emptyList(), // 每行解析出的完整(红球, 蓝球)列表
+    val validationIssues: List<String> = emptyList(),
+    val rejectedRows: Int = 0,
+    val parserVersion: String = "collected-v1"
 )
 
 /**
