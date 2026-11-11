@@ -10,6 +10,10 @@ import java.time.Instant
 import androidx.lifecycle.viewModelScope
 import com.lottery.analyzer.data.ai.AiLotteryService
 import com.lottery.analyzer.data.ai.AiAnalysisFactsBuilder
+import com.lottery.analyzer.data.ai.ArchivedAiRecommendationClient
+import com.lottery.analyzer.data.db.MemoryArchiveStore
+import com.lottery.analyzer.data.db.AndroidMemoryArchiveStore
+import com.lottery.analyzer.data.db.ArchiveProcessSession
 import com.lottery.analyzer.data.engine.WindowStrategy
 import com.lottery.analyzer.data.db.AiConfigPreferences
 import com.lottery.analyzer.data.model.AiAnalysisMode
@@ -73,6 +77,7 @@ data class LotteryUiState(
     val predictionFeedbackId: Long = 0,
     val syncMessageId: Long = 0,
     val pendingPredictions: List<PredictionDraft> = emptyList(),
+    val pendingEditedAtEpoch: Long? = null,
     val pendingTargetIssue: String = "",
     val isSavingPrediction: Boolean = false,
     val predictionSaveError: String? = null,
@@ -81,6 +86,10 @@ data class LotteryUiState(
     val isAiLoading: Boolean = false,
     val aiResult: AiRecommendationResult? = null,
     val aiWindowOptions: AiWindowOptions = AiWindowOptions(),
+    val memoryArchive: MemoryArchiveOverview = MemoryArchiveOverview(),
+    val memoryArchiveError: String? = null,
+    val memoryArchiveDetail: ArchiveRunDetail? = null,
+    val memoryCollectionDetail: ArchiveCollectionDetail? = null,
     val aiError: String? = null,
     val aiTestMessage: String? = null,
     val showAiSettingsDialog: Boolean = false,
@@ -105,7 +114,8 @@ class LotteryViewModel @JvmOverloads constructor(
     private val aiConfigPreferences: AiSettingsStore = AiConfigPreferences(application),
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
-    private val recommendationClient: AiRecommendationClient? = null
+    private val recommendationClient: AiRecommendationClient? = null,
+    private val archiveStore: MemoryArchiveStore = AndroidMemoryArchiveStore(application)
 ) : AndroidViewModel(application) {
     companion object {
         private val REGEX_NON_DIGIT = Regex("[^0-9]+")
@@ -141,6 +151,10 @@ class LotteryViewModel @JvmOverloads constructor(
     private var shrinkGeneration = 0
     private var parseJob: Job? = null
     private var textParsingGeneration = 0
+    private var archiveRefreshGeneration = 0
+    private var archiveRefreshJob: Job? = null
+    private var archiveDetailGeneration = 0
+    private var archiveDetailJob: Job? = null
 
     private data class RestoredInput(val hearts: Set<Int>, val shrink: Set<Int>, val text: String, val play: Kl8PlayType)
 
@@ -181,6 +195,10 @@ class LotteryViewModel @JvmOverloads constructor(
     fun switchLotteryType(type: LotteryType) = switchLotteryType(type, null)
 
     private fun switchLotteryType(type: LotteryType, restored: RestoredInput?) {
+        archiveRefreshGeneration++
+        archiveDetailGeneration++
+        archiveRefreshJob?.cancel()
+        archiveDetailJob?.cancel()
         switchGeneration++
         savedStateHandle["type"] = type.name
         savedStateHandle["hearts"] = intArrayOf()
@@ -203,6 +221,7 @@ class LotteryViewModel @JvmOverloads constructor(
         switchJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 currentType = type,
+                memoryArchive = MemoryArchiveOverview(), memoryArchiveDetail = null, memoryCollectionDetail = null, memoryArchiveError = null,
                 isLoading = true,
                 errorMessage = null,
                 myHeartBalls = emptySet(),
@@ -212,7 +231,7 @@ class LotteryViewModel @JvmOverloads constructor(
                 currentIssue = "",
                 nextIssueTarget = "",
                 predictionFeedback = null,
-                pendingPredictions = emptyList(), pendingTargetIssue = "", predictionSaveError = null,
+                pendingPredictions = emptyList(), pendingEditedAtEpoch = null, pendingTargetIssue = "", predictionSaveError = null,
                 isSavingPrediction = false,
                 predictionRecords = emptyList(),
                 predictionTotalCount = 0,
@@ -378,10 +397,17 @@ class LotteryViewModel @JvmOverloads constructor(
      * 更新他人购买号码文本并进行频次解析与注数提取 (支持1行1注)
      */
     fun updateCollectedBallsText(text: String) {
-        savedStateHandle["collected"] = text.takeIf { it.length <= 20000 }.orEmpty()
+        if (CollectionInputPolicy.error(text) == null) savedStateHandle["collected"] = text
         val currentType = _uiState.value.currentType
         val currentGen = ++textParsingGeneration
         parseJob?.cancel()
+
+        if (CollectionInputPolicy.error(text) != null) {
+            // Keep the editable draft, but do not parse or reuse results from an older valid input.
+            _uiState.value = _uiState.value.copy(collectedBallsText = text, isParsingCollectedText = false,
+                frequencyResult = FrequencyAnalysisResult(0, emptyMap(), emptyList()))
+            return
+        }
 
         if (text.isBlank()) {
             _uiState.value = _uiState.value.copy(
@@ -594,20 +620,21 @@ class LotteryViewModel @JvmOverloads constructor(
     fun savePredictionRecord(
         redBalls: List<Int>, blueBalls: List<Int> = emptyList(), strategy: String,
         targetIssue: String = "", kind: PredictionKind? = null,
-        playType: Kl8PlayType? = null, blueSource: BlueSource = BlueSource.PROVIDED
+        playType: Kl8PlayType? = null, blueSource: BlueSource = BlueSource.PROVIDED,
+        archiveParentEntryId: String? = null
     ) {
         val type = _uiState.value.currentType
         val resolvedKind = kind ?: PredictionRules.classify(type, redBalls, blueBalls)
         val draft = PredictionDraft(type, redBalls.sorted(), blueBalls.sorted(), strategy,
             resolvedKind,
             playType ?: if (resolvedKind == PredictionKind.SINGLE) PredictionRules.inferPlay(type, redBalls) else null,
-            if (blueBalls.isEmpty()) BlueSource.NONE else blueSource)
+            if (blueBalls.isEmpty()) BlueSource.NONE else blueSource, archiveParentEntryId)
         try { PredictionRules.validate(draft) }
         catch (e: Exception) { feedback(e.message ?: "号码无效"); return }
         if (_uiState.value.isSavingPrediction) return
         _uiState.value = _uiState.value.copy(
             pendingPredictions = _uiState.value.pendingPredictions + draft,
-            pendingTargetIssue = targetIssue.ifBlank { _uiState.value.nextIssueTarget }, predictionSaveError = null
+            pendingTargetIssue = targetIssue.ifBlank { _uiState.value.nextIssueTarget }, predictionSaveError = null, pendingEditedAtEpoch = null
         )
     }
 
@@ -621,6 +648,12 @@ class LotteryViewModel @JvmOverloads constructor(
         if (_uiState.value.isSavingPrediction) return
         val pending = _uiState.value.pendingPredictions
         if (pending.isEmpty()) return
+        if (pending.any { it.archiveParentEntryId == null }) {
+            CollectionInputPolicy.error(_uiState.value.collectedBallsText)?.let {
+                _uiState.value = _uiState.value.copy(predictionSaveError = it)
+                return
+            }
+        }
         val type = _uiState.value.currentType
         val generation = switchGeneration
         val records = try {
@@ -634,7 +667,9 @@ class LotteryViewModel @JvmOverloads constructor(
                 PredictionRecord(lotteryType = type, targetIssue = targetIssue.trim(), redBalls = draft.redBalls,
                     blueBalls = draft.blueBalls, strategy = draft.strategy, createdAt = time.toString(),
                     kind = draft.kind, kl8PlayType = draft.kl8PlayType, blueSource = draft.blueSource,
-                    createdAtEpoch = time.toEpochMilli())
+                    createdAtEpoch = time.toEpochMilli(), archiveParentEntryId = original.archiveParentEntryId,
+                    collectionSnapshot = if (original.archiveParentEntryId == null) collectionSnapshot(_uiState.value, targetIssue.trim()) else null,
+                    archiveEditedAtEpoch = _uiState.value.pendingEditedAtEpoch)
             }
         } catch (e: Exception) {
             _uiState.value = _uiState.value.copy(predictionSaveError = e.message ?: "方案无效")
@@ -648,6 +683,7 @@ class LotteryViewModel @JvmOverloads constructor(
                 if (_uiState.value.currentType == type && generation == switchGeneration) {
                     _uiState.value = _uiState.value.copy(pendingPredictions = emptyList())
                     loadPredictions(0)
+                    refreshMemoryArchive()
                     feedback("已保存 $count 条第 ${targetIssue.trim()} 期方案")
                 }
             } catch (e: CancellationException) { throw e }
@@ -853,6 +889,10 @@ class LotteryViewModel @JvmOverloads constructor(
 
     fun runAiAnalysis(mode: AiAnalysisMode, betCount: Int = 3) {
         val state = _uiState.value
+        CollectionInputPolicy.error(state.collectedBallsText)?.let {
+            _uiState.value = state.copy(aiError = it)
+            return
+        }
         if (state.isParsingCollectedText) {
             _uiState.value = state.copy(aiError = "他人号码正在解析，请稍后再发起推荐")
             return
@@ -887,13 +927,16 @@ class LotteryViewModel @JvmOverloads constructor(
                     otherBets = state.frequencyResult.parsedBets, otherCompleteBets = state.frequencyResult.parsedCompleteBets,
                     betCount = betCount, kl8PlayType = state.kl8PlayType, windowContext = facts.windowContext
                 )
-                val result = (recommendationClient ?: aiService).generateRecommendation(request)
+                val archived = ArchivedAiRecommendationClient(recommendationClient ?: aiService, archiveStore,
+                    ArchiveProcessSession.id, ioDispatcher)
+                val result = archived.generate(request, collectionSnapshot(state, state.nextIssueTarget))
                 if (generation != aiGeneration || _uiState.value.currentType != state.currentType) return@launch
                 _uiState.value = _uiState.value.copy(aiResult = result.getOrNull(), aiError = result.exceptionOrNull()?.message)
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 if (generation == aiGeneration) _uiState.value = _uiState.value.copy(aiError = e.message ?: "AI推演失败")
             } finally {
+                refreshMemoryArchive()
                 if (generation == aiGeneration) _uiState.value = _uiState.value.copy(isAiLoading = false)
             }
         }
@@ -917,7 +960,8 @@ class LotteryViewModel @JvmOverloads constructor(
                 redBalls = reds,
                 blueBalls = blues,
                 strategy = strategy,
-                targetIssue = target, kind = PredictionKind.SINGLE, playType = result.kl8PlayType
+                targetIssue = target, kind = PredictionKind.SINGLE, playType = result.kl8PlayType,
+                archiveParentEntryId = result.archiveEntryIds.getOrNull(betIndex)
             )
         }
     }
@@ -942,6 +986,80 @@ class LotteryViewModel @JvmOverloads constructor(
         aiJob?.cancel()
         aiTestJob?.cancel()
         _uiState.value = _uiState.value.copy(aiResult = null, aiError = null, isAiLoading = false)
+    }
+
+    private fun collectionSnapshot(state: LotteryUiState, target: String): CollectionSnapshot? {
+        if (state.collectedBallsText.isBlank() && state.frequencyResult.parsedCompleteBets.isEmpty()) return null
+        return CollectionSnapshot(state.currentType, target, state.collectedBallsText,
+            state.frequencyResult.parsedCompleteBets.map { it.first.toList() to it.second.toList() })
+    }
+
+    fun saveCollectedBatch(targetIssue: String, origin: ArchiveOrigin, source: String) {
+        val state = _uiState.value
+        CollectionInputPolicy.error(state.collectedBallsText)?.let { feedback(it); return }
+        if (state.isParsingCollectedText) { feedback("号码正在解析，请稍后归档"); return }
+        val snapshot = collectionSnapshot(state, targetIssue.trim())
+        if (snapshot == null || snapshot.groups.isEmpty()) { feedback("请先输入并解析收集号码"); return }
+        try { PredictionRules.validateTarget(targetIssue.trim()) }
+        catch (e: Exception) { feedback(e.message ?: "期号无效"); return }
+        viewModelScope.launch {
+            try {
+                withContext(ioDispatcher) { archiveStore.saveCollection(snapshot.copy(origin = origin, sourceLabel = source.trim().ifBlank { "手工收集" }), System.currentTimeMillis()) }
+                if (_uiState.value.currentType == state.currentType) { feedback("收集批次已归档（相同内容自动去重）"); refreshMemoryArchive() }
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { if (_uiState.value.currentType == state.currentType) feedback("归档失败，请检查期号、文本长度及存储") }
+        }
+    }
+
+    fun refreshMemoryArchive() {
+        val type = _uiState.value.currentType
+        val generation = ++archiveRefreshGeneration
+        archiveRefreshJob?.cancel()
+        archiveRefreshJob = viewModelScope.launch {
+            try {
+                val overview = withContext(ioDispatcher) { archiveStore.overview(type) }
+                if (generation == archiveRefreshGeneration && _uiState.value.currentType == type) {
+                    _uiState.value = _uiState.value.copy(memoryArchive = overview, memoryArchiveError = null)
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) {
+                if (generation == archiveRefreshGeneration && _uiState.value.currentType == type) {
+                    _uiState.value = _uiState.value.copy(memoryArchive = MemoryArchiveOverview(), memoryArchiveError = "归档读取失败，请检查存储后刷新")
+                }
+            }
+        }
+    }
+
+    fun showMemoryArchiveRun(id: String?) {
+        val generation = ++archiveDetailGeneration
+        archiveDetailJob?.cancel()
+        _uiState.value = _uiState.value.copy(memoryArchiveDetail = null, memoryCollectionDetail = null)
+        if (id == null) return
+        val type = _uiState.value.currentType
+        archiveDetailJob = viewModelScope.launch {
+            try {
+                val detail = withContext(ioDispatcher) { archiveStore.detail(id) }
+                if (generation == archiveDetailGeneration && _uiState.value.currentType == type) _uiState.value = _uiState.value.copy(memoryArchiveDetail = detail)
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { feedback("归档详情读取失败") }
+        }
+    }
+
+    fun markPendingPredictionEdited() {
+        if (!_uiState.value.isSavingPrediction) _uiState.value = _uiState.value.copy(pendingEditedAtEpoch = System.currentTimeMillis())
+    }
+
+    fun showMemoryCollection(id: String) {
+        showMemoryArchiveRun(null)
+        val generation = archiveDetailGeneration
+        val type = _uiState.value.currentType
+        archiveDetailJob = viewModelScope.launch {
+            try {
+                val detail = withContext(ioDispatcher) { archiveStore.collection(id) }
+                if (generation == archiveDetailGeneration && _uiState.value.currentType == type) _uiState.value = _uiState.value.copy(memoryCollectionDetail = detail)
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { feedback("收集批次读取失败") }
+        }
     }
 
     // ==================== 复式缩水与旋转矩阵控制 ====================

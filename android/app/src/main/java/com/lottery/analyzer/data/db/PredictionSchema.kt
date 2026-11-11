@@ -1,13 +1,14 @@
 package com.lottery.analyzer.data.db
 
 object PredictionSchema {
-    const val VERSION = 2
+    const val VERSION = 3
     val additions = linkedMapOf(
         "prediction_kind" to "TEXT NOT NULL DEFAULT 'LEGACY_UNCONFIRMED'",
         "kl8_play_type" to "TEXT",
         "blue_source" to "TEXT NOT NULL DEFAULT 'LEGACY_UNKNOWN'",
         "created_at_epoch" to "INTEGER NOT NULL DEFAULT 0",
-        "quarantined" to "INTEGER NOT NULL DEFAULT 0"
+        "quarantined" to "INTEGER NOT NULL DEFAULT 0",
+        "archive_entry_id" to "TEXT"
     )
 
     fun upgrades(existingColumns: Set<String>): List<String> = additions

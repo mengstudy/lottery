@@ -162,7 +162,8 @@ data class PredictionDraft(
     val strategy: String,
     val kind: PredictionKind,
     val kl8PlayType: Kl8PlayType?,
-    val blueSource: BlueSource
+    val blueSource: BlueSource,
+    val archiveParentEntryId: String? = null
 )
 
 data class PredictionRecord(
@@ -177,7 +178,11 @@ data class PredictionRecord(
     val kind: PredictionKind = PredictionKind.LEGACY_UNCONFIRMED,
     val kl8PlayType: Kl8PlayType? = null,
     val blueSource: BlueSource = BlueSource.LEGACY_UNKNOWN,
-    val createdAtEpoch: Long = 0
+    val createdAtEpoch: Long = 0,
+    val archiveEntryId: String? = null,
+    val archiveParentEntryId: String? = null,
+    val collectionSnapshot: CollectionSnapshot? = null,
+    val archiveEditedAtEpoch: Long? = null
 )
 
 /**

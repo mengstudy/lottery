@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.lottery.analyzer.data.db.AiSettingsStore
+import com.lottery.analyzer.data.db.MemoryArchiveStore
 import com.lottery.analyzer.data.engine.LotteryAnalysisEngine
 import com.lottery.analyzer.data.model.*
 import com.lottery.analyzer.data.repository.*
@@ -22,12 +23,47 @@ class LotteryViewModelTest {
     private val models=mutableListOf<LotteryViewModel>()
     @Before fun setup(){Dispatchers.setMain(dispatcher)}
     @After fun cleanup(){models.forEach{it.viewModelScope.cancel()};Dispatchers.resetMain()}
-    private fun model(repo:FakeRepository=FakeRepository(),handle:SavedStateHandle=SavedStateHandle(),client:AiRecommendationClient?=null):LotteryViewModel =
+    private fun model(repo:FakeRepository=FakeRepository(),handle:SavedStateHandle=SavedStateHandle(),client:AiRecommendationClient?=null,archive:MemoryArchiveStore=FakeArchiveStore()):LotteryViewModel =
         LotteryViewModel(Application(),handle,repo,object:AiSettingsStore {
             override fun getAiConfig()=AiConfig(apiKey="offline-test")
             override fun saveAiConfig(config:AiConfig){}
             override fun selectProviderPreset(provider:AiProvider)=AiConfig(provider=provider)
-        },dispatcher,dispatcher,client).also{models.add(it)}
+        },dispatcher,dispatcher,client,archive).also{models.add(it)}
+
+    @Test fun collectionOnlyArchivesOnExplicitActionAndRetainsTheOriginalSnapshot()=runTest {
+        val archive=FakeArchiveStore();val vm=model(archive=archive);advanceUntilIdle()
+        vm.updateCollectedBallsText("01 02 03 04 05 06 + 01");advanceUntilIdle()
+        assertTrue(archive.collections.isEmpty())
+        vm.saveCollectedBatch("2026124",ArchiveOrigin.REALTIME_RECOMMEND,"source");advanceUntilIdle()
+        assertEquals(1,archive.collections.size)
+        val snapshot=archive.collections.single()
+        vm.updateCollectedBallsText("07 08 09 10 11 12 + 02");advanceUntilIdle()
+        assertEquals("01 02 03 04 05 06 + 01",snapshot.rawText)
+        assertEquals((1..6).toList(),snapshot.groups.single().first)
+        assertEquals(1,archive.collections.size)
+    }
+
+    @Test fun oversizedDraftClearsOldStatsStopsParsingAndBlocksNewAiOrManualConfirmation()=runTest {
+        var calls=0
+        val client=object:AiRecommendationClient {override suspend fun generateRecommendation(request:AiRecommendationRequest):Result<AiRecommendationResult> {calls++;return Result.failure(Exception("not expected"))}}
+        val repo=FakeRepository();val archive=FakeArchiveStore();val handle=SavedStateHandle()
+        val vm=model(repo,handle,client,archive);advanceUntilIdle()
+        val valid="01 02 03 04 05 06 + 01"
+        vm.updateCollectedBallsText(valid);advanceUntilIdle();assertEquals(1,vm.uiState.value.frequencyResult.validGroupsCount)
+        vm.updateCollectedBallsText(valid.padEnd(CollectionInputPolicy.MAX_CHARS+1,' '));advanceUntilIdle()
+        assertFalse(vm.uiState.value.isParsingCollectedText)
+        assertEquals(0,vm.uiState.value.frequencyResult.validGroupsCount)
+        assertEquals(valid,handle.get<String>("collected"))
+        vm.runAiAnalysis(AiAnalysisMode.FULL_RECOMMEND);advanceUntilIdle()
+        assertEquals(0,calls);assertTrue(vm.uiState.value.aiError!!.contains("20000"))
+        vm.saveCollectedBatch("2026124",ArchiveOrigin.REALTIME_RECOMMEND,"");advanceUntilIdle()
+        assertTrue(archive.collections.isEmpty())
+        vm.savePredictionRecord((1..6).toList(),listOf(1),"manual")
+        vm.confirmPendingPredictions("2026124");advanceUntilIdle()
+        assertTrue(repo.saved.isEmpty());assertTrue(vm.uiState.value.predictionSaveError!!.contains("20000"))
+        vm.updateCollectedBallsText(valid);advanceUntilIdle();vm.confirmPendingPredictions("2026124");advanceUntilIdle()
+        assertEquals(1,repo.saved.size)
+    }
 
     @Test fun aiUsesLatestRetainedFactsAndPersistsOriginalModelAndWindow()=runTest {
         val repo=FakeRepository()
@@ -53,6 +89,12 @@ class LotteryViewModelTest {
         assertTrue(draft.strategy.contains("100期(实1)"))
         assertEquals(PredictionKind.SINGLE,draft.kind)
         assertTrue(repo.saved.isEmpty())
+        assertNotNull(draft.archiveParentEntryId)
+        vm.updateCollectedBallsText("x".repeat(CollectionInputPolicy.MAX_CHARS+1));advanceUntilIdle()
+        vm.markPendingPredictionEdited();vm.confirmPendingPredictions("2026124",listOf(2));advanceUntilIdle()
+        assertEquals(draft.archiveParentEntryId,repo.saved.single().archiveParentEntryId)
+        assertNotNull(repo.saved.single().archiveEditedAtEpoch)
+        assertNull(repo.saved.single().collectionSnapshot)
     }
 
     @Test fun changedAiWindowCancelsAndRejectsLateResponseAndRestoresSettings()=runTest {
@@ -193,6 +235,18 @@ class LotteryViewModelTest {
         withContext(Dispatchers.IO){assertTrue(second.await(3,java.util.concurrent.TimeUnit.SECONDS))}
         advanceUntilIdle()
         assertEquals(listOf("first","second"),written);assertEquals("second",vm.uiState.value.aiConfig.modelName)
+    }
+
+    private class FakeArchiveStore:MemoryArchiveStore {
+        val collections=mutableListOf<CollectionSnapshot>()
+        override fun begin(start:ArchiveRunStart){}
+        override fun complete(id:String,result:AiRecommendationResult,at:Long)=result.recommendedBets.indices.map{"$id:$it"}
+        override fun finish(id:String,status:ArchiveRunStatus,at:Long,category:String){}
+        override fun saveCollection(snapshot:CollectionSnapshot,at:Long):String {collections+=snapshot;return "batch"}
+        override fun recoverInterrupted(sessionId:String,at:Long){}
+        override fun overview(type:LotteryType)=MemoryArchiveOverview()
+        override fun detail(id:String):ArchiveRunDetail?=null
+        override fun collection(id:String):ArchiveCollectionDetail?=null
     }
 
     private class FakeRepository:LotteryRepositoryContract {

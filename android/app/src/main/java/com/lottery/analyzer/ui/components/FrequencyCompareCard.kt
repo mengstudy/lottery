@@ -28,6 +28,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lottery.analyzer.data.model.FrequencyAnalysisResult
+import com.lottery.analyzer.data.model.CollectionInputPolicy
+import androidx.compose.material3.MaterialTheme
 import com.lottery.analyzer.ui.theme.TextPrimary
 import com.lottery.analyzer.ui.theme.TextSecondary
 
@@ -41,6 +43,7 @@ fun FrequencyCompareCard(
     isParsing: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val inputError = CollectionInputPolicy.error(inputText)
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -99,6 +102,9 @@ fun FrequencyCompareCard(
 
             OutlinedTextField(
                 value = inputText,
+                isError = inputError != null,
+                supportingText = { Text(inputError ?: "${inputText.length} / ${CollectionInputPolicy.MAX_CHARS} 字符",
+                    color = if (inputError != null) MaterialTheme.colorScheme.error else TextSecondary, fontSize = 11.sp) },
                 onValueChange = onInputChange,
                 placeholder = {
                     Text(

@@ -284,7 +284,7 @@ fun MainContainerScreen(viewModel: LotteryViewModel) {
     }
 
     if (uiState.pendingPredictions.isNotEmpty()) {
-        PendingPredictionDialog(uiState, viewModel::dismissPendingPredictions, viewModel::confirmPendingPredictions)
+        PendingPredictionDialog(uiState, viewModel::dismissPendingPredictions, viewModel::confirmPendingPredictions, viewModel::markPendingPredictionEdited)
     }
 
     // 全局 AI 大模型配置弹窗

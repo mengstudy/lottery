@@ -15,7 +15,8 @@ import com.lottery.analyzer.ui.viewmodel.LotteryUiState
 fun PendingPredictionDialog(
     state: LotteryUiState,
     onDismiss: () -> Unit,
-    onConfirm: (String, List<Int>?) -> Unit
+    onConfirm: (String, List<Int>?) -> Unit,
+    onEdited: () -> Unit
 ) {
     val drafts = state.pendingPredictions
     if (drafts.isEmpty()) return
@@ -29,7 +30,7 @@ fun PendingPredictionDialog(
         title = { Text("确认保存 ${drafts.size} 条方案") },
         text = {
             Column(Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(value = issue, onValueChange = { issue = it; acknowledged = false },
+                OutlinedTextField(value = issue, onValueChange = { issue = it; acknowledged = false; onEdited() },
                     label = { Text("官方目标期号") }, placeholder = { Text("请核对并填写期号") }, singleLine = true,
                     enabled = !state.isSavingPrediction)
                 Text("期号仅为本地递增建议；跨年、休市或数据较旧时请按官方公告填写。")
@@ -40,7 +41,7 @@ fun PendingPredictionDialog(
                     if (draft.kind == PredictionKind.REFERENCE) Text("参考池只比对命中，不作为单注判断中奖。")
                     if (draft.kind == PredictionKind.COMPOUND) Text("复式池需展开为单注核验，此处仅记录命中。")
                 }
-                if (editableBlues) OutlinedTextField(value = blues, onValueChange = { blues = it; acknowledged = false },
+                if (editableBlues) OutlinedTextField(value = blues, onValueChange = { blues = it; acknowledged = false; onEdited() },
                     label = { Text("蓝球，可修改；多个号码用空格分隔") }, enabled = !state.isSavingPrediction, singleLine = true)
                 Row {
                     Checkbox(checked = acknowledged, onCheckedChange = { acknowledged = it }, enabled = !state.isSavingPrediction)

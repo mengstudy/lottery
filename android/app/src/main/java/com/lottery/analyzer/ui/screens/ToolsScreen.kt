@@ -313,6 +313,7 @@ fun ToolsScreen(
                 aiResult = uiState.aiResult,
                 aiError = uiState.aiError,
                 heartBallCount = uiState.myHeartBalls.size,
+                collectionError = com.lottery.analyzer.data.model.CollectionInputPolicy.error(uiState.collectedBallsText),
                 otherBallSet = uiState.frequencyResult.frequencyMap.keys,
                 otherBets = uiState.frequencyResult.parsedBets,
                 kl8PlayType = uiState.kl8PlayType,
@@ -327,6 +328,9 @@ fun ToolsScreen(
                 onViewLogs = { viewModel.setLogDialogVisible(true) }
             )
 
+            Spacer(modifier = Modifier.height(14.dp))
+
+            com.lottery.analyzer.ui.components.MemoryArchiveCard(viewModel, uiState)
             Spacer(modifier = Modifier.height(14.dp))
 
             // 4. 预测选号记录与开奖自动比对卡片 (含删除和清空)

@@ -22,6 +22,10 @@ class PredictionDao(private val context: Context) {
      */
     fun insert(record: PredictionRecord): Long {
         PredictionRules.validate(record)
+        val db = getDb()
+        return AndroidArchiveSql(db).transaction {
+        val archive = AndroidMemoryArchiveStore(context).forDatabase(db)
+        val entryId = archive.confirm(record)
         val cv = ContentValues().apply {
             put("lottery_type", record.lotteryType.name)
             put("target_issue", record.targetIssue)
@@ -34,8 +38,12 @@ class PredictionDao(private val context: Context) {
             put("kl8_play_type", record.kl8PlayType?.name)
             put("blue_source", record.blueSource.name)
             put("created_at_epoch", record.createdAtEpoch)
+            put("archive_entry_id", entryId)
         }
-        return getDb().insertOrThrow("user_predictions", null, cv)
+        val id = db.insertOrThrow("user_predictions", null, cv)
+        db.execSQL("UPDATE recommendation_entries SET prediction_id=? WHERE id=?", arrayOf(id, entryId))
+        id
+        }
     }
 
     /**
@@ -174,7 +182,8 @@ class PredictionDao(private val context: Context) {
             kind = PredictionKind.valueOf(cursor.getString(cursor.getColumnIndexOrThrow("prediction_kind"))),
             kl8PlayType = cursor.getString(cursor.getColumnIndexOrThrow("kl8_play_type"))?.let(Kl8PlayType::valueOf),
             blueSource = BlueSource.valueOf(cursor.getString(cursor.getColumnIndexOrThrow("blue_source"))),
-            createdAtEpoch = cursor.getLong(cursor.getColumnIndexOrThrow("created_at_epoch"))
+            createdAtEpoch = cursor.getLong(cursor.getColumnIndexOrThrow("created_at_epoch")),
+            archiveEntryId = cursor.getString(cursor.getColumnIndexOrThrow("archive_entry_id"))
         )
     }
 }

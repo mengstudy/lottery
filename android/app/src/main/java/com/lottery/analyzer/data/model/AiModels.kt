@@ -19,7 +19,8 @@ data class AiRecommendationRequest(
     val otherCompleteBets: List<Pair<List<Int>, List<Int>>> = emptyList(),
     val betCount: Int = 3,
     val kl8PlayType: Kl8PlayType = Kl8PlayType.XUAN_TEN,
-    val windowContext: AiWindowContext? = null
+    val windowContext: AiWindowContext? = null,
+    val preparedPrompt: AiPromptContent? = null
 )
 
 interface AiRecommendationClient {
@@ -114,5 +115,10 @@ data class AiRecommendationResult(
     val windowContext: AiWindowContext? = null,
     val baseIssue: String = "",
     val providerName: String = "",
-    val modelName: String = ""
+    val modelName: String = "",
+    val candidateAudit: List<ArchivedCandidate> = emptyList(),
+    val finishReason: String? = null,
+    val archiveRunId: String? = null,
+    val archiveEntryIds: List<String> = emptyList(),
+    val responseReceivedAtEpoch: Long? = null
 )

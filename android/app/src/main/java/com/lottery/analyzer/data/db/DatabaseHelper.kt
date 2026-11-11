@@ -24,6 +24,7 @@ object DatabaseHelper {
         val database = SQLiteDatabase.openOrCreateDatabase(dbFile, null)
 
         try {
+            if (dbFileName == "user_predictions.db") database.setForeignKeyConstraintsEnabled(true)
             val supported = if (dbFileName == "user_predictions.db") PredictionSchema.VERSION else 1
             check(database.version <= supported) { "数据库版本高于当前程序，拒绝降级打开" }
             database.beginTransaction()
@@ -34,6 +35,7 @@ object DatabaseHelper {
                         buildSet { while (cursor.moveToNext()) add(cursor.getString(cursor.getColumnIndexOrThrow("name"))) }
                     }
                     PredictionSchema.upgrades(columns).forEach(database::execSQL)
+                    MemoryArchiveSchema.statements.forEach(database::execSQL)
                     val quarantined = database.compileStatement(PredictionSchema.QUARANTINE_INVALID_TYPES).use { it.executeUpdateDelete() }
                     if (quarantined > 0) Log.w(TAG, "已隔离 $quarantined 条未知彩种旧记录")
                 }

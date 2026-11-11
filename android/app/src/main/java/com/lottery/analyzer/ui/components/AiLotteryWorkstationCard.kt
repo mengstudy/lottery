@@ -88,6 +88,7 @@ fun AiLotteryWorkstationCard(
     aiResult: AiRecommendationResult?,
     aiError: String?,
     heartBallCount: Int,
+    collectionError: String?,
     otherBallSet: Set<Int> = emptySet(),
     otherBets: List<List<Int>> = emptyList(),
     kl8PlayType: Kl8PlayType = Kl8PlayType.XUAN_TEN,
@@ -440,7 +441,7 @@ fun AiLotteryWorkstationCard(
                 // 发起推演按钮
                 Button(
                     onClick = { onRunAnalysis(selectedMode, selectedBetCount) },
-                    enabled = !isLoading && aiConfig.apiKey.isNotBlank() &&
+                    enabled = !isLoading && aiConfig.apiKey.isNotBlank() && collectionError == null &&
                         (lotteryType == LotteryType.KL8 || !windowOptions.enabled || validWindow != null),
                     colors = ButtonDefaults.buttonColors(containerColor = PurplePrimary)
                 ) {
@@ -462,6 +463,8 @@ fun AiLotteryWorkstationCard(
                     }
                 }
             }
+
+            collectionError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
 
             // 4. 正在加载的提示
             if (isLoading) {

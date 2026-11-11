@@ -128,9 +128,12 @@ fun PredictCompareScreen(
                 aiResult = uiState.aiResult,
                 aiError = uiState.aiError,
                 heartBallCount = uiState.myHeartBalls.size,
+                collectionError = com.lottery.analyzer.data.model.CollectionInputPolicy.error(uiState.collectedBallsText),
                 otherBallSet = uiState.frequencyResult.frequencyMap.keys,
                 otherBets = uiState.frequencyResult.parsedBets,
                 kl8PlayType = uiState.kl8PlayType,
+                windowOptions = uiState.aiWindowOptions,
+                onWindowOptionsChange = viewModel::updateAiWindowOptions,
                 onKl8PlayTypeChange = { viewModel.setKl8PlayType(it) },
                 onOpenSettings = { viewModel.setAiSettingsDialogVisible(true) },
                 onRunAnalysis = { mode, count -> viewModel.runAiAnalysis(mode, count) },
@@ -176,6 +179,9 @@ fun PredictCompareScreen(
             }
 
             // 7. 预测选号记录与开奖自动比对卡片 (含删除和清空)
+            com.lottery.analyzer.ui.components.MemoryArchiveCard(viewModel, uiState)
+            Spacer(modifier = Modifier.height(12.dp))
+
             PredictionRecordsCard(
                 lotteryType = uiState.currentType,
                 records = uiState.predictionRecords,

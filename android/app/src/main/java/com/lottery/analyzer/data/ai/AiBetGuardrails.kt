@@ -6,7 +6,8 @@ import com.lottery.analyzer.data.model.*
 data class AiBetValidation(
     val bets: List<Pair<List<Int>, List<Int>>>,
     val parsedCount: Int,
-    val rejectionReasons: Map<String, Int>
+    val rejectionReasons: Map<String, Int>,
+    val entries: List<ArchivedCandidate> = emptyList()
 )
 
 /** Only recommendation lines are parsed. Never repair an invalid group or mine prose for numbers. */
@@ -24,7 +25,14 @@ object AiBetGuardrails {
         val rejected = linkedMapOf<String, Int>()
         val hasTaggedLines = text.lineSequence().any { it.trim().startsWith("【推荐") }
         var parsed = 0
-        fun reject(reason: String) { rejected[reason] = (rejected[reason] ?: 0) + 1 }
+        val entries = mutableListOf<ArchivedCandidate>()
+        var auditLine = ""
+        var auditReds: List<Int>? = null
+        var auditBlues: List<Int>? = null
+        fun reject(reason: String) {
+            rejected[reason] = (rejected[reason] ?: 0) + 1
+            entries += ArchivedCandidate(parsed, auditLine, auditReds, auditBlues, reason)
+        }
         fun parseNumbers(part: String): List<Int>? {
             val value = part.trim()
             if (!numberList.matches(value)) return null
@@ -33,6 +41,9 @@ object AiBetGuardrails {
         for (rawLine in text.lineSequence()) {
             checkCancelled()
             val line = rawLine.trim()
+            auditLine = line.take(2048)
+            auditReds = null
+            auditBlues = null
             val match = tagged.matchEntire(line)
             val body = when {
                 match != null -> match.groupValues[1]
@@ -45,6 +56,8 @@ object AiBetGuardrails {
             if (parts.size != if (type.blueCount == 0) 1 else 2) { reject("红蓝球分隔格式错误"); continue }
             val reds = parseNumbers(parts[0])
             val blues = if (type.blueCount == 0) emptyList() else parseNumbers(parts[1].trim().replaceFirst(Regex("""^蓝球\s*[:：]\s*"""), ""))
+            auditReds = reds
+            auditBlues = blues
             if (reds == null || blues == null) { reject("包含非整数或多余文本"); continue }
             if (reds.any { it !in 1..type.maxRedNumber } || blues.any { it !in 1..type.maxBlueNumber }) { reject("号码越界"); continue }
             if (reds.distinct().size != reds.size || blues.distinct().size != blues.size) { reject("注内号码重复"); continue }
@@ -69,8 +82,9 @@ object AiBetGuardrails {
             }
             if (sorted in accepted) { reject("推荐组重复"); continue }
             if (accepted.size >= request.betCount) { reject("超过请求注数"); continue }
+            entries += ArchivedCandidate(parsed, auditLine, sorted.first, sorted.second, acceptedIndex = accepted.size)
             accepted += sorted
         }
-        return AiBetValidation(accepted.toList(), parsed, rejected.toMap())
+        return AiBetValidation(accepted.toList(), parsed, rejected.toMap(), entries.toList())
     }
 }
