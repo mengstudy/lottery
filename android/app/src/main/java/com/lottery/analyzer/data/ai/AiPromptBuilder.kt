@@ -15,11 +15,20 @@ object AiPromptBuilder {
                 memory.formalSummary+"\n策略状态=${memory.policyStatus}；配额=${memory.weights}。不得把历史命中描述为下期中奖概率。\n"
         }
         val selection=r.selectionContext?:return AiPromptContent(system(),prompt)
+        val maxOverlap = if (r.lotteryType == LotteryType.KL8) minOf(4, maxOf(1, r.kl8PlayType.pickCount - 1)) else 4
+        val fusionLadderHint = if (r.mode == AiAnalysisMode.HEART_FUSION) {
+            when (r.betCount) {
+                5 -> "\n【融合模式选号阶梯要求】：挑选的5个候选在【他人重】指标上必须呈现明显的阶梯差异（例如分别挑选他人重 $maxOverlap 码、${maxOf(1, maxOverlap - 1)} 码、${maxOf(1, maxOverlap - 2)} 码、1 码及 1~${maxOf(1, maxOverlap - 1)} 码的候选编号），严禁挑选他人重叠数完全相同的候选。"
+                3 -> "\n【融合模式选号阶梯要求】：挑选的3个候选在【他人重】指标上必须呈现明显的阶梯差异（例如分别挑选他人重 ${minOf(maxOverlap, 3)} 码、2 码、1 码的候选编号），各组他人重叠数必须各不相同。"
+                else -> "\n【融合模式选号阶梯要求】：挑选的${r.betCount}个候选在【他人重】指标上应尽量呈现阶梯梯度差异，避免各组他人重叠数完全相同。"
+            }
+        } else ""
         prompt=prompt+"\n【本地候选：只能选编号，不能改写号码】\n"+selection.candidates.joinToString("\n") {
             "[${it.id}] ${it.reds.joinToString(" ")}"+if(it.blues.isNotEmpty())" + ${it.blues.joinToString(" ")}" else ""
         }+"\n"+selection.candidates.joinToString("\n") {
             "[${it.id}] ${it.strategy} 和${it.sum} 奇${it.odd}:${it.reds.size-it.odd} 区${it.zones.joinToString(":")} 连${it.consecutive} 心水重${it.heartOverlap} 他人重${it.minOtherOverlap}~${it.maxOtherOverlap}"
         }+"\n在符合心水等软偏好的候选之间，优先降低已选各组的号码重叠，说明多样性取舍；不把多样性说成提高中奖概率。"+
+            fusionLadderHint+
             "\n请选择${r.betCount}个不同编号，仅返回JSON：{\"candidate_ids\":[\"实际候选编号\"],\"explanation\":\"简短依据\",\"strategy_summary\":\"偏好总结\"}。数组必须使用上方真实编号。"
         return AiPromptContent("你是候选方案比较助手。只能从给定候选中选择编号，不得生成新号码或修改候选。遵守用户硬约束；只能引用提供的统计。诊断模式也只能选择已有候选并作简短解释。只输出要求的JSON，不使用Markdown，不声称提高中奖概率。",prompt)
     }
@@ -140,12 +149,24 @@ object AiPromptBuilder {
                 sb.appendLine("请执行【心水与他人频次融合推演】，严格遵循以下规则生成 $betCount 注方案：")
                 sb.appendLine("1. 【心水胆码核心】：以用户自选的心水红球作为核心骨架与优先保留号码。")
                 if (otherBets.isNotEmpty()) {
-                    sb.appendLine("2. 【严格防撞号与重复度约束 (1-$maxOverlap 码)】：")
+                    sb.appendLine("2. 【严格防撞号与阶梯式重叠约束（核心原则：各注必须呈现阶梯梯度，杜绝同质化）】：")
                     sb.appendLine("   - 重点避开上面列出的他人每一注号码（1行1注），严禁整注雷同或高度撞车！")
-                    sb.appendLine("   - 所推荐的任意一注号码，与上述他人已购的【任意单注】之间的重复号码个数，必须严格控制在 1 ~ $maxOverlap 个之间（即每注与他人的重复度为 1-$maxOverlap 码，最多不超过 $maxOverlap 码）！")
-                    sb.appendLine("3. 【其余号码补充】：除 1~$maxOverlap 码适度借鉴他人号码以及用户心水球外，其余空缺号码必须从他人未涉足的优质 0~9+ 遗漏层级（如活跃温号、深冷回补号）中精选补齐，确保组合兼顾热度与独特性！")
+                    sb.appendLine("   - 所推荐的各注号码，与上述他人已购号码的重复红球数量【严禁每注都一样】，必须呈现鲜明的阶梯梯度分布：")
+                    when (betCount) {
+                        5 -> {
+                            sb.appendLine("     * 推荐5注阶梯配额：第1注重复 $maxOverlap 码（深度融合高频共识）；第2注重复 ${maxOf(1, maxOverlap - 1)} 码（适度参考热温平衡）；第3注重复 ${maxOf(1, maxOverlap - 2)} 码（轻微防撞）；第4注重复 1 码（极限防冷门）；第5注在 1~${maxOf(1, maxOverlap - 1)} 码中任选一个梯队。")
+                        }
+                        3 -> {
+                            sb.appendLine("     * 推荐3注阶梯配额：第1注重复 ${minOf(maxOverlap, 3)} 码（或 $maxOverlap 码）；第2注重复 2 码；第3注重复 1 码。3注之间的他人重复码数必须各不相同！")
+                        }
+                        else -> {
+                            sb.appendLine("     * 推荐 $betCount 注阶梯配额：请在 1~$maxOverlap 码区间内，为各注错开分配不同的重复红球数量（如交错采用 $maxOverlap、${maxOf(1, maxOverlap - 1)}、${maxOf(1, maxOverlap - 2)}、1 码等），尽量避免多注重合数量完全相同！")
+                        }
+                    }
+                    sb.appendLine("   - 每注与他人单注的重复度必须严格控制在 1 ~ $maxOverlap 码之间！")
+                    sb.appendLine("3. 【其余号码补充】：除根据上述阶梯配额借鉴对应数量的他人号码与心水球外，其余空缺号码必须从他人未涉足的优质 0~9+ 遗漏层级（如活跃温号、深冷回补号）中精选补齐，确保组合兼顾热度与独特性！")
                 } else if (topOtherBalls.isNotEmpty()) {
-                    sb.appendLine("2. 【严格防撞号约束 (1-$maxOverlap 码)】：所推荐的每注号码与他人号码的重叠数必须严格控制在 1 ~ $maxOverlap 码之间，严禁超过 $maxOverlap 码！")
+                    sb.appendLine("2. 【严格防撞号与阶梯式重叠约束 (1-$maxOverlap 码)】：所推荐的各注号码与他人号码的重叠数必须严格控制在 1 ~ $maxOverlap 码之间，且各注之间应尽量呈现阶梯梯度差异，严禁每注机械式重复相同数量的红球！")
                     sb.appendLine("3. 其余号码从他人未选的优质 0~9+ 遗漏层级中补充。")
                 } else {
                     sb.appendLine("2. 结合下期 0~9+ 遗漏层级与冷热号轮动，补齐其余红蓝球。")

@@ -56,6 +56,8 @@ object CandidatePoolEngine {
             }.sorted()
         }
         val desired = maxOf(limit,r.betCount)
+        val maxOverlap = if (r.lotteryType == LotteryType.KL8) minOf(4, maxOf(1, rules.redCount - 1)) else 4
+        val overlapBuckets = mutableMapOf<Int, Int>()
         for (attempt in 0 until 4000) {
             check()
             if(pool.size>=desired) break
@@ -68,6 +70,10 @@ object CandidatePoolEngine {
             if(rules.rejection(reds,blues)!=null || (reds to blues) in pool) continue
             val zones=if(r.lotteryType==LotteryType.KL8)4 else 3
             val overlaps=rules.otherPools.map{other->reds.count{it in other}}
+            val maxO = overlaps.maxOrNull() ?: 0
+            val bucketCap = if(rules.fusion && rules.otherPools.isNotEmpty()) maxOf(2, (desired + maxOverlap - 1) / maxOverlap) else desired
+            if(attempt < 3500 && rules.fusion && rules.otherPools.isNotEmpty() && (overlapBuckets[maxO] ?: 0) >= bucketCap) continue
+            overlapBuckets[maxO] = (overlapBuckets[maxO] ?: 0) + 1
             val id="C${(pool.size+1).toString().padStart(3,'0')}"
             pool[reds to blues]=LocalCandidate(id,strategy.name,reds,blues,reds.sum(),reds.count{it%2!=0},
                 (0 until zones).map{zone->reds.count{(it-1)*zones/rules.type.maxRedNumber==zone}},

@@ -103,4 +103,23 @@ class RecommendationLearningTest {
         val valid=CollectedNumbersParser.parse("010203040506 + 01\n红球: 07 08 09 10 11 12 蓝球: 02",LotteryType.SSQ)
         assertEquals(0,valid.rejectedRows);assertEquals(2,valid.validGroupsCount)
     }
+
+    @Test fun fusionLadderPromptAndBucketDiversity() {
+        val r5 = request().copy(mode = AiAnalysisMode.HEART_FUSION, betCount = 5, otherBets = listOf((1..6).toList()))
+        val prompt5 = AiPromptBuilder.build(r5)
+        assertTrue(prompt5.user.contains("推荐5注阶梯配额"))
+        assertTrue(prompt5.user.contains("第1注重复 4 码"))
+
+        val r3 = request().copy(mode = AiAnalysisMode.HEART_FUSION, betCount = 3, otherBets = listOf((1..6).toList()))
+        val prompt3 = AiPromptBuilder.build(r3)
+        assertTrue(prompt3.user.contains("推荐3注阶梯配额"))
+
+        val pool = CandidatePoolEngine.generate(r5, 16, 42)
+        val overlaps = pool.candidates.map { it.maxOtherOverlap }.toSet()
+        assertTrue("重叠档位多样性需至少覆盖2个以上等级: $overlaps", overlaps.size >= 2)
+
+        val r5WithSelection = r5.copy(selectionContext = pool)
+        val selectionPrompt = AiPromptBuilder.build(r5WithSelection)
+        assertTrue(selectionPrompt.user.contains("融合模式选号阶梯要求"))
+    }
 }
