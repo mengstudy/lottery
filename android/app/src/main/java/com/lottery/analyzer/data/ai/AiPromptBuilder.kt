@@ -23,12 +23,27 @@ object AiPromptBuilder {
                 else -> "\n【融合模式选号阶梯要求】：挑选的${r.betCount}个候选在【他人重】指标上应尽量呈现阶梯梯度差异，避免各组他人重叠数完全相同。"
             }
         } else ""
+        val blueSelectionHint = if (r.mode == AiAnalysisMode.HEART_FUSION && r.lotteryType.maxBlueNumber > 0) {
+            val blueAnalysis = analyzeOtherBlues(r.topOtherBlues, r.otherCompleteBets)
+            val pairWarning = if (r.lotteryType == LotteryType.DLT && blueAnalysis.topPairs.isNotEmpty()) {
+                val pairsStr = blueAnalysis.topPairs.joinToString("、") { "${String.format("%02d %02d", it.first, it.second)}" }
+                "避免挑选全盘复用他人最高频后区组合 [${pairsStr}] 的候选；"
+            } else ""
+            val singleWarning = if (blueAnalysis.topBlues.isNotEmpty()) {
+                val bluesStr = blueAnalysis.topBlues.joinToString(", ") { String.format("%02d", it) }
+                "他人单码最高频蓝球 [${bluesStr}] 建议结合历史记忆与遗漏层级梯队搭配，避免多注扎堆雷同；"
+            } else ""
+            if (pairWarning.isNotEmpty() || singleWarning.isNotEmpty()) {
+                "\n【后区交叉防撞选号要求】：清醒认识他人数据为局部样本，$pairWarning$singleWarning 优先挑选后区组合差异化、兼顾防撞与大数趋势的候选编号。"
+            } else ""
+        } else ""
         prompt=prompt+"\n【本地候选：只能选编号，不能改写号码】\n"+selection.candidates.joinToString("\n") {
             "[${it.id}] ${it.reds.joinToString(" ")}"+if(it.blues.isNotEmpty())" + ${it.blues.joinToString(" ")}" else ""
         }+"\n"+selection.candidates.joinToString("\n") {
             "[${it.id}] ${it.strategy} 和${it.sum} 奇${it.odd}:${it.reds.size-it.odd} 区${it.zones.joinToString(":")} 连${it.consecutive} 心水重${it.heartOverlap} 他人重${it.minOtherOverlap}~${it.maxOtherOverlap}"
         }+"\n在符合心水等软偏好的候选之间，优先降低已选各组的号码重叠，说明多样性取舍；不把多样性说成提高中奖概率。"+
             fusionLadderHint+
+            blueSelectionHint+
             "\n请选择${r.betCount}个不同编号，仅返回JSON：{\"candidate_ids\":[\"实际候选编号\"],\"explanation\":\"简短依据\",\"strategy_summary\":\"偏好总结\"}。数组必须使用上方真实编号。"
         return AiPromptContent("你是候选方案比较助手。只能从给定候选中选择编号，不得生成新号码或修改候选。遵守用户硬约束；只能引用提供的统计。诊断模式也只能选择已有候选并作简短解释。只输出要求的JSON，不使用Markdown，不声称提高中奖概率。",prompt)
     }
@@ -171,8 +186,19 @@ object AiPromptBuilder {
                 } else {
                     sb.appendLine("2. 结合下期 0~9+ 遗漏层级与冷热号轮动，补齐其余红蓝球。")
                 }
-                if (lotteryType.maxBlueNumber > 0 && topOtherBlues.isNotEmpty()) {
-                    sb.appendLine("4. 【他人蓝球参考指导】：参考他人收集的蓝球热度榜，分析他人扎堆热选与被忽视的冷门蓝球，结合蓝球历史走势推演最具博弈性价比的蓝球推荐方案！")
+                if (lotteryType.maxBlueNumber > 0 && (topOtherBlues.isNotEmpty() || otherCompleteBets.any { it.second.isNotEmpty() })) {
+                    val blueAnalysis = analyzeOtherBlues(topOtherBlues, otherCompleteBets)
+                    sb.appendLine("4. 【他人蓝球/后区与历史大数交叉博弈指导（核心防撞与大势平衡）】：")
+                    sb.appendLine("   - 局部样本边界认知：清醒认识到他人收集仅为局部有限样本，严禁孤立盲目对号码进行一刀切绝对拉黑；")
+                    sb.appendLine("   - 三维交叉印证原则：必须结合【客观开奖频次】、【0~9+遗漏分布】与【逐期记忆历史中奖检验】进行交叉研判：")
+                    if (lotteryType == LotteryType.DLT && blueAnalysis.topPairs.isNotEmpty()) {
+                        val pairsStr = blueAnalysis.topPairs.joinToString("、") { "${String.format("%02d %02d", it.first, it.second)}" }
+                        sb.appendLine("   - 大乐透后区组合防扎堆：他人出现组合最多的后区对子为 [${pairsStr}]（各出现 ${blueAnalysis.maxPairFreq} 次），反映了局部大众抱团惯性；所推荐的各注严禁全部复用该大热组合对子，至少 60%~80% 方案应采用‘次热+冷温遗漏回补’的全新搭配，杜绝全网撞车！")
+                    }
+                    if (blueAnalysis.topBlues.isNotEmpty()) {
+                        val bluesStr = blueAnalysis.topBlues.joinToString(", ") { String.format("%02d", it) }
+                        sb.appendLine("   - 单码避热与防空对冲：他人单码最高频蓝球为 [${bluesStr}]（出现 ${blueAnalysis.maxBlueFreq} 次）。若其在历史客观大数中本属冷态，坚决顺势剔除；若其与历史大热回补趋势重合，多注方案中采取阶梯对冲（多数方案避开以防撞车，保留个别方案兼顾大势防空）。")
+                    }
                 }
             }
             AiAnalysisMode.DIAGNOSE_SELECTION -> {
@@ -182,6 +208,29 @@ object AiPromptBuilder {
 
         sb.appendLine("\n请在 200 字内简述推演思路，随后立即输出标准格式推荐号码与一句话【策略总结】。")
         return sb.toString()
+    }
+
+    private data class OtherBlueAnalysis(
+        val topBlues: List<Int>,
+        val maxBlueFreq: Int,
+        val topPairs: List<Pair<Int, Int>>,
+        val maxPairFreq: Int
+    )
+
+    private fun analyzeOtherBlues(
+        topOtherBlues: List<Pair<Int, Int>>,
+        otherCompleteBets: List<Pair<List<Int>, List<Int>>>
+    ): OtherBlueAnalysis {
+        val maxBlueFreq = topOtherBlues.maxOfOrNull { it.second } ?: 0
+        val topBlues = if (maxBlueFreq > 0) topOtherBlues.filter { it.second == maxBlueFreq }.map { it.first } else emptyList()
+        val pairCounts = otherCompleteBets
+            .map { it.second.sorted() }
+            .filter { it.size == 2 }
+            .groupingBy { it[0] to it[1] }
+            .eachCount()
+        val maxPairFreq = pairCounts.values.maxOrNull() ?: 0
+        val topPairs = if (maxPairFreq > 1) pairCounts.filter { it.value == maxPairFreq }.keys.toList() else emptyList()
+        return OtherBlueAnalysis(topBlues, maxBlueFreq, topPairs, maxPairFreq)
     }
 
 }

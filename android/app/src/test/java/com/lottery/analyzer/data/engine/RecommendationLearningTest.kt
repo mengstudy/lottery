@@ -122,4 +122,39 @@ class RecommendationLearningTest {
         val selectionPrompt = AiPromptBuilder.build(r5WithSelection)
         assertTrue(selectionPrompt.user.contains("融合模式选号阶梯要求"))
     }
+
+    @Test fun blueBallCrossValidationAndPairAvoidancePrompt() {
+        // 1. 双色球场景：单码最高频蓝球测试
+        val ssqRequest = request(LotteryType.SSQ).copy(
+            mode = AiAnalysisMode.HEART_FUSION,
+            topOtherBlues = listOf(8 to 3, 12 to 1)
+        )
+        val ssqPrompt = AiPromptBuilder.build(ssqRequest)
+        assertTrue(ssqPrompt.user.contains("他人蓝球/后区与历史大数交叉博弈指导"))
+        assertTrue(ssqPrompt.user.contains("局部样本边界认知"))
+        assertTrue(ssqPrompt.user.contains("三维交叉印证原则"))
+        assertTrue(ssqPrompt.user.contains("他人单码最高频蓝球为 [08]"))
+
+        // 2. 大乐透场景：后区组合频次防扎堆测试
+        val dltCompleteBets = listOf(
+            (1..5).toList() to listOf(2, 8),
+            (6..10).toList() to listOf(2, 8),
+            (11..15).toList() to listOf(3, 11)
+        )
+        val dltRequest = request(LotteryType.DLT).copy(
+            mode = AiAnalysisMode.HEART_FUSION,
+            otherCompleteBets = dltCompleteBets,
+            topOtherBlues = listOf(2 to 2, 8 to 2, 3 to 1, 11 to 1)
+        )
+        val dltPrompt = AiPromptBuilder.build(dltRequest)
+        assertTrue(dltPrompt.user.contains("大乐透后区组合防扎堆"))
+        assertTrue(dltPrompt.user.contains("02 08"))
+
+        // 3. 大乐透两阶段选号提示
+        val dltPool = CandidatePoolEngine.generate(dltRequest, 16, 42)
+        val dltWithSelection = dltRequest.copy(selectionContext = dltPool)
+        val dltSelectionPrompt = AiPromptBuilder.build(dltWithSelection)
+        assertTrue(dltSelectionPrompt.user.contains("后区交叉防撞选号要求"))
+        assertTrue(dltSelectionPrompt.user.contains("02 08"))
+    }
 }
