@@ -42,9 +42,9 @@ class AiLotteryService : AiRecommendationClient {
     private val gson = Gson()
     private val client = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
-        .readTimeout(180, TimeUnit.SECONDS)   // 云端深度推演预留充裕时间，避免高并发时 timeout
+        .readTimeout(360, TimeUnit.SECONDS)   // 云端深度推演预留充裕时间（6分钟），避免高并发或深度思考模型超时
         .writeTimeout(60, TimeUnit.SECONDS)
-        .callTimeout(180, TimeUnit.SECONDS)
+        .callTimeout(360, TimeUnit.SECONDS)   // 单次调用总上限调整为6分钟
         .retryOnConnectionFailure(true)
         .build()
 
