@@ -100,6 +100,7 @@ fun ShrinkFilterCard(
     onUpdateConfig: (ShrinkFilterConfig) -> Unit,
     onExecuteShrink: () -> Unit,
     onSaveBetToPrediction: (List<Int>) -> Unit,
+    onSaveAllBetsToPrediction: ((List<List<Int>>) -> Unit)? = null,
     onApplyBetToHeart: (List<Int>) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -629,8 +630,20 @@ fun ShrinkFilterCard(
                     if (shrinkResult.filteredBets.isNotEmpty()) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
+                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            if (onSaveAllBetsToPrediction != null && shrinkResult.filteredBets.isNotEmpty()) {
+                                val targetBets = shrinkResult.filteredBets.take(15)
+                                OutlinedButton(
+                                    onClick = { onSaveAllBetsToPrediction(targetBets) },
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = GreenPrimary, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("一键记录全部 (${targetBets.size}注)", fontSize = 11.sp, color = GreenPrimary, fontWeight = FontWeight.Bold)
+                                }
+                            }
                             OutlinedButton(
                                 onClick = {
                                     val text = shrinkResult.filteredBets.joinToString("\n") { bet ->

@@ -325,6 +325,7 @@ fun ToolsScreen(
                 onOpenSettings = { viewModel.setAiSettingsDialogVisible(true) },
                 onRunAnalysis = { mode, count -> viewModel.runAiAnalysis(mode, count) },
                 onSaveBetToPrediction = { index -> viewModel.saveAiBetToPrediction(index) },
+                onSaveAllBetsToPrediction = { viewModel.saveAllAiBetsToPrediction() },
                 onApplyBetToHeart = { index -> viewModel.applyAiBetToHeartBalls(index) },
                 onClearResult = { viewModel.clearAiResult() },
                 onViewLogs = { viewModel.setLogDialogVisible(true) }
@@ -454,6 +455,7 @@ fun ToolsScreen(
                             onUpdateConfig = { viewModel.updateShrinkConfig(it) },
                             onExecuteShrink = { viewModel.runShrinkCalculation() },
                             onSaveBetToPrediction = { viewModel.saveShrinkBetToPrediction(it) },
+                            onSaveAllBetsToPrediction = { viewModel.saveAllShrinkBetsToPrediction(it) },
                             onApplyBetToHeart = { viewModel.setHeartBalls(it.toSet()) }
                         )
 

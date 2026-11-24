@@ -885,6 +885,96 @@ class LotteryViewModel @JvmOverloads constructor(
     }
 
     /**
+     * 将 AI 推荐的所有注数方案一键保存为下期预测记录
+     */
+    fun saveAllAiBetsToPrediction() {
+        val result = _uiState.value.aiResult ?: return
+        if (result.lotteryType != _uiState.value.currentType) return
+        if (result.recommendedBets.isEmpty()) return
+        val type = _uiState.value.currentType
+        val target = result.targetIssue.ifBlank { _uiState.value.nextIssueTarget }
+        val playSuffix = if (result.lotteryType == LotteryType.KL8 && result.kl8PlayType != null) "-${result.kl8PlayType.title}" else ""
+        val provenance = result.windowContext?.let {
+            "频次v1/${it.strategy.title}/${it.stats.requestedPeriods}期(实${it.stats.sampleCount})/${it.stats.firstIssue}-${it.stats.lastIssue}"
+        } ?: "未启用历史频次/截止${result.baseIssue}"
+        val aiVersion = if (result.selectionContext == null) "AIv2" else "AIv3"
+
+        val drafts = mutableListOf<PredictionDraft>()
+        result.recommendedBets.forEachIndexed { betIndex, (reds, blues) ->
+            val strategy = "$aiVersion[${result.providerName}/${result.modelName}]-${result.mode.title}${playSuffix}/$provenance#${betIndex + 1}"
+            val draft = PredictionDraft(
+                lotteryType = type,
+                redBalls = reds.sorted(),
+                blueBalls = blues.sorted(),
+                strategy = strategy,
+                kind = PredictionKind.SINGLE,
+                kl8PlayType = result.kl8PlayType ?: PredictionRules.inferPlay(type, reds),
+                blueSource = if (blues.isEmpty()) BlueSource.NONE else BlueSource.PROVIDED,
+                archiveParentEntryId = result.archiveEntryIds.getOrNull(betIndex)
+            )
+            try {
+                PredictionRules.validate(draft)
+                drafts.add(draft)
+            } catch (_: Exception) {}
+        }
+        if (drafts.isEmpty()) {
+            feedback("未找到有效的推荐号码")
+            return
+        }
+        if (_uiState.value.isSavingPrediction) return
+        _uiState.value = _uiState.value.copy(
+            pendingPredictions = _uiState.value.pendingPredictions + drafts,
+            pendingTargetIssue = target,
+            predictionSaveError = null,
+            pendingEditedAtEpoch = null
+        )
+    }
+
+    /**
+     * 将缩水过滤生成的方案批量保存为下期预测记录
+     */
+    fun saveAllShrinkBetsToPrediction(bets: List<List<Int>>) {
+        if (bets.isEmpty()) return
+        val type = _uiState.value.currentType
+        val playSuffix = if (type == LotteryType.KL8) "[${_uiState.value.shrinkConfig.kl8PlayType.title}]" else ""
+        val strategyPrefix = "复式缩水$playSuffix[" + _uiState.value.shrinkConfig.wheelMode.title + "]"
+
+        val drafts = mutableListOf<PredictionDraft>()
+        bets.forEachIndexed { index, reds ->
+            val blueList = when (type) {
+                LotteryType.SSQ -> listOf((1..16).random())
+                LotteryType.DLT -> (1..12).shuffled().take(2).sorted()
+                LotteryType.KL8 -> emptyList()
+            }
+            val strategy = "$strategyPrefix#${index + 1}"
+            val draft = PredictionDraft(
+                lotteryType = type,
+                redBalls = reds.sorted(),
+                blueBalls = blueList,
+                strategy = strategy,
+                kind = PredictionKind.SINGLE,
+                kl8PlayType = if (type == LotteryType.KL8) _uiState.value.shrinkConfig.kl8PlayType else null,
+                blueSource = if (blueList.isEmpty()) BlueSource.NONE else BlueSource.GENERATED_CONFIRMED
+            )
+            try {
+                PredictionRules.validate(draft)
+                drafts.add(draft)
+            } catch (_: Exception) {}
+        }
+        if (drafts.isEmpty()) {
+            feedback("未找到有效的缩水注数")
+            return
+        }
+        if (_uiState.value.isSavingPrediction) return
+        _uiState.value = _uiState.value.copy(
+            pendingPredictions = _uiState.value.pendingPredictions + drafts,
+            pendingTargetIssue = _uiState.value.nextIssueTarget,
+            predictionSaveError = null,
+            pendingEditedAtEpoch = null
+        )
+    }
+
+    /**
      * 将 AI 推荐的红球一键设置为心水红球
      */
     fun applyAiBetToHeartBalls(betIndex: Int) {

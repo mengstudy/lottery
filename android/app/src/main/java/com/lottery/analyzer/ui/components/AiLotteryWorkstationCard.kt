@@ -100,6 +100,7 @@ fun AiLotteryWorkstationCard(
     onOpenSettings: () -> Unit,
     onRunAnalysis: (mode: AiAnalysisMode, count: Int) -> Unit,
     onSaveBetToPrediction: (index: Int) -> Unit,
+    onSaveAllBetsToPrediction: (() -> Unit)? = null,
     onApplyBetToHeart: (index: Int) -> Unit,
     onClearResult: () -> Unit,
     onViewLogs: (() -> Unit)? = null,
@@ -641,12 +642,46 @@ fun AiLotteryWorkstationCard(
 
                     // 推荐号码列表展示
                     if (aiResult.recommendedBets.isNotEmpty()) {
-                        Text(
-                            text = "AI 推荐注数方案：",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "AI 推荐注数方案 (${aiResult.recommendedBets.size} 注)：",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+
+                            if (onSaveAllBetsToPrediction != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(PurpleLight)
+                                        .clickable { onSaveAllBetsToPrediction() }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = PurplePrimary,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Text(
+                                            text = if (aiResult.recommendedBets.size > 1) "一键记录全部 ${aiResult.recommendedBets.size} 注" else "一键记录预测",
+                                            fontSize = 11.sp,
+                                            color = PurplePrimary,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
 
                         aiResult.recommendedBets.forEachIndexed { index, bet ->
                             val (redBalls, blueBalls) = bet
