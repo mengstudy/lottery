@@ -604,3 +604,87 @@ private fun EmptySectionHint(text: String) {
         modifier = Modifier.padding(vertical = 4.dp)
     )
 }
+
+/**
+ * 分析看板内嵌的「当期逐期开奖复盘」卡片
+ * 随看板期号切换自动更新，展示当期归档对照摘要、改号影响与一键展开完整复盘
+ */
+@Composable
+fun DashboardIssueReviewCard(
+    issue: String,
+    reviewDetail: IssueReviewDetail?,
+    onOpenFullReview: (String?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val detail = reviewDetail?.takeIf { it.issue == issue }
+    val acceptedAi = remember(detail) { detail?.aiOriginalItems?.filter { !it.isRejected }.orEmpty() }
+    val userFinals = detail?.userFinalItems.orEmpty()
+    val collected = detail?.collectedItems.orEmpty()
+    val localCandidates = detail?.localCandidates.orEmpty()
+    val editComps = detail?.editComparisons.orEmpty()
+
+    val hasAnyData = userFinals.isNotEmpty() || acceptedAi.isNotEmpty() || collected.isNotEmpty() || localCandidates.isNotEmpty()
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, BorderLight)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "🔍 第 $issue 期 · 开奖复盘对照",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Text(
+                    text = if (hasAnyData) "查看完整复盘 >" else "复盘中心 >",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PurplePrimary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(PurpleLight)
+                        .clickable { onOpenFullReview(if (hasAnyData) issue else null) }
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+            }
+
+            if (!hasAnyData) {
+                Text(
+                    text = "本期暂无收集号码、AI 推演或保存预测记录，点击右侧可进入复盘中心查看其它已归档期号。",
+                    fontSize = 12.sp,
+                    color = TextSecondary
+                )
+            } else {
+                Text(
+                    text = "用户保存 ${userFinals.size} · AI精选 ${acceptedAi.size} · 收集参考 ${collected.size} · 本地候选 ${localCandidates.size}",
+                    fontSize = 12.sp,
+                    color = TextSecondary
+                )
+
+                // 优先展示改号前后对比摘要（若有）
+                editComps.firstOrNull()?.let { comp ->
+                    EditComparisonCard(comparison = comp, hasDraw = detail?.drawRecord != null)
+                }
+
+                // 预览最多 2 条核心记录（优先用户最终保存，其次 AI 精选）
+                val previewItems = (userFinals + acceptedAi).take(2)
+                previewItems.forEach { item ->
+                    ReviewItemCard(item = item, hasDraw = detail?.drawRecord != null)
+                }
+            }
+        }
+    }
+}

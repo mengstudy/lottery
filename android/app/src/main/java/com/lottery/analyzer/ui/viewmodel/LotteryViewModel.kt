@@ -118,6 +118,7 @@ data class LotteryUiState(
     val selectedReviewIssue: String? = null,
     val issueReviewDetail: IssueReviewDetail? = null,
     val issueReviewError: String? = null,
+    val dashboardIssueReview: IssueReviewDetail? = null,
     // 数据备份与迁移状态
     val isBackupBusy: Boolean = false,
     val pendingBackupSummary: ArchiveBackupSummary? = null,
@@ -165,6 +166,8 @@ class LotteryViewModel @JvmOverloads constructor(
     private var archiveDetailJob: Job? = null
     private var reviewGeneration = 0
     private var reviewJob: Job? = null
+    private var dashboardReviewGeneration = 0
+    private var dashboardReviewJob: Job? = null
 
     private data class RestoredInput(val hearts: Set<Int>, val shrink: Set<Int>, val text: String, val play: Kl8PlayType)
 
@@ -238,6 +241,7 @@ class LotteryViewModel @JvmOverloads constructor(
         issueJob?.cancel()
         predictionJob?.cancel()
         reviewJob?.cancel()
+        dashboardReviewJob?.cancel()
         if (restored == null) {
             savedStateHandle["reviewOpen"] = false
             savedStateHandle["reviewIssue"] = null
@@ -248,7 +252,7 @@ class LotteryViewModel @JvmOverloads constructor(
                 memoryArchive = MemoryArchiveOverview(), memoryArchiveDetail = null, memoryCollectionDetail = null, memoryArchiveError = null,
                 performanceReport = PerformanceReport(), settlementResult = SettlementResult(), isSettlingArchive = false,
                 showIssueReviewDialog = false, isReviewLoading = false, reviewOptions = emptyList(),
-                selectedReviewIssue = null, issueReviewDetail = null, issueReviewError = null,
+                selectedReviewIssue = null, issueReviewDetail = null, issueReviewError = null, dashboardIssueReview = null,
                 isLoading = true,
                 errorMessage = null,
                 myHeartBalls = emptySet(),
@@ -313,6 +317,9 @@ class LotteryViewModel @JvmOverloads constructor(
                     nextIssueTarget = nextIssue,
                     isLoading = false
                 )
+                if (firstIssue.isNotEmpty()) {
+                    loadDashboardReview(type, firstIssue)
+                }
                 recalcHeartDistributions()
                 loadPredictions()
 
@@ -350,6 +357,7 @@ class LotteryViewModel @JvmOverloads constructor(
                     errorMessage = null
                 )
                 recalcHeartDistributions()
+                loadDashboardReview(type, issue)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1061,6 +1069,8 @@ class LotteryViewModel @JvmOverloads constructor(
                 if (generation == archiveRefreshGeneration && _uiState.value.currentType == type) {
                     _uiState.value = _uiState.value.copy(memoryArchive = archiveData.first, performanceReport=archiveData.second,
                         settlementResult=archiveData.third, memoryArchiveError = null)
+                    val curIssue = _uiState.value.currentIssue
+                    if (curIssue.isNotBlank()) loadDashboardReview(type, curIssue)
                 }
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) {
@@ -1209,6 +1219,29 @@ class LotteryViewModel @JvmOverloads constructor(
             isReviewLoading = false,
             issueReviewError = null
         )
+    }
+
+    private fun loadDashboardReview(type: LotteryType, issue: String) {
+        if (issue.isBlank()) return
+        val generation = ++dashboardReviewGeneration
+        dashboardReviewJob?.cancel()
+        dashboardReviewJob = viewModelScope.launch {
+            try {
+                val detail = withContext(ioDispatcher) {
+                    archiveStore.issueReview(type, issue)
+                }
+                if (generation == dashboardReviewGeneration &&
+                    _uiState.value.currentType == type &&
+                    _uiState.value.currentIssue == issue
+                ) {
+                    _uiState.value = _uiState.value.copy(dashboardIssueReview = detail)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // 看板复盘摘要加载失败不影响主看板展示
+            }
+        }
     }
 
     // ==================== 复式缩水与旋转矩阵控制 ====================

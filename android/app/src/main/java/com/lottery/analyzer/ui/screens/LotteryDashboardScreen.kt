@@ -124,6 +124,15 @@ fun LotteryDashboardScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                // 2.5 本期逐期开奖复盘卡片
+                com.lottery.analyzer.ui.components.DashboardIssueReviewCard(
+                    issue = analysis.issue,
+                    reviewDetail = uiState.dashboardIssueReview,
+                    onOpenFullReview = { target -> viewModel.openIssueReview(target) }
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
                 // 3. 核心统计指标网格
                 LotteryMetricsCard(analysis = analysis)
 
