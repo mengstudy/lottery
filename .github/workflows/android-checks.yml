@@ -24,9 +24,12 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: gradle
-      - uses: android-actions/setup-android@v3
       - name: Install build SDK
-        run: yes | sdkmanager 'platforms;android-34' 'build-tools;34.0.0' || true
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMGR="$(command -v sdkmanager || find "$SDK_ROOT/cmdline-tools" -name sdkmanager | head -n 1)"
+          yes | "$SDKMGR" --licenses >/dev/null || true
+          "$SDKMGR" 'platforms;android-34' 'build-tools;34.0.0'
       - name: Test, lint and build
         run: |
           sed -i 's/\r$//' gradlew
