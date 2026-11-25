@@ -60,6 +60,7 @@ fun PredictionRecordsCard(
     onPageChange: (Int) -> Unit,
     onDelete: (Long) -> Unit,
     onClearAll: () -> Unit,
+    onOpenReview: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     initialExpanded: Boolean = true
 ) {
@@ -103,6 +104,20 @@ fun PredictionRecordsCard(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (onOpenReview != null) {
+                        Text(
+                            text = "逐期复盘",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF059669),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFFECFDF5))
+                                .clickable { onOpenReview() }
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
                     if (records.isNotEmpty() && isExpanded) {
                         Text(
                             text = "清空",

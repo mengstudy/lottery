@@ -1,6 +1,7 @@
 package com.lottery.analyzer.ui.viewmodel
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import com.lottery.analyzer.data.model.*
@@ -109,7 +110,20 @@ data class LotteryUiState(
     val trendMatrixLimit: Int = 30,
     val trendDescOrder: Boolean = true,
     val trendMatrixData: TrendMatrixData? = null,
-    val isTrendLoading: Boolean = false
+    val isTrendLoading: Boolean = false,
+    // 逐期开奖复盘状态 (v1.0.8)
+    val showIssueReviewDialog: Boolean = false,
+    val isReviewLoading: Boolean = false,
+    val reviewOptions: List<IssueReviewOption> = emptyList(),
+    val selectedReviewIssue: String? = null,
+    val issueReviewDetail: IssueReviewDetail? = null,
+    val issueReviewError: String? = null,
+    // 数据备份与迁移状态
+    val isBackupBusy: Boolean = false,
+    val pendingBackupSummary: ArchiveBackupSummary? = null,
+    val pendingBackupRawJson: String? = null,
+    val backupMessage: String? = null,
+    val backupError: String? = null
 )
 
 class LotteryViewModel @JvmOverloads constructor(
@@ -149,6 +163,8 @@ class LotteryViewModel @JvmOverloads constructor(
     private var archiveRefreshJob: Job? = null
     private var archiveDetailGeneration = 0
     private var archiveDetailJob: Job? = null
+    private var reviewGeneration = 0
+    private var reviewJob: Job? = null
 
     private data class RestoredInput(val hearts: Set<Int>, val shrink: Set<Int>, val text: String, val play: Kl8PlayType)
 
@@ -179,6 +195,9 @@ class LotteryViewModel @JvmOverloads constructor(
             }
         }
         switchLotteryType(restoredType, RestoredInput(restoredHearts, restoredShrink, restoredText, restoredPlay))
+        if (savedStateHandle.get<Boolean>("reviewOpen") == true) {
+            openIssueReview(savedStateHandle.get<String>("reviewIssue"))
+        }
     }
 
     /**
@@ -218,11 +237,18 @@ class LotteryViewModel @JvmOverloads constructor(
         trendJob?.cancel()
         issueJob?.cancel()
         predictionJob?.cancel()
+        reviewJob?.cancel()
+        if (restored == null) {
+            savedStateHandle["reviewOpen"] = false
+            savedStateHandle["reviewIssue"] = null
+        }
         switchJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 currentType = type,
                 memoryArchive = MemoryArchiveOverview(), memoryArchiveDetail = null, memoryCollectionDetail = null, memoryArchiveError = null,
                 performanceReport = PerformanceReport(), settlementResult = SettlementResult(), isSettlingArchive = false,
+                showIssueReviewDialog = false, isReviewLoading = false, reviewOptions = emptyList(),
+                selectedReviewIssue = null, issueReviewDetail = null, issueReviewError = null,
                 isLoading = true,
                 errorMessage = null,
                 myHeartBalls = emptySet(),
@@ -1089,6 +1115,102 @@ class LotteryViewModel @JvmOverloads constructor(
         }
     }
 
+    // ==================== 逐期开奖复盘控制 (v1.0.8) ====================
+    fun openIssueReview(initialIssue: String? = null) {
+        val type = _uiState.value.currentType
+        val generation = ++reviewGeneration
+        reviewJob?.cancel()
+        savedStateHandle["reviewOpen"] = true
+        if (initialIssue != null) savedStateHandle["reviewIssue"] = initialIssue
+        _uiState.value = _uiState.value.copy(
+            showIssueReviewDialog = true,
+            isReviewLoading = true,
+            issueReviewError = null
+        )
+        reviewJob = viewModelScope.launch {
+            try {
+                val (options, targetIssue, detail) = withContext(ioDispatcher) {
+                    val context = coroutineContext
+                    // 确保最新开奖已同步结算
+                    archiveStore.settle(type) { context.ensureActive() }
+                    val opts = archiveStore.reviewOptions(type, 50)
+                    val chosen = initialIssue?.takeIf { target -> opts.any { it.issue == target } }
+                        ?: opts.firstOrNull { it.hasDraw }?.issue
+                        ?: opts.firstOrNull()?.issue
+                    val reviewDetail = chosen?.let { archiveStore.issueReview(type, it) }
+                    Triple(opts, chosen, reviewDetail)
+                }
+                if (generation == reviewGeneration && _uiState.value.currentType == type) {
+                    savedStateHandle["reviewIssue"] = targetIssue
+                    _uiState.value = _uiState.value.copy(
+                        reviewOptions = options,
+                        selectedReviewIssue = targetIssue,
+                        issueReviewDetail = detail,
+                        isReviewLoading = false,
+                        issueReviewError = null
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                if (generation == reviewGeneration && _uiState.value.currentType == type) {
+                    _uiState.value = _uiState.value.copy(
+                        isReviewLoading = false,
+                        issueReviewError = "复盘数据加载失败，请检查存储后重试"
+                    )
+                }
+            }
+        }
+    }
+
+    fun selectReviewIssue(issue: String) {
+        val type = _uiState.value.currentType
+        val generation = ++reviewGeneration
+        reviewJob?.cancel()
+        savedStateHandle["reviewIssue"] = issue
+        _uiState.value = _uiState.value.copy(
+            selectedReviewIssue = issue,
+            isReviewLoading = true,
+            issueReviewError = null
+        )
+        reviewJob = viewModelScope.launch {
+            try {
+                val detail = withContext(ioDispatcher) {
+                    val context = coroutineContext
+                    archiveStore.settle(type) { context.ensureActive() }
+                    archiveStore.issueReview(type, issue)
+                }
+                if (generation == reviewGeneration && _uiState.value.currentType == type) {
+                    _uiState.value = _uiState.value.copy(
+                        issueReviewDetail = detail,
+                        isReviewLoading = false,
+                        issueReviewError = null
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                if (generation == reviewGeneration && _uiState.value.currentType == type) {
+                    _uiState.value = _uiState.value.copy(
+                        isReviewLoading = false,
+                        issueReviewError = "第 $issue 期复盘详情读取失败"
+                    )
+                }
+            }
+        }
+    }
+
+    fun closeIssueReview() {
+        reviewGeneration++
+        reviewJob?.cancel()
+        savedStateHandle["reviewOpen"] = false
+        _uiState.value = _uiState.value.copy(
+            showIssueReviewDialog = false,
+            isReviewLoading = false,
+            issueReviewError = null
+        )
+    }
+
     // ==================== 复式缩水与旋转矩阵控制 ====================
     fun toggleShrinkBall(ball: Int) {
         val current = _uiState.value.shrinkSelectedBalls.toMutableSet()
@@ -1216,5 +1338,99 @@ class LotteryViewModel @JvmOverloads constructor(
         val newDesc = !_uiState.value.trendDescOrder
         _uiState.value = _uiState.value.copy(trendDescOrder = newDesc)
         loadTrendMatrixData()
+    }
+
+    // ==================== 数据备份与迁移控制 ====================
+    fun exportArchiveBackupToUri(uri: Uri) {
+        if (_uiState.value.isBackupBusy) return
+        _uiState.value = _uiState.value.copy(isBackupBusy = true, backupError = null, backupMessage = null)
+        viewModelScope.launch {
+            try {
+                val json = withContext(ioDispatcher) {
+                    val data = archiveStore.exportBackupJson(System.currentTimeMillis())
+                    val out = getApplication<Application>().contentResolver.openOutputStream(uri)
+                        ?: throw IllegalStateException("无法打开目标写入文件")
+                    out.bufferedWriter(Charsets.UTF_8).use { it.write(data) }
+                    data
+                }
+                val summary = archiveStore.inspectBackup(json)
+                _uiState.value = _uiState.value.copy(
+                    isBackupBusy = false,
+                    backupMessage = "导出成功（不含 API Key）：共 ${summary.predictionCount} 条预测、${summary.collectionBatchCount} 批收集、${summary.aiRunCount} 次推演"
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isBackupBusy = false,
+                    backupError = "备份导出失败：${e.message ?: "存储异常"}"
+                )
+            }
+        }
+    }
+
+    fun prepareBackupRestoreFromUri(uri: Uri) {
+        if (_uiState.value.isBackupBusy) return
+        _uiState.value = _uiState.value.copy(isBackupBusy = true, backupError = null, backupMessage = null)
+        viewModelScope.launch {
+            try {
+                val (rawJson, summary) = withContext(ioDispatcher) {
+                    val input = getApplication<Application>().contentResolver.openInputStream(uri)
+                        ?: throw IllegalStateException("无法读取所选文件")
+                    val text = input.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                    text to archiveStore.inspectBackup(text)
+                }
+                _uiState.value = _uiState.value.copy(
+                    isBackupBusy = false,
+                    pendingBackupSummary = summary,
+                    pendingBackupRawJson = rawJson
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isBackupBusy = false,
+                    backupError = "备份文件校验失败：${e.message ?: "格式无效"}"
+                )
+            }
+        }
+    }
+
+    fun confirmBackupRestore() {
+        val rawJson = _uiState.value.pendingBackupRawJson ?: return
+        if (_uiState.value.isBackupBusy) return
+        _uiState.value = _uiState.value.copy(isBackupBusy = true, backupError = null)
+        viewModelScope.launch {
+            try {
+                val result = withContext(ioDispatcher) {
+                    archiveStore.restoreBackupJson(rawJson)
+                }
+                _uiState.value = _uiState.value.copy(
+                    isBackupBusy = false,
+                    pendingBackupSummary = null,
+                    pendingBackupRawJson = null,
+                    backupMessage = "恢复完成：已还原 ${result.predictionCount} 条预测、${result.collectionBatchCount} 批收集、${result.aiRunCount} 次推演（API Key 需在设置中单独配置）"
+                )
+                // 刷新全部业务数据并按当前开奖重结算
+                loadPredictions(page = 0)
+                refreshMemoryArchive()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isBackupBusy = false,
+                    backupError = "恢复失败（已自动回滚原数据）：${e.message ?: "写入异常"}"
+                )
+            }
+        }
+    }
+
+    fun dismissBackupRestore() {
+        _uiState.value = _uiState.value.copy(
+            pendingBackupSummary = null,
+            pendingBackupRawJson = null,
+            backupError = null,
+            backupMessage = null
+        )
     }
 }

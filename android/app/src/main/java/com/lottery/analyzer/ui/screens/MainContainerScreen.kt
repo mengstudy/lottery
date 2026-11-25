@@ -56,6 +56,7 @@ import com.lottery.analyzer.data.model.LotteryType
 import com.lottery.analyzer.ui.components.PendingPredictionDialog
 import com.lottery.analyzer.ui.components.AiSettingsDialog
 import com.lottery.analyzer.ui.components.LogViewerDialog
+import com.lottery.analyzer.ui.components.IssueReviewDialog
 import com.lottery.analyzer.ui.theme.BluePrimary
 import com.lottery.analyzer.ui.theme.OrangePrimary
 import com.lottery.analyzer.ui.theme.RedDark
@@ -304,6 +305,15 @@ fun MainContainerScreen(viewModel: LotteryViewModel) {
     if (uiState.showLogDialog) {
         LogViewerDialog(
             onDismiss = { viewModel.setLogDialogVisible(false) }
+        )
+    }
+
+    // 逐期开奖复盘全屏弹窗 (v1.0.8)
+    if (uiState.showIssueReviewDialog) {
+        IssueReviewDialog(
+            state = uiState,
+            onSelectIssue = viewModel::selectReviewIssue,
+            onDismiss = viewModel::closeIssueReview
         )
     }
 }

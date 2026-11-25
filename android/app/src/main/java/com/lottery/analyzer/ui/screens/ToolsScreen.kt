@@ -345,7 +345,8 @@ fun ToolsScreen(
                 pageSize = uiState.predictionPageSize,
                 onPageChange = { page -> viewModel.loadPredictions(page = page) },
                 onDelete = { viewModel.deletePredictionRecord(it) },
-                onClearAll = { viewModel.clearPredictionRecords() }
+                onClearAll = { viewModel.clearPredictionRecords() },
+                onOpenReview = { viewModel.openIssueReview() }
             )
 
             Spacer(modifier = Modifier.height(14.dp))

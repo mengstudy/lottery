@@ -282,6 +282,11 @@ class LotteryViewModelTest {
         override fun overview(type:LotteryType)=MemoryArchiveOverview()
         override fun detail(id:String):ArchiveRunDetail?=null
         override fun collection(id:String):ArchiveCollectionDetail?=null
+        override fun reviewOptions(type:LotteryType,limit:Int):List<IssueReviewOption> = emptyList()
+        override fun issueReview(type:LotteryType,issue:String) = IssueReviewDetail(type,issue,null,null,emptyList(),emptyList(),emptyList(),emptyList(),emptyList())
+        override fun exportBackupJson(nowEpoch:Long) = "{}"
+        override fun inspectBackup(jsonText:String) = ArchiveBackupSummary("lottery-archive-backup",1,4,0L,0,0,0,0)
+        override fun restoreBackupJson(jsonText:String) = ArchiveBackupRestoreResult(0,0,0,0)
     }
 
     private class FakeRepository:LotteryRepositoryContract {

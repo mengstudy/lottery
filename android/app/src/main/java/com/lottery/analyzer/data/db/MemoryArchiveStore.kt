@@ -23,6 +23,11 @@ interface MemoryArchiveStore {
     fun settle(type: LotteryType, check: () -> Unit = {}): SettlementResult
     fun performance(type: LotteryType, periods: Int = 30, cutoffIssue: String? = null): PerformanceReport
     fun learning(request: AiRecommendationRequest, options: AiMemoryOptions): LearningContext
+    fun reviewOptions(type: LotteryType, limit: Int = 50): List<IssueReviewOption>
+    fun issueReview(type: LotteryType, issue: String): IssueReviewDetail
+    fun exportBackupJson(nowEpoch: Long = System.currentTimeMillis()): String
+    fun inspectBackup(jsonText: String): ArchiveBackupSummary
+    fun restoreBackupJson(jsonText: String): ArchiveBackupRestoreResult
 }
 
 /** SQL shared by Android and real SQLite JVM tests. All writes use stable IDs, never REPLACE. */
@@ -216,4 +221,9 @@ class SqlMemoryArchiveStore(
     }
     override fun performance(type: LotteryType, periods: Int, cutoffIssue: String?) = ArchiveLearningStore(sql).performance(type,periods,cutoffIssue)
     override fun learning(request: AiRecommendationRequest, options: AiMemoryOptions) = ArchiveLearningStore(sql).learning(request,options)
+    override fun reviewOptions(type: LotteryType, limit: Int) = ArchiveReviewStore(sql, drawLookup).reviewOptions(type, limit)
+    override fun issueReview(type: LotteryType, issue: String) = ArchiveReviewStore(sql, drawLookup).issueReview(type, issue)
+    override fun exportBackupJson(nowEpoch: Long) = ArchiveBackupStore(sql).exportJson(nowEpoch)
+    override fun inspectBackup(jsonText: String) = ArchiveBackupStore(sql).inspectBackup(jsonText)
+    override fun restoreBackupJson(jsonText: String) = ArchiveBackupStore(sql).restoreFromJson(jsonText)
 }

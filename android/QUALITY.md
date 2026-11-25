@@ -68,6 +68,26 @@ Windows: use `gradlew.bat`. Keep `GRADLE_USER_HOME`, `ANDROID_USER_HOME`, and te
 - Optional raw prompt/response payloads of terminal settled runs can roll off beyond the latest 100 eligible runs. Candidate-bearing unsettled or dirty-head runs and PENDING runs are protected. Terminal failures without any candidate rows remain eligible under the prior policy. Facts, numbers, relationships, revisions, timings, seeds and evaluation rows are never pruned. No new library or real service call is required for these features.
 - Offline coverage includes all lotteries/play sizes, deterministic legal candidates/features, impossible constraints, ID-only responses, strict collector failures, V3/V4 preservation/rollback, source invalidation, official corrections/idempotency, per-issue averaging, shape/origin qualification, cancellation/write failure, corrupted facts, control reproducibility, future-policy isolation, synthetic formal tuning/refresh/correction bounds, payload protection and ViewModel settings/request snapshots.
 
+## Issue-by-issue draw review (v1.0.8)
+
+- Per-issue review aggregates `collected_batches`, `recommendation_entries` (`LOCAL_CANDIDATE`, `AI_ORIGINAL`, `USER_FINAL`), unlinked `user_predictions`, and the active settled head (`archive_draw_heads` / `archive_evaluations`). No new tables or migrations are added.
+- Display badges and the top banner distinguish single-ticket prize evaluation (`SINGLE`) from reference-only hit counts (`REFERENCE`, `COMPOUND`, `LEGACY_UNCONFIRMED`). Reference and compound pools never trigger single-ticket prize highlighting.
+- User confirmation edits (`USER_FINAL` linked via `parent_entry_id`) compute added/removed numbers and hit-count deltas (`redHitDelta`, `blueHitDelta`) against the original `AI_ORIGINAL` entry.
+- `SavedStateHandle` persists the open state and selected review issue across configuration changes and process recreation, and clears them when switching lottery types.
+- **Device acceptance checklist for v1.0.8:**
+  1. Open 「逐期复盘」 from both 「逐期记忆档案」 and 「预测选号记录」, verify issue chips and draw status dots.
+  2. Rotate the screen / background-kill the Activity while reviewing an issue, verify the dialog and selected issue restore accurately.
+  3. Switch lottery type (SSQ / DLT / KL8), verify review state resets cleanly without cross-lottery leakage.
+  4. Verify single-ticket prize summary vs. collected reference pool / compound pool badges ("仅统计命中，不判奖") and confirm edit deltas match manual ball changes.
+  5. Re-sync draws / simulate draw revision update and reopen review to confirm hit counts update cleanly without duplicate rows.
+
+## Archive backup and migration
+
+- Manual export/import uses structured JSON (`format = "lottery-archive-backup"`, `backup_version = 1`) through Android SAF (`CreateDocument` / `OpenDocument`) without requiring external storage permissions.
+- Backup export strictly whitelists business tables (`collected_batches`, `ai_request_archive`, `ai_archive_payload`, `recommendation_entries`, `user_predictions`, `archive_draw_heads`, `archive_evaluations`, `archive_source_versions`, `archive_policy_state`) and excludes all AI credentials (`ai_lottery_preferences` / `ai_lottery_credentials`) and diagnostic logs.
+- Restore runs inside a single SQLite transaction, validates schema/backup versions and parent-entry topology before committing, preserves `user_predictions` AUTOINCREMENT continuity and `archive_source_versions`, and rolls back completely on any error.
+- After restore, users reconfigure their API Key on the target device; historical predictions, issue reviews, and settled evaluations remain immediately usable.
+
 ## Device acceptance still required
 
 JVM tests verify HTTP cancellation/error handling, paging decisions, snapshot publication, credential scope/AES-GCM, schema SQL migration, prediction semantics, ViewModel failure handling and state restoration. They do not replace Android-device tests of Keystore, backup/restore, Activity/process recreation or rendering/frame timing.

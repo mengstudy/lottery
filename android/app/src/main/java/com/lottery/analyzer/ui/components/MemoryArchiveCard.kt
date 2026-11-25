@@ -1,5 +1,7 @@
 package com.lottery.analyzer.ui.components
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -11,8 +13,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lottery.analyzer.data.model.*
+import com.lottery.analyzer.ui.theme.GreenPrimary
 import com.lottery.analyzer.ui.viewmodel.LotteryUiState
 import com.lottery.analyzer.ui.viewmodel.LotteryViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -23,6 +29,12 @@ fun MemoryArchiveCard(viewModel: LotteryViewModel, state: LotteryUiState) {
     var originName by rememberSaveable(state.currentType) { mutableStateOf(ArchiveOrigin.REALTIME_RECOMMEND.name) }
     val selectedOrigin = runCatching { ArchiveOrigin.valueOf(originName) }.getOrDefault(ArchiveOrigin.REALTIME_RECOMMEND)
     LaunchedEffect(state.currentType) { viewModel.refreshMemoryArchive() }
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) viewModel.exportArchiveBackupToUri(uri)
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.prepareBackupRestoreFromUri(uri)
+    }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("逐期记忆档案", fontWeight = FontWeight.Bold)
@@ -30,6 +42,7 @@ fun MemoryArchiveCard(viewModel: LotteryViewModel, state: LotteryUiState) {
             Text("同步开奖或刷新后自动结算。缺少可信时间依据的记录仅作观察，不进入正式成绩与自动调权。", fontSize = 11.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { collecting = true }, enabled = CollectionInputPolicy.error(state.collectedBallsText,state.frequencyResult) == null && !state.isParsingCollectedText && state.frequencyResult.parsedCompleteBets.isNotEmpty()) { Text("记录收集批次") }
+                Button(onClick = { viewModel.openIssueReview() }) { Text("逐期复盘") }
                 TextButton(onClick = viewModel::refreshMemoryArchive) { Text("刷新") }
             }
             state.memoryArchiveError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
@@ -42,6 +55,30 @@ fun MemoryArchiveCard(viewModel: LotteryViewModel, state: LotteryUiState) {
                 }
             }
             MemoryPerformanceCard(viewModel,state)
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            Text("档案备份与迁移（自动排除 API Key 与日志）", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        val stamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())
+                        exportLauncher.launch("lottery_backup_$stamp.json")
+                    },
+                    enabled = !state.isBackupBusy
+                ) { Text("导出档案备份", fontSize = 12.sp) }
+                OutlinedButton(
+                    onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
+                    enabled = !state.isBackupBusy
+                ) { Text("导入并恢复", fontSize = 12.sp) }
+            }
+            if (state.isBackupBusy) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+            state.backupMessage?.let { msg ->
+                Text(msg, color = GreenPrimary, fontSize = 12.sp)
+            }
+            state.backupError?.let { err ->
+                Text(err, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+            }
         }
     }
     if (collecting) AlertDialog(
@@ -92,6 +129,37 @@ fun MemoryArchiveCard(viewModel: LotteryViewModel, state: LotteryUiState) {
                     Text(detail.rawText.orEmpty().take(3000), fontSize = 11.sp)
                 }
             }, confirmButton = { TextButton(onClick = { viewModel.showMemoryArchiveRun(null) }) { Text("关闭") } })
+    }
+    state.pendingBackupSummary?.let { summary ->
+        val exportedTime = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(summary.exportedAtEpoch))
+        AlertDialog(
+            onDismissRequest = { if (!state.isBackupBusy) viewModel.dismissBackupRestore() },
+            title = { Text("确认导入并恢复档案") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("导出时间：$exportedTime", fontSize = 12.sp)
+                    Text("包含数据：预测记录 ${summary.predictionCount} 条 · 收集批次 ${summary.collectionBatchCount} 批 · AI推演 ${summary.aiRunCount} 次 · 方案条目 ${summary.entryCount} 条", fontSize = 12.sp)
+                    Text("数据库版本：v${summary.dbSchemaVersion}（备份协议 v${summary.backupVersion}）", fontSize = 11.sp)
+                    Text(
+                        "注意：本备份不包含 API Key 与诊断日志。确认恢复将用备份内容完整替换当前本地预测与归档记录，换机后请在 AI 设置中重新填写密钥。",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !state.isBackupBusy,
+                    onClick = { viewModel.confirmBackupRestore() }
+                ) { Text("确认覆盖恢复") }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !state.isBackupBusy,
+                    onClick = { viewModel.dismissBackupRestore() }
+                ) { Text("取消") }
+            }
+        )
     }
 }
 

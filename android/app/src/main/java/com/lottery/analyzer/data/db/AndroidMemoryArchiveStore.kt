@@ -44,5 +44,10 @@ class AndroidMemoryArchiveStore(context: Context) : MemoryArchiveStore {
     override fun settle(type: LotteryType, check: () -> Unit) = store().settle(type, check)
     override fun performance(type: LotteryType, periods: Int, cutoffIssue: String?) = store().performance(type, periods, cutoffIssue)
     override fun learning(request: AiRecommendationRequest, options: AiMemoryOptions) = store().learning(request, options)
+    override fun reviewOptions(type: LotteryType, limit: Int) = store().reviewOptions(type, limit)
+    override fun issueReview(type: LotteryType, issue: String) = store().issueReview(type, issue)
+    override fun exportBackupJson(nowEpoch: Long) = store().exportBackupJson(nowEpoch)
+    override fun inspectBackup(jsonText: String) = store().inspectBackup(jsonText)
+    override fun restoreBackupJson(jsonText: String) = store().restoreBackupJson(jsonText)
     fun prunePayloads() = store().prunePayloads()
 }
