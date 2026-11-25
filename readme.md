@@ -16,6 +16,8 @@
 
 源码独立存放于 [android/](android/) 目录下，采用现代 **Kotlin + Jetpack Compose + Material 3** 全新重构，完全适配手机屏幕与单手操作。
 
+安卓apk：[点击下载](https://github.com/mengstudy/lottery/releases)
+
 ### 🌟 移动端核心功能
 
 #### 1. 深度分析综合看板 (LotteryDashboardScreen)
